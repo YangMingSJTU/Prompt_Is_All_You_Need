@@ -1,0 +1,4 @@
+{"role":"user","content":"review current diff for missing tests"}
+{"type":"human","text":"帮我修复失败测试"}
+{"role":"assistant","content":"assistant answer"}
+{"type":"tool_result","content":"tool output"}
