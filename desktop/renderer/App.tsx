@@ -1,5 +1,6 @@
-import { BarChart3, BookOpen, Database, Library, Package, Search, Settings } from 'lucide-react';
+import { BarChart3, Database, Library, Package, Search, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { resolveAppName } from '../shared/appIdentity';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
 import type { Candidate, SkillRecord, Spell, UsageAnalytics } from '../shared/types';
 import { AnalyticsView } from './components/AnalyticsView';
@@ -64,6 +65,10 @@ export function App() {
     void window.spellbook.getSettings().then(setSettings);
   }, []);
 
+  useEffect(() => {
+    document.title = resolveAppName(settings.language, globalThis.navigator?.language);
+  }, [settings.language]);
+
   const selectedView = useMemo(() => {
     if (view === 'library') {
       return (
@@ -107,15 +112,6 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">
-            <BookOpen size={17} />
-          </div>
-          <div className="brand-copy">
-            <h1>{t('app.brand')}</h1>
-            <small>{t('app.subtitle')}</small>
-          </div>
-        </div>
         <nav className="nav-list" aria-label="Navigation">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;

@@ -1,10 +1,11 @@
 import type { AppLanguage } from '../shared/settings';
+import { resolveAppLocale } from '../shared/appIdentity';
 
 export type Locale = 'zh' | 'en';
 
 const resources = {
   zh: {
-    'app.brand': 'Spellbook 魔法书',
+    'app.brand': '魔法书',
     'app.subtitle': 'AI 提示词与技能管理器',
     'app.version': '',
     'status.ready': '',
@@ -188,18 +189,11 @@ export type I18nKey = keyof typeof resources.zh;
 export type TFunction = (key: I18nKey) => string;
 
 export function detectLocale(language: string | undefined | null): Locale {
-  const normalized = (language ?? '').toLowerCase();
-  if (normalized.startsWith('en')) {
-    return 'en';
-  }
-  return 'zh';
+  return resolveAppLocale('system', language);
 }
 
 export function resolveLocalePreference(preference: AppLanguage, systemLanguage: string | undefined | null): Locale {
-  if (preference === 'zh' || preference === 'en') {
-    return preference;
-  }
-  return detectLocale(systemLanguage);
+  return resolveAppLocale(preference, systemLanguage);
 }
 
 export function createTranslator(locale: Locale): TFunction {

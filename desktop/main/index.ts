@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { resolveAppName } from '../shared/appIdentity';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
 import type { SkillPlatform } from '../shared/types';
 import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
@@ -16,6 +17,7 @@ import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './servi
 import { createSettingsService, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
+import { getAppIconPath } from './services/appAssets';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -26,12 +28,14 @@ let activeQuickPanelShortcut: ShortcutAccelerator | null = null;
 
 async function createWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
+  const appName = getCurrentAppName();
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 760,
     minWidth: 980,
     minHeight: 640,
-    title: 'Spellbook',
+    title: appName,
+    icon: getAppIconPath(),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -51,6 +55,7 @@ async function createWindow(): Promise<void> {
 
 async function createFloatingWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
+  const appName = getCurrentAppName();
   floatingWindow = new BrowserWindow({
     width: 560,
     height: 420,
@@ -58,7 +63,8 @@ async function createFloatingWindow(): Promise<void> {
     minHeight: 360,
     maxWidth: 680,
     maxHeight: 520,
-    title: 'Spellbook',
+    title: appName,
+    icon: getAppIconPath(),
     show: false,
     frame: false,
     resizable: false,
@@ -101,6 +107,7 @@ async function bootstrap(): Promise<void> {
   });
   settingsService = createSettingsService(db);
   await spellService.seedStarterSpells();
+  applyAppIdentity();
 
   ipcMain.handle('spells:search', (_event, query: string) => spellService.searchSpells(query ?? ''));
   ipcMain.handle('spells:list', () => spellService.listSpells());
@@ -159,6 +166,7 @@ async function bootstrap(): Promise<void> {
       nextPatch.quickPanelShortcut = requestedShortcut;
     }
     const settings = await settingsService.updateSettings(nextPatch);
+    applyAppIdentity();
     return { settings };
   });
   ipcMain.handle('scanner:run', async () => {
@@ -196,11 +204,9 @@ function registerDesktopControls(): void {
     registerQuickPanelShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut);
   }
 
-  const trayIcon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4AWP4z8Dwn4ECwESJ5lEDRg0YNWDUgFEDBg0A2b4DHXcCpJcAAAAASUVORK5CYII='
-  );
+  const trayIcon = nativeImage.createFromPath(getAppIconPath()).resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
-  tray.setToolTip('Spellbook 魔法书');
+  tray.setToolTip(getCurrentAppName());
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show', click: () => mainWindow?.show() },
@@ -210,6 +216,19 @@ function registerDesktopControls(): void {
       { label: 'Quit', click: () => app.quit() }
     ])
   );
+}
+
+function getCurrentAppName(): string {
+  const language = settingsService?.getSettings().language ?? DEFAULT_APP_SETTINGS.language;
+  return resolveAppName(language, app.getLocale());
+}
+
+function applyAppIdentity(): void {
+  const name = getCurrentAppName();
+  app.setName(name);
+  mainWindow?.setTitle(name);
+  floatingWindow?.setTitle(name);
+  tray?.setToolTip(name);
 }
 
 function registerQuickPanelShortcut(shortcut: ShortcutAccelerator): boolean {

@@ -37,7 +37,7 @@ describe('i18n', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));
 
-    expect(zh('app.brand')).toBe('Spellbook 魔法书');
+    expect(zh('app.brand')).toBe('魔法书');
     expect(en('app.brand')).toBe('Spellbook');
     expect(zh('app.subtitle')).toBe('AI 提示词与技能管理器');
     expect(zh('status.ready')).toBe('');
