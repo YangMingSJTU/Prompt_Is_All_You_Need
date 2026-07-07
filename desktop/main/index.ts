@@ -10,6 +10,7 @@ import { generateCandidates } from './services/ranker';
 import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './services/scanner';
 
 let mainWindow: BrowserWindow | null = null;
+let floatingWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
 async function createWindow(): Promise<void> {
@@ -33,10 +34,47 @@ async function createWindow(): Promise<void> {
     mainWindow?.show();
   });
 
+  await loadRenderer(mainWindow, 'main');
+}
+
+async function createFloatingWindow(): Promise<void> {
+  const preloadPath = join(__dirname, '../preload/preload.mjs');
+  floatingWindow = new BrowserWindow({
+    width: 560,
+    height: 420,
+    minWidth: 520,
+    minHeight: 360,
+    maxWidth: 680,
+    maxHeight: 520,
+    title: 'Agent Prompt Miner Quick Panel',
+    show: false,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#ffffff',
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  floatingWindow.on('blur', () => {
+    floatingWindow?.hide();
+  });
+
+  await loadRenderer(floatingWindow, 'floating');
+}
+
+async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): Promise<void> {
   if (process.env.ELECTRON_RENDERER_URL) {
-    await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    await window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?mode=${mode}`);
   } else {
-    await mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    await window.loadFile(join(__dirname, '../renderer/index.html'), {
+      query: { mode }
+    });
   }
 }
 
@@ -47,9 +85,11 @@ async function bootstrap(): Promise<void> {
 
   ipcMain.handle('prompts:search', (_event, query: string) => promptService.searchPrompts(query ?? ''));
   ipcMain.handle('prompts:list', () => promptService.listPrompts());
+  ipcMain.handle('prompts:popular', (_event, limit?: number) => promptService.listPopularPrompts(limit ?? 6));
   ipcMain.handle('prompts:copy', async (_event, promptId: string) => {
     const prompt = await promptService.copyPrompt(promptId);
     clipboard.writeText(prompt.body);
+    floatingWindow?.hide();
     return prompt;
   });
   ipcMain.handle('candidates:list', () => promptService.listCandidates());
@@ -105,6 +145,9 @@ async function bootstrap(): Promise<void> {
       return result;
     }
   );
+  ipcMain.handle('floating:close', () => {
+    floatingWindow?.hide();
+  });
 }
 
 function defaultExportBase(target: ExportTarget): string {
@@ -120,14 +163,23 @@ function defaultExportBase(target: ExportTarget): string {
 
 function registerDesktopControls(): void {
   globalShortcut.register('CommandOrControl+Shift+Space', () => {
-    if (!mainWindow) {
+    if (!floatingWindow) {
       return;
     }
-    if (mainWindow.isVisible()) {
-      mainWindow.hide();
+    if (floatingWindow.isVisible()) {
+      floatingWindow.hide();
     } else {
-      mainWindow.show();
-      mainWindow.focus();
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      const bounds = focusedWindow?.getBounds();
+      if (bounds) {
+        floatingWindow.setPosition(
+          Math.round(bounds.x + bounds.width / 2 - 280),
+          Math.round(bounds.y + 110)
+        );
+      }
+      floatingWindow.show();
+      floatingWindow.focus();
+      floatingWindow.webContents.send('floating:focus-search');
     }
   });
 
@@ -139,6 +191,7 @@ function registerDesktopControls(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show', click: () => mainWindow?.show() },
+      { label: 'Quick Panel', click: () => floatingWindow?.show() },
       { label: 'Hide', click: () => mainWindow?.hide() },
       { type: 'separator' },
       { label: 'Quit', click: () => app.quit() }
@@ -149,6 +202,7 @@ function registerDesktopControls(): void {
 app.whenReady().then(async () => {
   await bootstrap();
   await createWindow();
+  await createFloatingWindow();
   registerDesktopControls();
 });
 
@@ -161,6 +215,7 @@ app.on('window-all-closed', () => {
 app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     await createWindow();
+    await createFloatingWindow();
   }
 });
 

@@ -13,6 +13,7 @@ declare global {
     apm: {
       searchPrompts(query: string): Promise<Prompt[]>;
       listPrompts(): Promise<Prompt[]>;
+      listPopularPrompts(limit?: number): Promise<Prompt[]>;
       copyPrompt(promptId: string): Promise<Prompt>;
       listCandidates(): Promise<Candidate[]>;
       promoteCandidate(candidateId: string): Promise<Prompt>;
@@ -36,6 +37,8 @@ declare global {
         promptId?: string | null,
         candidateId?: string | null
       ): Promise<ExportPreview>;
+      onFloatingFocus(callback: () => void): () => void;
+      closeFloatingWindow(): Promise<void>;
     };
   }
 }

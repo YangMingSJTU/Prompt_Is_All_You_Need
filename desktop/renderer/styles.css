@@ -12,8 +12,6 @@
 
 body {
   margin: 0;
-  min-width: 900px;
-  min-height: 620px;
   overflow: hidden;
 }
 
@@ -26,6 +24,8 @@ input {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   height: 100vh;
+  min-width: 900px;
+  min-height: 620px;
 }
 
 .sidebar {
@@ -184,6 +184,30 @@ small {
   min-height: 0;
   flex-direction: column;
   padding: 14px;
+}
+
+.quick-start {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.quick-start h3,
+.quick-start p {
+  margin: 0;
+}
+
+.quick-start h3 {
+  font-size: 18px;
+}
+
+.quick-start p {
+  color: #4f5b6b;
+  line-height: 1.45;
 }
 
 .search-box {
@@ -444,6 +468,115 @@ small {
   overflow: hidden;
   margin: 0;
   color: #3b4656;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  width: 100vw;
+  height: 100vh;
+  padding: 14px;
+  border: 1px solid #cbd3df;
+  background: #ffffff;
+}
+
+.floating-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  -webkit-app-region: drag;
+}
+
+.floating-header h1,
+.floating-header p {
+  margin: 0;
+}
+
+.floating-header h1 {
+  font-size: 18px;
+}
+
+.floating-header span {
+  max-width: 210px;
+  overflow: hidden;
+  color: #697386;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #b8c2d2;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.floating-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.floating-results {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.floating-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.floating-row.selected,
+.floating-row:hover {
+  background: #eef2f7;
+}
+
+.floating-row strong,
+.floating-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-row small,
+.floating-footer,
+.floating-empty {
+  color: #697386;
+}
+
+.floating-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+}
+
+.floating-footer {
+  overflow: hidden;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

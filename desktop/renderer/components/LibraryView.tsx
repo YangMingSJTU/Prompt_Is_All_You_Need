@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Candidate, Prompt } from '../../shared/types';
+import type { TFunction } from '../i18n';
 import { ExportDialog } from './ExportDialog';
 
 interface LibraryViewProps {
@@ -8,13 +9,15 @@ interface LibraryViewProps {
   candidates: Candidate[];
   onChanged(): Promise<void>;
   onMessage(message: string): void;
+  t: TFunction;
 }
 
 export function LibraryView({
   prompts,
   candidates,
   onChanged,
-  onMessage
+  onMessage,
+  t
 }: LibraryViewProps) {
   const [exportPrompt, setExportPrompt] = useState<Prompt | null>(null);
 
@@ -28,10 +31,10 @@ export function LibraryView({
     <section className="stack">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Saved assets</p>
-          <h3>Prompt Library</h3>
+          <p className="eyebrow">{t('library.assets')}</p>
+          <h3>{t('library.title')}</h3>
         </div>
-        <span className="count-pill">{prompts.length} prompts</span>
+        <span className="count-pill">{prompts.length} {t('metric.prompts')}</span>
       </div>
       <div className="card-grid">
         {prompts.map((prompt) => (
@@ -42,17 +45,17 @@ export function LibraryView({
               <p>{prompt.description}</p>
             </div>
             <button className="secondary-button" onClick={() => setExportPrompt(prompt)} type="button">
-              Export
+              {t('prompt.export')}
             </button>
           </article>
         ))}
       </div>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">From local history</p>
-          <h3>Candidates</h3>
+          <p className="eyebrow">{t('library.fromHistory')}</p>
+          <h3>{t('library.candidates')}</h3>
         </div>
-        <span className="count-pill">{candidates.length} candidates</span>
+        <span className="count-pill">{candidates.length} {t('metric.candidates')}</span>
       </div>
       <div className="candidate-list">
         {candidates.map((candidate) => (
@@ -66,7 +69,7 @@ export function LibraryView({
             </div>
             <button className="primary-button" onClick={() => promote(candidate)} type="button">
               <Plus size={16} />
-              Save
+              {t('library.save')}
             </button>
           </article>
         ))}
@@ -78,6 +81,7 @@ export function LibraryView({
           onClose={() => setExportPrompt(null)}
           onExported={onChanged}
           onMessage={onMessage}
+          t={t}
         />
       ) : null}
     </section>

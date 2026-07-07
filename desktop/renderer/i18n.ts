@@ -1,0 +1,128 @@
+export type Locale = 'zh' | 'en';
+
+const resources = {
+  zh: {
+    'app.subtitle': '本地提示词启动器',
+    'app.version': '桌面版 v0.1',
+    'status.ready': '就绪',
+    'status.copied': '已复制',
+    'status.exported': '已导出',
+    'status.scanFinished': '扫描完成',
+    'nav.panel': '快捷面板',
+    'nav.library': '提示词库',
+    'nav.scanner': '本地扫描',
+    'nav.analytics': '使用分析',
+    'shortcut.label': '快捷键',
+    'shortcut.value': 'Ctrl Shift Space',
+    'home.title': '先搜索，再复制',
+    'home.description': '默认展示最常用提示词；输入关键词可搜索整个本地库。',
+    'home.scanCta': '扫描本地历史',
+    'home.manageCta': '管理提示词',
+    'prompt.placeholder': '搜索标题、标签或内容',
+    'prompt.copy': '复制',
+    'prompt.export': '导出',
+    'prompt.empty': '没有找到匹配提示词',
+    'floating.title': '选择提示词',
+    'floating.placeholder': '输入关键词搜索提示词',
+    'floating.hint': '回车复制选中项，Esc 关闭窗口',
+    'floating.default': '常用',
+    'floating.noResult': '没有匹配项',
+    'library.assets': '已保存资产',
+    'library.title': '提示词库',
+    'library.candidates': '候选提示词',
+    'library.fromHistory': '来自本地历史',
+    'library.save': '保存',
+    'scanner.localOnly': '仅本地处理',
+    'scanner.title': '历史扫描',
+    'scanner.description': '扫描 Claude 和 Codex JSONL 文件，不上传数据。',
+    'scanner.run': '开始扫描',
+    'scanner.running': '扫描中',
+    'metric.prompts': '提示词',
+    'metric.sources': '来源',
+    'metric.candidates': '候选',
+    'metric.warnings': '警告',
+    'metric.copies': '复制',
+    'metric.exports': '导出',
+    'analytics.usage': '使用情况',
+    'analytics.topCopied': '最常复制',
+    'analytics.empty': '复制提示词后，这里会展示本地使用统计。',
+    'export.preview': '写入前预览',
+    'export.title': '导出',
+    'export.snippet': 'Snippet',
+    'export.claude': 'Claude Skill',
+    'export.codex': 'Codex Skill',
+    'export.cancel': '取消',
+    'export.confirm': '确认写入',
+    'export.writing': '写入中'
+  },
+  en: {
+    'app.subtitle': 'Local prompt launcher',
+    'app.version': 'Desktop v0.1',
+    'status.ready': 'Ready',
+    'status.copied': 'Copied',
+    'status.exported': 'Exported',
+    'status.scanFinished': 'Scan finished',
+    'nav.panel': 'Quick Panel',
+    'nav.library': 'Library',
+    'nav.scanner': 'Scanner',
+    'nav.analytics': 'Analytics',
+    'shortcut.label': 'Hotkey',
+    'shortcut.value': 'Ctrl Shift Space',
+    'home.title': 'Search, then copy',
+    'home.description': 'Most used prompts appear first. Type to search your local library.',
+    'home.scanCta': 'Scan local history',
+    'home.manageCta': 'Manage prompts',
+    'prompt.placeholder': 'Search titles, tags, or content',
+    'prompt.copy': 'Copy',
+    'prompt.export': 'Export',
+    'prompt.empty': 'No matching prompts',
+    'floating.title': 'Choose Prompt',
+    'floating.placeholder': 'Search prompts',
+    'floating.hint': 'Enter copies the selected prompt. Esc closes this window.',
+    'floating.default': 'Popular',
+    'floating.noResult': 'No matches',
+    'library.assets': 'Saved assets',
+    'library.title': 'Prompt Library',
+    'library.candidates': 'Candidates',
+    'library.fromHistory': 'From local history',
+    'library.save': 'Save',
+    'scanner.localOnly': 'Local only',
+    'scanner.title': 'History Scanner',
+    'scanner.description': 'Scans Claude and Codex JSONL files without uploading data.',
+    'scanner.run': 'Run Scan',
+    'scanner.running': 'Scanning',
+    'metric.prompts': 'Prompts',
+    'metric.sources': 'Sources',
+    'metric.candidates': 'Candidates',
+    'metric.warnings': 'Warnings',
+    'metric.copies': 'Copies',
+    'metric.exports': 'Exports',
+    'analytics.usage': 'Usage',
+    'analytics.topCopied': 'Top copied prompts',
+    'analytics.empty': 'Copy a prompt to start collecting local usage stats.',
+    'export.preview': 'Preview before write',
+    'export.title': 'Export',
+    'export.snippet': 'Snippet',
+    'export.claude': 'Claude Skill',
+    'export.codex': 'Codex Skill',
+    'export.cancel': 'Cancel',
+    'export.confirm': 'Confirm Write',
+    'export.writing': 'Writing'
+  }
+} as const;
+
+export type I18nKey = keyof typeof resources.zh;
+
+export type TFunction = (key: I18nKey) => string;
+
+export function detectLocale(language: string | undefined | null): Locale {
+  const normalized = (language ?? '').toLowerCase();
+  if (normalized.startsWith('en')) {
+    return 'en';
+  }
+  return 'zh';
+}
+
+export function createTranslator(locale: Locale): TFunction {
+  return (key) => resources[locale][key] ?? resources.zh[key];
+}

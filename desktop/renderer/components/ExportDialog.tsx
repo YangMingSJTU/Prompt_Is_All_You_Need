@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ExportPreview, ExportTarget, Prompt } from '../../shared/types';
+import type { TFunction } from '../i18n';
 
 interface ExportDialogProps {
   prompt: Prompt;
@@ -9,12 +10,13 @@ interface ExportDialogProps {
   onClose(): void;
   onExported(): Promise<void>;
   onMessage(message: string): void;
+  t: TFunction;
 }
 
-const TARGETS: Array<{ value: ExportTarget; label: string }> = [
-  { value: 'snippet', label: 'Snippet' },
-  { value: 'claude-skill', label: 'Claude Skill' },
-  { value: 'codex-skill', label: 'Codex Skill' }
+const TARGETS: Array<{ value: ExportTarget; labelKey: 'export.snippet' | 'export.claude' | 'export.codex' }> = [
+  { value: 'snippet', labelKey: 'export.snippet' },
+  { value: 'claude-skill', labelKey: 'export.claude' },
+  { value: 'codex-skill', labelKey: 'export.codex' }
 ];
 
 export function ExportDialog({
@@ -23,7 +25,8 @@ export function ExportDialog({
   candidateId,
   onClose,
   onExported,
-  onMessage
+  onMessage,
+  t
 }: ExportDialogProps) {
   const [target, setTarget] = useState<ExportTarget>('snippet');
   const [preview, setPreview] = useState<ExportPreview | null>(null);
@@ -54,7 +57,7 @@ export function ExportDialog({
         promptId,
         candidateId
       );
-      onMessage(`Exported ${result.path}`);
+      onMessage(`${t('status.exported')} ${result.path}`);
       await onExported();
       onClose();
     } finally {
@@ -67,8 +70,8 @@ export function ExportDialog({
       <section className="modal">
         <header className="modal-header">
           <div>
-            <p className="eyebrow">Preview before write</p>
-            <h3>Export {prompt.title}</h3>
+            <p className="eyebrow">{t('export.preview')}</p>
+            <h3>{t('export.title')} {prompt.title}</h3>
           </div>
           <button className="icon-button" onClick={onClose} type="button" aria-label="Close">
             <X size={18} />
@@ -82,7 +85,7 @@ export function ExportDialog({
               onClick={() => setTarget(item.value)}
               type="button"
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
@@ -90,10 +93,10 @@ export function ExportDialog({
         <pre className="export-preview">{preview?.content}</pre>
         <div className="button-row end">
           <button className="secondary-button" onClick={onClose} type="button">
-            Cancel
+            {t('export.cancel')}
           </button>
           <button className="primary-button" disabled={busy} onClick={write} type="button">
-            {busy ? 'Writing' : 'Confirm Write'}
+            {busy ? t('export.writing') : t('export.confirm')}
           </button>
         </div>
       </section>

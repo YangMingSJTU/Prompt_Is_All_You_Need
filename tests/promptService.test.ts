@@ -24,4 +24,20 @@ describe('prompt service', () => {
 
     expect(analytics.totalCopies).toBe(1);
   });
+
+  it('returns most used prompts first for the floating panel defaults', async () => {
+    const db = await createTestDatabase();
+    const service = createPromptService(db);
+    await service.seedStarterPrompts();
+    const [review] = await service.searchPrompts('review');
+    const [commit] = await service.searchPrompts('commit');
+
+    await service.copyPrompt(commit.id);
+    await service.copyPrompt(commit.id);
+    await service.copyPrompt(review.id);
+
+    const popular = await service.listPopularPrompts(2);
+
+    expect(popular.map((prompt) => prompt.slug)).toEqual(['commit-message', 'review-diff']);
+  });
 });

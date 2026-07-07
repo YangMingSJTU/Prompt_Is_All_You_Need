@@ -7,8 +7,11 @@ Agent Prompt Miner is a local-first desktop prompt launcher and miner for Codex 
 The first desktop version provides:
 
 - Electron desktop workspace with a global prompt-panel hotkey.
+- Main workspace for library, scan, export, and analytics.
+- Small floating quick panel opened by `Ctrl+Shift+Space`.
 - Starter prompt library for review, debugging tests, and commit messages.
 - Prompt search, preview, copy, and local usage analytics.
+- Chinese and English UI copy, selected from the local language with Chinese fallback.
 - Local Claude/Codex JSONL scanning that only extracts user/human prompts.
 - Candidate generation from local history.
 - Preview and confirmed export for snippets, Claude Skills, and Codex Skills.

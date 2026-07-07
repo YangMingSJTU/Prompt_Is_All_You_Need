@@ -1,15 +1,17 @@
 import { Clipboard, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Prompt } from '../../shared/types';
+import type { TFunction } from '../i18n';
 import { ExportDialog } from './ExportDialog';
 
 interface PromptPanelProps {
   prompts: Prompt[];
   onChanged(): Promise<void>;
   onMessage(message: string): void;
+  t: TFunction;
 }
 
-export function PromptPanel({ prompts, onChanged, onMessage }: PromptPanelProps) {
+export function PromptPanel({ prompts, onChanged, onMessage, t }: PromptPanelProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(prompts[0]?.id ?? null);
   const [exportPrompt, setExportPrompt] = useState<Prompt | null>(null);
@@ -31,19 +33,24 @@ export function PromptPanel({ prompts, onChanged, onMessage }: PromptPanelProps)
 
   async function copySelected(prompt: Prompt): Promise<void> {
     await window.apm.copyPrompt(prompt.id);
-    onMessage(`Copied ${prompt.title}`);
+    onMessage(`${t('status.copied')} ${prompt.title}`);
     await onChanged();
   }
 
   return (
     <section className="panel-grid">
       <div className="search-pane">
+        <div className="quick-start">
+          <p className="eyebrow">{t('home.title')}</p>
+          <h3>{t('nav.panel')}</h3>
+          <p>{t('home.description')}</p>
+        </div>
         <label className="search-box">
           <Search size={18} />
           <input
             autoFocus
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search prompts, tags, or content"
+            placeholder={t('prompt.placeholder')}
             value={query}
           />
         </label>
@@ -75,17 +82,17 @@ export function PromptPanel({ prompts, onChanged, onMessage }: PromptPanelProps)
               <div className="button-row">
                 <button className="primary-button" onClick={() => copySelected(selected)} type="button">
                   <Clipboard size={16} />
-                  Copy
+                  {t('prompt.copy')}
                 </button>
                 <button className="secondary-button" onClick={() => setExportPrompt(selected)} type="button">
-                  Export
+                  {t('prompt.export')}
                 </button>
               </div>
             </div>
             <pre className="prompt-preview">{selected.body}</pre>
           </>
         ) : (
-          <div className="empty-state">No prompts found.</div>
+          <div className="empty-state">{t('prompt.empty')}</div>
         )}
       </div>
       {exportPrompt ? (
@@ -95,6 +102,7 @@ export function PromptPanel({ prompts, onChanged, onMessage }: PromptPanelProps)
           onClose={() => setExportPrompt(null)}
           onExported={onChanged}
           onMessage={onMessage}
+          t={t}
         />
       ) : null}
     </section>

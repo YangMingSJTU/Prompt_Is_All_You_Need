@@ -1,34 +1,36 @@
 import type { UsageAnalytics } from '../../shared/types';
+import type { TFunction } from '../i18n';
 
 interface AnalyticsViewProps {
   analytics: UsageAnalytics | null;
+  t: TFunction;
 }
 
-export function AnalyticsView({ analytics }: AnalyticsViewProps) {
+export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
   return (
     <section className="stack">
       <div className="metric-grid">
         <div className="metric-card">
-          <span>Prompts</span>
+          <span>{t('metric.prompts')}</span>
           <strong>{analytics?.promptCount ?? 0}</strong>
         </div>
         <div className="metric-card">
-          <span>Candidates</span>
+          <span>{t('metric.candidates')}</span>
           <strong>{analytics?.candidateCount ?? 0}</strong>
         </div>
         <div className="metric-card">
-          <span>Copies</span>
+          <span>{t('metric.copies')}</span>
           <strong>{analytics?.totalCopies ?? 0}</strong>
         </div>
         <div className="metric-card">
-          <span>Exports</span>
+          <span>{t('metric.exports')}</span>
           <strong>{analytics?.exportedAssetCount ?? 0}</strong>
         </div>
       </div>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Usage</p>
-          <h3>Top copied prompts</h3>
+          <p className="eyebrow">{t('analytics.usage')}</p>
+          <h3>{t('analytics.topCopied')}</h3>
         </div>
       </div>
       <div className="candidate-list">
@@ -36,12 +38,12 @@ export function AnalyticsView({ analytics }: AnalyticsViewProps) {
           <article className="candidate-row" key={prompt.id}>
             <div>
               <strong>{prompt.title}</strong>
-              <p>{prompt.copyCount} copy actions</p>
+              <p>{prompt.copyCount} {t('metric.copies')}</p>
             </div>
           </article>
         ))}
         {analytics && analytics.topPrompts.length === 0 ? (
-          <div className="empty-state">Copy a prompt to start collecting local usage stats.</div>
+          <div className="empty-state">{t('analytics.empty')}</div>
         ) : null}
       </div>
     </section>

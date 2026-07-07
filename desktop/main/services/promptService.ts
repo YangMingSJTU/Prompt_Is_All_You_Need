@@ -117,6 +117,20 @@ export function createPromptService(db: AppDatabase) {
         .map(rowToPrompt);
     },
 
+    async listPopularPrompts(limit = 6): Promise<Prompt[]> {
+      return db
+        .all<PromptRow>(
+          `SELECT prompts.*
+           FROM prompts
+           LEFT JOIN usage_events ON usage_events.prompt_id = prompts.id AND usage_events.action = 'copy'
+           GROUP BY prompts.id
+           ORDER BY COUNT(usage_events.id) DESC, prompts.updated_at DESC, prompts.title ASC
+           LIMIT ?`,
+          [limit]
+        )
+        .map(rowToPrompt);
+    },
+
     async copyPrompt(promptId: string): Promise<Prompt> {
       const row = db.get<PromptRow>('SELECT * FROM prompts WHERE id = ?', [promptId]);
       if (!row) {
