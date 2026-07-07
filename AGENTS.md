@@ -33,7 +33,7 @@ Follow the existing TypeScript and React style. Keep UI state local unless it is
 
 ## UI Interaction Guidance
 
-For click-triggered success feedback such as copy, save, scan, package, or install, use a short Tooltip anchored to the triggering control. Do not show routine confirmations as a global status pill or other persistent topbar/global status text. Reserve inline messages for actionable errors, validation problems, or warnings the user must fix.
+For click-triggered result feedback such as copy, save, scan, package, or install, use a window-top centered Toast. Do not use Tooltip for click results, and do not show routine confirmations as a global status pill or other persistent topbar/global status text. Reserve Tooltip for hover explanations or supplemental detail, and reserve inline messages for actionable errors, validation problems, or warnings the user must fix.
 
 ## Testing Guidelines
 

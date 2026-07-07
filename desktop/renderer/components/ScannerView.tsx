@@ -2,7 +2,7 @@ import { RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import type { Candidate, SourceFileSummary } from '../../shared/types';
 import type { TFunction } from '../i18n';
-import { FeedbackTarget, useFeedbackTooltip } from './FeedbackTooltip';
+import { useFeedbackToast } from './FeedbackToast';
 
 interface ScannerViewProps {
   onChanged(): Promise<void>;
@@ -19,14 +19,14 @@ interface ScanState {
 export function ScannerView({ onChanged, t }: ScannerViewProps) {
   const [scanState, setScanState] = useState<ScanState | null>(null);
   const [running, setRunning] = useState(false);
-  const { showFeedback, tooltipFor } = useFeedbackTooltip();
+  const { showToast } = useFeedbackToast();
 
   async function runScan(): Promise<void> {
     setRunning(true);
     try {
       const result = await window.spellbook.runScan();
       setScanState(result);
-      showFeedback('scanner:run', `${t('status.scanFinished')}: ${result.scannedPrompts}`);
+      showToast(`${t('status.scanFinished')}: ${result.scannedPrompts}`);
       await onChanged();
     } finally {
       setRunning(false);
@@ -39,12 +39,10 @@ export function ScannerView({ onChanged, t }: ScannerViewProps) {
         <div>
           <h3>{t('scanner.title')}</h3>
         </div>
-        <FeedbackTarget align="right" message={tooltipFor('scanner:run')}>
-          <button className="primary-button" disabled={running} onClick={runScan} type="button">
-            <RotateCw size={16} />
-            {running ? t('scanner.running') : t('scanner.run')}
-          </button>
-        </FeedbackTarget>
+        <button className="primary-button" disabled={running} onClick={runScan} type="button">
+          <RotateCw size={16} />
+          {running ? t('scanner.running') : t('scanner.run')}
+        </button>
       </div>
       <div className="summary-strip">
         <div className="summary-item">

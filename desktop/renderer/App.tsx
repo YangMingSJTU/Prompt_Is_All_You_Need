@@ -4,6 +4,7 @@ import { resolveAppName } from '../shared/appIdentity';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
 import type { Candidate, SkillRecord, Spell, UsageAnalytics } from '../shared/types';
 import { AnalyticsView } from './components/AnalyticsView';
+import { FeedbackToastProvider } from './components/FeedbackToast';
 import { FloatingPanel } from './components/FloatingPanel';
 import { LibraryView } from './components/LibraryView';
 import { ScannerView } from './components/ScannerView';
@@ -40,7 +41,11 @@ export function App() {
   const [analytics, setAnalytics] = useState<UsageAnalytics | null>(null);
 
   if (mode === 'floating') {
-    return <FloatingPanel t={t} />;
+    return (
+      <FeedbackToastProvider>
+        <FloatingPanel t={t} />
+      </FeedbackToastProvider>
+    );
   }
 
   const refresh = useCallback(async () => {
@@ -107,44 +112,46 @@ export function App() {
   const PageIcon = selectedNavItem.icon;
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <nav className="nav-list" aria-label="Navigation">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={view === item.id ? 'nav-item active' : 'nav-item'}
-                key={item.id}
-                onClick={() => setView(item.id)}
-                type="button"
-              >
-                <Icon size={18} />
-                <span>{t(item.labelKey)}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <div className="sidebar-footer">
-          <button
-            className={view === 'settings' ? 'settings-entry active' : 'settings-entry'}
-            onClick={() => setView('settings')}
-            type="button"
-          >
-            <Settings size={16} />
-            <span>{t('settings.title')}</span>
-          </button>
-        </div>
-      </aside>
-      <main className="workspace">
-        <header className="topbar">
-          <div className="topbar-title">
-            <PageIcon size={16} />
-            <h2>{t(selectedNavItem.labelKey)}</h2>
+    <FeedbackToastProvider>
+      <div className="app-shell">
+        <aside className="sidebar">
+          <nav className="nav-list" aria-label="Navigation">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  className={view === item.id ? 'nav-item active' : 'nav-item'}
+                  key={item.id}
+                  onClick={() => setView(item.id)}
+                  type="button"
+                >
+                  <Icon size={18} />
+                  <span>{t(item.labelKey)}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <div className="sidebar-footer">
+            <button
+              className={view === 'settings' ? 'settings-entry active' : 'settings-entry'}
+              onClick={() => setView('settings')}
+              type="button"
+            >
+              <Settings size={16} />
+              <span>{t('settings.title')}</span>
+            </button>
           </div>
-        </header>
-        {selectedView}
-      </main>
-    </div>
+        </aside>
+        <main className="workspace">
+          <header className="topbar">
+            <div className="topbar-title">
+              <PageIcon size={16} />
+              <h2>{t(selectedNavItem.labelKey)}</h2>
+            </div>
+          </header>
+          {selectedView}
+        </main>
+      </div>
+    </FeedbackToastProvider>
   );
 }

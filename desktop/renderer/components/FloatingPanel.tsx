@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { getSpellDisplayText } from '../spellDisplay';
-import { FeedbackTooltip, useFeedbackTooltip } from './FeedbackTooltip';
+import { useFeedbackToast } from './FeedbackToast';
 
 interface FloatingPanelProps {
   t: TFunction;
@@ -14,7 +14,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   const [query, setQuery] = useState('');
   const [spells, setSpells] = useState<Spell[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const { showFeedback, tooltipFor } = useFeedbackTooltip();
+  const { showToast } = useFeedbackToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadPrompts = useCallback(async (value: string) => {
@@ -43,7 +43,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
   async function copySpell(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    showFeedback(`floating:${spell.id}`, t('status.copied'));
+    showToast(t('status.copied'));
   }
 
   async function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): Promise<void> {
@@ -98,7 +98,6 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
           >
             <span className="spell-result-text">{getSpellDisplayText(spell)}</span>
             <Clipboard size={15} />
-            <FeedbackTooltip align="right" message={tooltipFor(`floating:${spell.id}`)} />
           </button>
         ))}
         {spells.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}

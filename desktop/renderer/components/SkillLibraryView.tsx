@@ -2,7 +2,7 @@ import { Archive, Download, RotateCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { SkillPlatform, SkillRecord } from '../../shared/types';
 import type { TFunction } from '../i18n';
-import { FeedbackTarget, useFeedbackTooltip } from './FeedbackTooltip';
+import { useFeedbackToast } from './FeedbackToast';
 
 interface SkillLibraryViewProps {
   skills: SkillRecord[];
@@ -13,7 +13,7 @@ interface SkillLibraryViewProps {
 export function SkillLibraryView({ skills, onChanged, t }: SkillLibraryViewProps) {
   const [scanning, setScanning] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const { showFeedback, tooltipFor } = useFeedbackTooltip();
+  const { showToast } = useFeedbackToast();
   const summary = useMemo(
     () => ({
       total: skills.length,
@@ -28,7 +28,7 @@ export function SkillLibraryView({ skills, onChanged, t }: SkillLibraryViewProps
     setScanning(true);
     try {
       const result = await window.spellbook.scanSkills();
-      showFeedback('skills:scan', `${t('status.skillScanFinished')}: ${result.length}`);
+      showToast(`${t('status.skillScanFinished')}: ${result.length}`);
       await onChanged();
     } finally {
       setScanning(false);
@@ -39,7 +39,7 @@ export function SkillLibraryView({ skills, onChanged, t }: SkillLibraryViewProps
     setBusyAction(`${skill.id}:package`);
     try {
       const result = await window.spellbook.packageSkill(skill.id);
-      showFeedback(`${skill.id}:package`, `${t('status.packaged')} ${result.path}`);
+      showToast(`${t('status.packaged')} ${result.path}`);
     } finally {
       setBusyAction(null);
     }
@@ -49,10 +49,9 @@ export function SkillLibraryView({ skills, onChanged, t }: SkillLibraryViewProps
     setBusyAction(`${skill.id}:install:${platform}`);
     try {
       const result = await window.spellbook.installSkill(skill.id, platform);
-      showFeedback(
-        `${skill.id}:install:${platform}`,
-        result.warning ?? `${t('status.installed')} ${result.path}`
-      );
+      showToast(result.warning ?? `${t('status.installed')} ${result.path}`, {
+        variant: result.warning ? 'warning' : 'success'
+      });
       await onChanged();
     } finally {
       setBusyAction(null);
@@ -65,12 +64,10 @@ export function SkillLibraryView({ skills, onChanged, t }: SkillLibraryViewProps
         <div>
           <h3>{t('skill.title')}</h3>
         </div>
-        <FeedbackTarget align="right" message={tooltipFor('skills:scan')}>
-          <button className="primary-button" disabled={scanning} onClick={scanSkills} type="button">
-            <RotateCw size={16} />
-            {scanning ? t('skill.scanning') : t('skill.scan')}
-          </button>
-        </FeedbackTarget>
+        <button className="primary-button" disabled={scanning} onClick={scanSkills} type="button">
+          <RotateCw size={16} />
+          {scanning ? t('skill.scanning') : t('skill.scan')}
+        </button>
       </div>
       <div className="summary-strip">
         <div className="summary-item">
@@ -118,39 +115,33 @@ export function SkillLibraryView({ skills, onChanged, t }: SkillLibraryViewProps
                 {remaining > 0 ? <code>+{remaining}</code> : null}
               </div>
               <div className="skill-actions">
-                <FeedbackTarget message={tooltipFor(`${skill.id}:package`)}>
-                  <button
-                    className="secondary-button"
-                    disabled={!skill.packageable || busyAction !== null}
-                    onClick={() => void packageSkill(skill)}
-                    type="button"
-                  >
-                    <Archive size={15} />
-                    {t('skill.package')}
-                  </button>
-                </FeedbackTarget>
-                <FeedbackTarget message={tooltipFor(`${skill.id}:install:claude`)}>
-                  <button
-                    className="secondary-button"
-                    disabled={busyAction !== null}
-                    onClick={() => void installSkill(skill, 'claude')}
-                    type="button"
-                  >
-                    <Download size={15} />
-                    {t('skill.installClaude')}
-                  </button>
-                </FeedbackTarget>
-                <FeedbackTarget align="right" message={tooltipFor(`${skill.id}:install:codex`)}>
-                  <button
-                    className="secondary-button"
-                    disabled={busyAction !== null}
-                    onClick={() => void installSkill(skill, 'codex')}
-                    type="button"
-                  >
-                    <Download size={15} />
-                    {t('skill.installCodex')}
-                  </button>
-                </FeedbackTarget>
+                <button
+                  className="secondary-button"
+                  disabled={!skill.packageable || busyAction !== null}
+                  onClick={() => void packageSkill(skill)}
+                  type="button"
+                >
+                  <Archive size={15} />
+                  {t('skill.package')}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={busyAction !== null}
+                  onClick={() => void installSkill(skill, 'claude')}
+                  type="button"
+                >
+                  <Download size={15} />
+                  {t('skill.installClaude')}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={busyAction !== null}
+                  onClick={() => void installSkill(skill, 'codex')}
+                  type="button"
+                >
+                  <Download size={15} />
+                  {t('skill.installCodex')}
+                </button>
               </div>
             </article>
           );

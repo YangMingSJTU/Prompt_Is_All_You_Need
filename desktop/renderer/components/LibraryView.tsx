@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
-import { FeedbackTarget, useFeedbackTooltip } from './FeedbackTooltip';
+import { useFeedbackToast } from './FeedbackToast';
 
 interface LibraryViewProps {
   spells: Spell[];
@@ -20,7 +20,7 @@ interface SpellDraft {
 
 export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
-  const { showFeedback, tooltipFor } = useFeedbackTooltip();
+  const { showToast } = useFeedbackToast();
   const selectedSpell = useMemo(
     () => spells.find((spell) => spell.id === selectedId) ?? spells[0] ?? null,
     [selectedId, spells]
@@ -37,13 +37,13 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
   async function promote(candidate: Candidate): Promise<void> {
     const spell = await window.spellbook.promoteCandidate(candidate.id);
     setSelectedId(spell.id);
-    showFeedback(`candidate:${candidate.id}`, t('library.saved'));
+    showToast(t('library.saved'));
     await onChanged();
   }
 
-  async function copy(spell: Spell, feedbackKey: string): Promise<void> {
+  async function copy(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    showFeedback(feedbackKey, t('status.copied'));
+    showToast(t('status.copied'));
     await onChanged();
   }
 
@@ -56,7 +56,7 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
       body: draft.body,
       tags: parseTagInput(draft.tags)
     });
-    showFeedback('editor:save', t('spell.saved'));
+    showToast(t('spell.saved'));
     await onChanged();
   }
 
@@ -96,17 +96,15 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
                   </div>
                 ) : null}
               </button>
-              <FeedbackTarget align="right" message={tooltipFor(`spell:${spell.id}:copy`)}>
-                <button
-                  aria-label={t('spell.copy')}
-                  className="icon-button"
-                  onClick={() => void copy(spell, `spell:${spell.id}:copy`)}
-                  title={t('spell.copy')}
-                  type="button"
-                >
-                  <Clipboard size={15} />
-                </button>
-              </FeedbackTarget>
+              <button
+                aria-label={t('spell.copy')}
+                className="icon-button"
+                onClick={() => void copy(spell)}
+                title={t('spell.copy')}
+                type="button"
+              >
+                <Clipboard size={15} />
+              </button>
             </article>
           ))}
           {spells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
@@ -130,12 +128,10 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
                       {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
                     </small>
                   </div>
-                  <FeedbackTarget align="right" message={tooltipFor(`candidate:${candidate.id}`)}>
-                    <button className="primary-button" onClick={() => void promote(candidate)} type="button">
-                      <Plus size={16} />
-                      {t('library.save')}
-                    </button>
-                  </FeedbackTarget>
+                  <button className="primary-button" onClick={() => void promote(candidate)} type="button">
+                    <Plus size={16} />
+                    {t('library.save')}
+                  </button>
                 </article>
               ))}
             </div>
@@ -156,26 +152,22 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
                 <h3>{getSpellTitle(selectedSpell, t)}</h3>
               </div>
               <div className="button-row">
-                <FeedbackTarget message={tooltipFor('editor:copy')}>
-                  <button
-                    className="secondary-button"
-                    onClick={() => void copy(selectedSpell, 'editor:copy')}
-                    type="button"
-                  >
-                    <Clipboard size={16} />
-                    {t('spell.copy')}
-                  </button>
-                </FeedbackTarget>
+                <button
+                  className="secondary-button"
+                  onClick={() => void copy(selectedSpell)}
+                  type="button"
+                >
+                  <Clipboard size={16} />
+                  {t('spell.copy')}
+                </button>
                 <button className="secondary-button" onClick={resetDraft} type="button">
                   <X size={16} />
                   {t('spell.cancel')}
                 </button>
-                <FeedbackTarget align="right" message={tooltipFor('editor:save')}>
-                  <button className="primary-button" disabled={!draft.body.trim()} type="submit">
-                    <Save size={16} />
-                    {t('spell.save')}
-                  </button>
-                </FeedbackTarget>
+                <button className="primary-button" disabled={!draft.body.trim()} type="submit">
+                  <Save size={16} />
+                  {t('spell.save')}
+                </button>
               </div>
             </div>
             <label className="field-row">

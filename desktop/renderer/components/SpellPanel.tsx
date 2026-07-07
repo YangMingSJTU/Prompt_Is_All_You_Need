@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { getSpellDisplayText } from '../spellDisplay';
-import { FeedbackTarget, useFeedbackTooltip } from './FeedbackTooltip';
+import { useFeedbackToast } from './FeedbackToast';
 
 interface SpellPanelProps {
   spells: Spell[];
@@ -14,7 +14,7 @@ interface SpellPanelProps {
 export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
-  const { showFeedback, tooltipFor } = useFeedbackTooltip();
+  const { showToast } = useFeedbackToast();
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -28,7 +28,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
 
   async function copySelected(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    showFeedback('panel:copy', t('status.copied'));
+    showToast(t('status.copied'));
     await onChanged();
   }
 
@@ -68,12 +68,10 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
             <div className="detail-heading">
               <div className="detail-title" />
               <div className="button-row">
-                <FeedbackTarget align="right" message={tooltipFor('panel:copy')}>
-                  <button className="primary-button" onClick={() => copySelected(selected)} type="button">
-                    <Clipboard size={16} />
-                    {t('spell.copy')}
-                  </button>
-                </FeedbackTarget>
+                <button className="primary-button" onClick={() => copySelected(selected)} type="button">
+                  <Clipboard size={16} />
+                  {t('spell.copy')}
+                </button>
               </div>
             </div>
             <pre className="spell-preview">{getSpellDisplayText(selected)}</pre>

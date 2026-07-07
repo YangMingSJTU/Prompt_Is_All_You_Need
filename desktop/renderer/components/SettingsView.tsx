@@ -11,7 +11,7 @@ import {
   type SettingsInfo
 } from '../../shared/settings';
 import type { TFunction } from '../i18n';
-import { FeedbackTarget, FeedbackTooltip, useFeedbackTooltip } from './FeedbackTooltip';
+import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -55,7 +55,7 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
   const [recordingShortcut, setRecordingShortcut] = useState(false);
   const [shortcutError, setShortcutError] = useState<string | null>(null);
   const shortcutButtonRef = useRef<HTMLButtonElement>(null);
-  const { showFeedback, tooltipFor } = useFeedbackTooltip();
+  const { showToast } = useFeedbackToast();
 
   useEffect(() => {
     void window.spellbook.getSettingsInfo().then(setInfo);
@@ -67,12 +67,14 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
     }
   }, [recordingShortcut]);
 
-  async function updateSettings(patch: Partial<AppSettings>, feedbackKey: string): Promise<void> {
+  async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
     setSaving(true);
     try {
       const result = await window.spellbook.updateSettings(patch);
       onSettingsChanged(result.settings);
-      showFeedback(feedbackKey, result.warning ?? t('settings.saved'));
+      showToast(result.warning ?? t('settings.saved'), {
+        variant: result.warning ? 'warning' : 'success'
+      });
     } finally {
       setSaving(false);
     }
@@ -109,11 +111,10 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
                     className={settings.language === option.value ? 'active' : ''}
                     disabled={saving}
                     key={option.value}
-                    onClick={() => void updateSettings({ language: option.value }, `language:${option.value}`)}
+                    onClick={() => void updateSettings({ language: option.value })}
                     type="button"
                   >
                     {t(option.labelKey)}
-                    <FeedbackTooltip message={tooltipFor(`language:${option.value}`)} />
                   </button>
                 ))}
               </div>
@@ -143,21 +144,18 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
                       : formatShortcutDisplay(settings.quickPanelShortcut)}
                   </span>
                   {recordingShortcut ? <small>{t('settings.shortcut.recordingHint')}</small> : null}
-                  <FeedbackTooltip message={tooltipFor('shortcut:capture')} />
                 </button>
-                <FeedbackTarget align="right" message={tooltipFor('shortcut:reset')}>
-                  <button
-                    className="secondary-button shortcut-reset"
-                    disabled={
-                      saving ||
-                      settings.quickPanelShortcut === DEFAULT_APP_SETTINGS.quickPanelShortcut
-                    }
-                    onClick={() => void updateShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'shortcut:reset')}
-                    type="button"
-                  >
-                    {t('settings.shortcut.reset')}
-                  </button>
-                </FeedbackTarget>
+                <button
+                  className="secondary-button shortcut-reset"
+                  disabled={
+                    saving ||
+                    settings.quickPanelShortcut === DEFAULT_APP_SETTINGS.quickPanelShortcut
+                  }
+                  onClick={() => void updateShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut)}
+                  type="button"
+                >
+                  {t('settings.shortcut.reset')}
+                </button>
                 {shortcutError ? <span className="settings-error">{shortcutError}</span> : null}
               </div>
             </SettingRow>
@@ -168,16 +166,10 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
                     className={settings.quickPanelPlacement === option.value ? 'active' : ''}
                     disabled={saving}
                     key={option.value}
-                    onClick={() =>
-                      void updateSettings(
-                        { quickPanelPlacement: option.value },
-                        `placement:${option.value}`
-                      )
-                    }
+                    onClick={() => void updateSettings({ quickPanelPlacement: option.value })}
                     type="button"
                   >
                     {t(option.labelKey)}
-                    <FeedbackTooltip message={tooltipFor(`placement:${option.value}`)} />
                   </button>
                 ))}
               </div>
@@ -244,11 +236,11 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
 
     setRecordingShortcut(false);
     setShortcutError(null);
-    void updateShortcut(shortcut.accelerator, 'shortcut:capture');
+    void updateShortcut(shortcut.accelerator);
   }
 
-  async function updateShortcut(accelerator: string, feedbackKey: string): Promise<void> {
-    await updateSettings({ quickPanelShortcut: accelerator }, feedbackKey);
+  async function updateShortcut(accelerator: string): Promise<void> {
+    await updateSettings({ quickPanelShortcut: accelerator });
   }
 }
 
