@@ -45,7 +45,7 @@ export function ScannerView({ onChanged, onMessage, t }: ScannerViewProps) {
       </div>
       <div className="summary-strip">
         <div className="summary-item">
-          <span>{t('metric.prompts')}</span>
+          <span>{t('metric.snippets')}</span>
           <strong>{scanState?.scannedPrompts ?? 0}</strong>
         </div>
         <div className="summary-item">
@@ -64,7 +64,7 @@ export function ScannerView({ onChanged, onMessage, t }: ScannerViewProps) {
       <div className="source-table">
         <div className="source-row source-header">
           <span>{t('metric.sources')}</span>
-          <strong>{t('metric.prompts')}</strong>
+          <strong>{t('metric.snippets')}</strong>
           <small>{t('metric.path')}</small>
         </div>
         {(scanState?.sourceFiles ?? []).map((source) => (

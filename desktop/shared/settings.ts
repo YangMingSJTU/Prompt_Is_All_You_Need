@@ -1,3 +1,5 @@
+import type { SkillPlatform } from './types';
+
 export type AppLanguage = 'system' | 'zh' | 'en';
 
 export type ShortcutAccelerator = string;
@@ -32,7 +34,7 @@ export interface ShortcutKeyInput {
 export interface SettingsInfo {
   databasePath: string;
   historyRoots: Array<{ sourceTool: 'claude' | 'codex'; path: string }>;
-  exportTargets: Array<{ label: string; path: string }>;
+  skillRoots: Array<{ platform: SkillPlatform; path: string }>;
 }
 
 export const DEFAULT_QUICK_PANEL_SHORTCUT = 'CommandOrControl+Shift+Space';

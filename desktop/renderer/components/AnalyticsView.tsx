@@ -11,8 +11,12 @@ export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
     <section className="stack">
       <div className="summary-strip">
         <div className="summary-item">
-          <span>{t('metric.prompts')}</span>
-          <strong>{analytics?.promptCount ?? 0}</strong>
+          <span>{t('metric.snippets')}</span>
+          <strong>{analytics?.snippetCount ?? 0}</strong>
+        </div>
+        <div className="summary-item">
+          <span>{t('metric.skills')}</span>
+          <strong>{analytics?.skillCount ?? 0}</strong>
         </div>
         <div className="summary-item">
           <span>{t('metric.candidates')}</span>
@@ -22,10 +26,6 @@ export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
           <span>{t('metric.copies')}</span>
           <strong>{analytics?.totalCopies ?? 0}</strong>
         </div>
-        <div className="summary-item">
-          <span>{t('metric.exports')}</span>
-          <strong>{analytics?.exportedAssetCount ?? 0}</strong>
-        </div>
       </div>
       <div className="section-heading">
         <div>
@@ -33,15 +33,15 @@ export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
         </div>
       </div>
       <div className="candidate-list">
-        {(analytics?.topPrompts ?? []).map((prompt) => (
-          <article className="candidate-row" key={prompt.id}>
+        {(analytics?.topSnippets ?? []).map((snippet) => (
+          <article className="candidate-row" key={snippet.id}>
             <div>
-              <strong>{prompt.title}</strong>
-              <p>{prompt.copyCount} {t('metric.copies')}</p>
+              <strong>{snippet.title}</strong>
+              <p>{snippet.copyCount} {t('metric.copies')}</p>
             </div>
           </article>
         ))}
-        {analytics && analytics.topPrompts.length === 0 ? (
+        {analytics && analytics.topSnippets.length === 0 ? (
           <div className="empty-state">{t('analytics.empty')}</div>
         ) : null}
       </div>

@@ -184,8 +184,12 @@ export function SettingsView({ settings, onSettingsChanged, onMessage, t }: Sett
                 value={root.path}
               />
             ))}
-            {(info?.exportTargets ?? []).map((target) => (
-              <InfoRow key={target.label} label={target.label} value={target.path} />
+            {(info?.skillRoots ?? []).map((root) => (
+              <InfoRow
+                key={root.platform}
+                label={`${root.platform === 'claude' ? 'Claude' : 'Codex'} ${t('settings.skillRoot')}`}
+                value={root.path}
+              />
             ))}
           </SettingsSection>
         ) : null}

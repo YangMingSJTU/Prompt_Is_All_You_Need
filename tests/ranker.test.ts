@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateCandidates } from '../desktop/main/services/ranker';
 
 describe('ranker', () => {
-  it('groups review diff prompts into a review-diff skill candidate', () => {
+  it('groups review diff prompts into a review-diff snippet candidate', () => {
     const candidates = generateCandidates([
       {
         id: '1',
@@ -31,7 +31,7 @@ describe('ranker', () => {
     ]);
 
     expect(candidates[0].slug).toBe('review-diff');
-    expect(candidates[0].candidateType).toBe('skill');
+    expect(candidates[0].candidateType).toBe('snippet');
     expect(candidates[0].sourceCount).toBe(2);
   });
 });

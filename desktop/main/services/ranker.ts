@@ -14,7 +14,7 @@ const CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'review-diff',
     title: 'Review current diff',
-    candidateType: 'skill',
+    candidateType: 'snippet',
     keywords: [/review/i, /diff/i, /changes?/i, /边界|遗漏|测试|bug/i],
     description: 'Review the current git diff for correctness, edge cases, regressions, and missing tests.',
     template: [
@@ -34,7 +34,7 @@ const CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'debug-failing-tests',
     title: 'Debug failing tests',
-    candidateType: 'skill',
+    candidateType: 'snippet',
     keywords: [/failing tests?/i, /test failure/i, /测试.*失败|失败.*测试|修复失败测试/i],
     description: 'Investigate failing tests and identify the smallest safe fix.',
     template: 'Investigate the failing tests, identify the failing behavior, and propose the smallest safe fix.'
@@ -42,7 +42,7 @@ const CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'write-tests',
     title: 'Write focused tests',
-    candidateType: 'skill',
+    candidateType: 'snippet',
     keywords: [/write tests?/i, /add tests?/i, /补.*测试|写.*测试/i],
     description: 'Add focused tests for the current behavior or change.',
     template: 'Write focused tests for the current behavior. Keep tests minimal, clear, and tied to real behavior.'
@@ -50,7 +50,7 @@ const CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'refactor-code',
     title: 'Refactor code',
-    candidateType: 'skill',
+    candidateType: 'snippet',
     keywords: [/refactor/i, /重构/i],
     description: 'Refactor code while preserving behavior and existing public contracts.',
     template: 'Refactor the selected code while preserving behavior. Keep the change scoped and run relevant tests.'
@@ -74,7 +74,7 @@ const CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'implement-feature',
     title: 'Implement feature',
-    candidateType: 'skill',
+    candidateType: 'snippet',
     keywords: [/implement/i, /build/i, /add .*feature/i, /实现|添加.*功能/i],
     description: 'Implement a requested feature with scoped changes and verification.',
     template: 'Implement the requested feature. Keep the change scoped, follow existing patterns, and verify behavior.'
@@ -82,7 +82,7 @@ const CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'security-review',
     title: 'Security review',
-    candidateType: 'skill',
+    candidateType: 'snippet',
     keywords: [/security/i, /安全/i],
     description: 'Review the current change for security and data-loss risk.',
     template: 'Review the current change for security, privacy, and data-loss risks. Return prioritized findings.'

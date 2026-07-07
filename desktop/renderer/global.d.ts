@@ -5,10 +5,9 @@ import type {
 } from '../shared/settings';
 import type {
   Candidate,
-  ExportablePrompt,
-  ExportPreview,
-  ExportTarget,
-  Prompt,
+  SkillPlatform,
+  SkillRecord,
+  Snippet,
   SourceFileSummary,
   UsageAnalytics
 } from '../shared/types';
@@ -16,12 +15,12 @@ import type {
 declare global {
   interface Window {
     apm: {
-      searchPrompts(query: string): Promise<Prompt[]>;
-      listPrompts(): Promise<Prompt[]>;
-      listPopularPrompts(limit?: number): Promise<Prompt[]>;
-      copyPrompt(promptId: string): Promise<Prompt>;
+      searchSnippets(query: string): Promise<Snippet[]>;
+      listSnippets(): Promise<Snippet[]>;
+      listPopularSnippets(limit?: number): Promise<Snippet[]>;
+      copySnippet(snippetId: string): Promise<Snippet>;
       listCandidates(): Promise<Candidate[]>;
-      promoteCandidate(candidateId: string): Promise<Prompt>;
+      promoteCandidate(candidateId: string): Promise<Snippet>;
       runScan(): Promise<{
         id: string;
         scannedPrompts: number;
@@ -30,21 +29,13 @@ declare global {
         warningCount: number;
       }>;
       getAnalytics(): Promise<UsageAnalytics>;
+      listSkills(): Promise<SkillRecord[]>;
+      scanSkills(): Promise<SkillRecord[]>;
+      packageSkill(skillId: string): Promise<{ path: string }>;
+      installSkill(skillId: string, targetPlatform: SkillPlatform): Promise<{ path: string; warning?: string }>;
       getSettings(): Promise<AppSettings>;
       getSettingsInfo(): Promise<SettingsInfo>;
       updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;
-      previewExport(
-        prompt: ExportablePrompt,
-        target: ExportTarget,
-        baseDirectory?: string
-      ): Promise<ExportPreview>;
-      writeExport(
-        prompt: ExportablePrompt,
-        target: ExportTarget,
-        baseDirectory?: string,
-        promptId?: string | null,
-        candidateId?: string | null
-      ): Promise<ExportPreview>;
       onFloatingFocus(callback: () => void): () => void;
       closeFloatingWindow(): Promise<void>;
     };

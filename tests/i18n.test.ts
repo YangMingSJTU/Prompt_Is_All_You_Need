@@ -6,14 +6,18 @@ describe('i18n', () => {
     const t = createTranslator(detectLocale('zh-CN'));
 
     expect(t('nav.panel')).toBe('快捷面板');
-    expect(t('floating.placeholder')).toBe('输入关键词搜索提示词');
+    expect(t('nav.library')).toBe('Snippet 库');
+    expect(t('nav.skills')).toBe('Skill 库');
+    expect(t('floating.placeholder')).toBe('输入关键词搜索 Snippet');
   });
 
   it('uses English for English local language', () => {
     const t = createTranslator(detectLocale('en-US'));
 
     expect(t('nav.panel')).toBe('Quick Panel');
-    expect(t('floating.placeholder')).toBe('Search prompts');
+    expect(t('nav.library')).toBe('Snippet Library');
+    expect(t('nav.skills')).toBe('Skill Library');
+    expect(t('floating.placeholder')).toBe('Search snippets');
   });
 
   it('falls back to Chinese for unsupported languages', () => {

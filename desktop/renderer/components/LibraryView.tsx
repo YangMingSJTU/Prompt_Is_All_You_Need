@@ -1,11 +1,9 @@
-import { FileDown, Plus } from 'lucide-react';
-import { useState } from 'react';
-import type { Candidate, Prompt } from '../../shared/types';
+import { Clipboard, Plus } from 'lucide-react';
+import type { Candidate, Snippet } from '../../shared/types';
 import type { TFunction } from '../i18n';
-import { ExportDialog } from './ExportDialog';
 
 interface LibraryViewProps {
-  prompts: Prompt[];
+  snippets: Snippet[];
   candidates: Candidate[];
   onChanged(): Promise<void>;
   onMessage(message: string): void;
@@ -13,17 +11,21 @@ interface LibraryViewProps {
 }
 
 export function LibraryView({
-  prompts,
+  snippets,
   candidates,
   onChanged,
   onMessage,
   t
 }: LibraryViewProps) {
-  const [exportPrompt, setExportPrompt] = useState<Prompt | null>(null);
-
   async function promote(candidate: Candidate): Promise<void> {
     await window.apm.promoteCandidate(candidate.id);
     onMessage(`Saved ${candidate.title} to library`);
+    await onChanged();
+  }
+
+  async function copy(snippet: Snippet): Promise<void> {
+    await window.apm.copySnippet(snippet.id);
+    onMessage(`${t('status.copied')} ${snippet.title}`);
     await onChanged();
   }
 
@@ -33,19 +35,19 @@ export function LibraryView({
         <div>
           <h3>{t('library.title')}</h3>
         </div>
-        <span className="count-pill">{prompts.length} {t('metric.prompts')}</span>
+        <span className="count-pill">{snippets.length} {t('metric.snippets')}</span>
       </div>
       <div className="card-grid">
-        {prompts.map((prompt) => (
-          <article className="prompt-card" key={prompt.id}>
+        {snippets.map((snippet) => (
+          <article className="prompt-card" key={snippet.id}>
             <div>
-              <p className="eyebrow">{prompt.promptType}</p>
-              <h4>{prompt.title}</h4>
-              <p>{prompt.description}</p>
+              <p className="eyebrow">Snippet</p>
+              <h4>{snippet.title}</h4>
+              <p>{snippet.description}</p>
             </div>
-            <button className="secondary-button" onClick={() => setExportPrompt(prompt)} type="button">
-              <FileDown size={16} />
-              {t('prompt.export')}
+            <button className="secondary-button" onClick={() => copy(snippet)} type="button">
+              <Clipboard size={16} />
+              {t('snippet.copy')}
             </button>
           </article>
         ))}
@@ -73,16 +75,6 @@ export function LibraryView({
           </article>
         ))}
       </div>
-      {exportPrompt ? (
-        <ExportDialog
-          prompt={exportPrompt}
-          promptId={exportPrompt.id}
-          onClose={() => setExportPrompt(null)}
-          onExported={onChanged}
-          onMessage={onMessage}
-          t={t}
-        />
-      ) : null}
     </section>
   );
 }

@@ -599,7 +599,8 @@ p {
 
 .card-grid,
 .candidate-list,
-.source-table {
+.source-table,
+.skill-table {
   display: grid;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -609,7 +610,8 @@ p {
 
 .prompt-card,
 .candidate-row,
-.source-row {
+.source-row,
+.skill-row {
   display: grid;
   min-width: 0;
   align-items: center;
@@ -619,7 +621,8 @@ p {
 
 .prompt-card:last-child,
 .candidate-row:last-child,
-.source-row:last-child {
+.source-row:last-child,
+.skill-row:last-child {
   border-bottom: 0;
 }
 
@@ -672,6 +675,129 @@ p {
   font-size: 11px;
   font-weight: 600;
   text-transform: none;
+}
+
+.skill-row {
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "platform main actions"
+    "platform files actions";
+  gap: 6px 12px;
+  min-height: 78px;
+  padding: 10px 12px;
+}
+
+.skill-header {
+  grid-template-areas: "platform main files actions";
+  min-height: 36px;
+  background: var(--muted-surface);
+  padding: 0 12px;
+}
+
+.skill-row > span {
+  grid-area: platform;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.skill-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-main strong,
+.skill-main p,
+.skill-main code,
+.skill-title-line em,
+.skill-files code {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-main strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skill-main p,
+.skill-main code,
+.skill-title-line em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  margin-top: 3px;
+}
+
+.skill-main code,
+.skill-files code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.skill-files {
+  grid-area: files;
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.skill-files code {
+  max-width: 160px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted-surface);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.skill-actions {
+  grid-area: actions;
+  display: flex;
+  max-width: 330px;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.skill-actions .secondary-button {
+  height: 30px;
+  font-size: 12px;
+}
+
+.skill-header span,
+.skill-header strong,
+.skill-header small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.skill-header strong {
+  grid-area: main;
+}
+
+.skill-header small {
+  grid-area: files;
 }
 
 .settings-layout {

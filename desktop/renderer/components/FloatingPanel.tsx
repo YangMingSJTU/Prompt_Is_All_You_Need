@@ -1,7 +1,7 @@
 import { Clipboard, Search } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Prompt } from '../../shared/types';
+import type { Snippet } from '../../shared/types';
 import type { TFunction } from '../i18n';
 
 interface FloatingPanelProps {
@@ -10,7 +10,7 @@ interface FloatingPanelProps {
 
 export function FloatingPanel({ t }: FloatingPanelProps) {
   const [query, setQuery] = useState('');
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [status, setStatus] = useState(t('status.ready'));
   const inputRef = useRef<HTMLInputElement>(null);
@@ -18,9 +18,9 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   const loadPrompts = useCallback(async (value: string) => {
     const trimmed = value.trim();
     const results = trimmed
-      ? await window.apm.searchPrompts(trimmed)
-      : await window.apm.listPopularPrompts(6);
-    setPrompts(results);
+      ? await window.apm.searchSnippets(trimmed)
+      : await window.apm.listPopularSnippets(6);
+    setSnippets(results);
     setSelectedIndex(0);
   }, []);
 
@@ -37,11 +37,11 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     return dispose;
   }, []);
 
-  const selected = useMemo(() => prompts[selectedIndex] ?? null, [prompts, selectedIndex]);
+  const selected = useMemo(() => snippets[selectedIndex] ?? null, [snippets, selectedIndex]);
 
-  async function copyPrompt(prompt: Prompt): Promise<void> {
-    await window.apm.copyPrompt(prompt.id);
-    setStatus(`${t('status.copied')} ${prompt.title}`);
+  async function copySnippet(snippet: Snippet): Promise<void> {
+    await window.apm.copySnippet(snippet.id);
+    setStatus(`${t('status.copied')} ${snippet.title}`);
   }
 
   async function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): Promise<void> {
@@ -52,7 +52,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setSelectedIndex((current) => Math.min(current + 1, Math.max(prompts.length - 1, 0)));
+      setSelectedIndex((current) => Math.min(current + 1, Math.max(snippets.length - 1, 0)));
       return;
     }
     if (event.key === 'ArrowUp') {
@@ -62,7 +62,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     }
     if (event.key === 'Enter' && selected) {
       event.preventDefault();
-      await copyPrompt(selected);
+      await copySnippet(selected);
     }
   }
 
@@ -85,24 +85,24 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
         />
       </label>
       <section className="floating-results">
-        {prompts.map((prompt, index) => (
+        {snippets.map((snippet, index) => (
           <button
             className={index === selectedIndex ? 'floating-row selected' : 'floating-row'}
-            key={prompt.id}
+            key={snippet.id}
             onClick={() => {
               setSelectedIndex(index);
-              void copyPrompt(prompt);
+              void copySnippet(snippet);
             }}
             type="button"
           >
             <span>
-              <strong>{prompt.title}</strong>
-              <small>{prompt.description}</small>
+              <strong>{snippet.title}</strong>
+              <small>{snippet.description}</small>
             </span>
             <Clipboard size={15} />
           </button>
         ))}
-        {prompts.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
+        {snippets.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
       </section>
     </main>
   );

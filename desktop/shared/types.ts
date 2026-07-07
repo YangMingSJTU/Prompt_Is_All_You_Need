@@ -1,12 +1,14 @@
-export type SourceTool = 'claude' | 'codex' | 'manual';
+export type SkillPlatform = 'claude' | 'codex';
 
-export type PromptType = 'snippet' | 'skill' | 'memory';
+export type SourceTool = SkillPlatform | 'manual';
 
-export type CandidateType = 'snippet' | 'skill' | 'memory';
+export type AssetType = 'snippet' | 'skill';
+
+export type CandidateType = 'snippet';
 
 export type CandidateStatus = 'pending' | 'saved' | 'ignored';
 
-export type ExportTarget = 'snippet' | 'claude-skill' | 'codex-skill';
+export type SkillInstallState = 'installed' | 'missing';
 
 export interface ExtractedPrompt {
   id: string;
@@ -21,13 +23,12 @@ export interface ExtractedPrompt {
   hash: string;
 }
 
-export interface Prompt {
+export interface Snippet {
   id: string;
   slug: string;
   title: string;
   body: string;
   description: string;
-  promptType: PromptType;
   tags: string[];
   source: string;
   createdAt: string;
@@ -66,24 +67,26 @@ export interface ScanSummary {
   warningCount: number;
 }
 
-export interface ExportablePrompt {
-  slug: string;
-  title: string;
+export interface SkillRecord {
+  id: string;
+  platform: SkillPlatform;
+  name: string;
   description: string;
-  body: string;
-}
-
-export interface ExportPreview {
-  path: string;
-  content: string;
+  rootPath: string;
+  entryFilePath: string;
+  fileCount: number;
+  files: string[];
+  updatedAt: string;
+  packageable: boolean;
+  installState: SkillInstallState;
 }
 
 export interface UsageAnalytics {
-  promptCount: number;
+  snippetCount: number;
+  skillCount: number;
   candidateCount: number;
-  exportedAssetCount: number;
   totalCopies: number;
-  topPrompts: Array<{
+  topSnippets: Array<{
     id: string;
     title: string;
     copyCount: number;

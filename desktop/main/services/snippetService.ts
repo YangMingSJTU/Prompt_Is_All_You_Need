@@ -1,14 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { Candidate, ExportTarget, Prompt, UsageAnalytics } from '../../shared/types';
+import type { Candidate, Snippet, UsageAnalytics } from '../../shared/types';
 import type { AppDatabase } from './database';
 
-interface PromptRow extends Record<string, unknown> {
+interface SnippetRow extends Record<string, unknown> {
   id: string;
   slug: string;
   title: string;
   body: string;
   description: string;
-  prompt_type: string;
   tags: string;
   source: string;
   created_at: string;
@@ -34,7 +33,7 @@ interface CandidateRow extends Record<string, unknown> {
   updated_at: string;
 }
 
-const STARTER_PROMPTS: Array<Omit<Prompt, 'id' | 'createdAt' | 'updatedAt'>> = [
+const STARTER_SNIPPETS: Array<Omit<Snippet, 'id' | 'createdAt' | 'updatedAt'>> = [
   {
     slug: 'review-diff',
     title: 'Review current diff',
@@ -46,7 +45,6 @@ const STARTER_PROMPTS: Array<Omit<Prompt, 'id' | 'createdAt' | 'updatedAt'>> = [
       'Do not modify files yet. Return prioritized findings.'
     ].join('\n'),
     description: 'Review current changes for bugs, edge cases, regressions, and missing tests.',
-    promptType: 'skill',
     tags: ['review', 'codex', 'claude', 'diff'],
     source: 'starter'
   },
@@ -55,7 +53,6 @@ const STARTER_PROMPTS: Array<Omit<Prompt, 'id' | 'createdAt' | 'updatedAt'>> = [
     title: 'Debug failing tests',
     body: 'Investigate the failing tests, identify the failing behavior, decide whether implementation or tests are wrong, and propose the smallest safe fix.',
     description: 'Debug failing tests with minimal, verified changes.',
-    promptType: 'skill',
     tags: ['tests', 'debug', 'codex', 'claude'],
     source: 'starter'
   },
@@ -64,30 +61,28 @@ const STARTER_PROMPTS: Array<Omit<Prompt, 'id' | 'createdAt' | 'updatedAt'>> = [
     title: 'Generate commit message',
     body: 'Generate a concise commit message for the current changes.\n\nFormat:\n<type>: <summary>\n\nBody:\n- What changed\n- Why it changed\n- Testing notes',
     description: 'Generate a concise commit message from the current diff.',
-    promptType: 'snippet',
     tags: ['git', 'commit', 'summary'],
     source: 'starter'
   }
 ];
 
-export function createPromptService(db: AppDatabase) {
+export function createSnippetService(db: AppDatabase) {
   return {
-    async seedStarterPrompts(): Promise<void> {
+    async seedStarterSnippets(): Promise<void> {
       const now = new Date().toISOString();
-      for (const prompt of STARTER_PROMPTS) {
+      for (const snippet of STARTER_SNIPPETS) {
         db.run(
-          `INSERT OR IGNORE INTO prompts
-            (id, slug, title, body, description, prompt_type, tags, source, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT OR IGNORE INTO snippets
+            (id, slug, title, body, description, tags, source, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             randomUUID(),
-            prompt.slug,
-            prompt.title,
-            prompt.body,
-            prompt.description,
-            prompt.promptType,
-            JSON.stringify(prompt.tags),
-            prompt.source,
+            snippet.slug,
+            snippet.title,
+            snippet.body,
+            snippet.description,
+            JSON.stringify(snippet.tags),
+            snippet.source,
             now,
             now
           ]
@@ -96,11 +91,11 @@ export function createPromptService(db: AppDatabase) {
       await db.save();
     },
 
-    async searchPrompts(query: string): Promise<Prompt[]> {
+    async searchSnippets(query: string): Promise<Snippet[]> {
       const normalized = `%${query.toLowerCase()}%`;
       return db
-        .all<PromptRow>(
-          `SELECT * FROM prompts
+        .all<SnippetRow>(
+          `SELECT * FROM snippets
            WHERE lower(title) LIKE ?
               OR lower(body) LIKE ?
               OR lower(description) LIKE ?
@@ -108,40 +103,40 @@ export function createPromptService(db: AppDatabase) {
            ORDER BY updated_at DESC, title ASC`,
           [normalized, normalized, normalized, normalized]
         )
-        .map(rowToPrompt);
+        .map(rowToSnippet);
     },
 
-    async listPrompts(): Promise<Prompt[]> {
+    async listSnippets(): Promise<Snippet[]> {
       return db
-        .all<PromptRow>('SELECT * FROM prompts ORDER BY updated_at DESC, title ASC')
-        .map(rowToPrompt);
+        .all<SnippetRow>('SELECT * FROM snippets ORDER BY updated_at DESC, title ASC')
+        .map(rowToSnippet);
     },
 
-    async listPopularPrompts(limit = 6): Promise<Prompt[]> {
+    async listPopularSnippets(limit = 6): Promise<Snippet[]> {
       return db
-        .all<PromptRow>(
-          `SELECT prompts.*
-           FROM prompts
-           LEFT JOIN usage_events ON usage_events.prompt_id = prompts.id AND usage_events.action = 'copy'
-           GROUP BY prompts.id
-           ORDER BY COUNT(usage_events.id) DESC, prompts.updated_at DESC, prompts.title ASC
+        .all<SnippetRow>(
+          `SELECT snippets.*
+           FROM snippets
+           LEFT JOIN usage_events ON usage_events.snippet_id = snippets.id AND usage_events.action = 'copy'
+           GROUP BY snippets.id
+           ORDER BY COUNT(usage_events.id) DESC, snippets.updated_at DESC, snippets.title ASC
            LIMIT ?`,
           [limit]
         )
-        .map(rowToPrompt);
+        .map(rowToSnippet);
     },
 
-    async copyPrompt(promptId: string): Promise<Prompt> {
-      const row = db.get<PromptRow>('SELECT * FROM prompts WHERE id = ?', [promptId]);
+    async copySnippet(snippetId: string): Promise<Snippet> {
+      const row = db.get<SnippetRow>('SELECT * FROM snippets WHERE id = ?', [snippetId]);
       if (!row) {
-        throw new Error(`Prompt not found: ${promptId}`);
+        throw new Error(`Snippet not found: ${snippetId}`);
       }
       db.run(
-        'INSERT INTO usage_events (id, prompt_id, action, created_at) VALUES (?, ?, ?, ?)',
-        [randomUUID(), promptId, 'copy', new Date().toISOString()]
+        'INSERT INTO usage_events (id, snippet_id, action, created_at) VALUES (?, ?, ?, ?)',
+        [randomUUID(), snippetId, 'copy', new Date().toISOString()]
       );
       await db.save();
-      return rowToPrompt(row);
+      return rowToSnippet(row);
     },
 
     async saveCandidates(candidates: Candidate[]): Promise<void> {
@@ -177,24 +172,23 @@ export function createPromptService(db: AppDatabase) {
         .map(rowToCandidate);
     },
 
-    async promoteCandidate(candidateId: string): Promise<Prompt> {
+    async promoteCandidate(candidateId: string): Promise<Snippet> {
       const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
       if (!candidate) {
         throw new Error(`Candidate not found: ${candidateId}`);
       }
       const now = new Date().toISOString();
       db.run(
-        `INSERT OR REPLACE INTO prompts
-          (id, slug, title, body, description, prompt_type, tags, source, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO snippets
+          (id, slug, title, body, description, tags, source, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           randomUUID(),
           candidate.slug,
           candidate.title,
           candidate.template,
           candidate.description,
-          candidate.candidate_type,
-          JSON.stringify(['candidate', candidate.candidate_type]),
+          JSON.stringify(['candidate']),
           'candidate',
           now,
           now
@@ -202,70 +196,47 @@ export function createPromptService(db: AppDatabase) {
       );
       db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
       await db.save();
-      const row = db.get<PromptRow>('SELECT * FROM prompts WHERE slug = ?', [candidate.slug]);
+      const row = db.get<SnippetRow>('SELECT * FROM snippets WHERE slug = ?', [candidate.slug]);
       if (!row) {
-        throw new Error(`Promoted prompt not found: ${candidate.slug}`);
+        throw new Error(`Promoted snippet not found: ${candidate.slug}`);
       }
-      return rowToPrompt(row);
-    },
-
-    async recordExport(input: {
-      promptId?: string | null;
-      candidateId?: string | null;
-      assetType: ExportTarget;
-      path: string;
-    }): Promise<void> {
-      db.run(
-        `INSERT INTO exported_assets (id, prompt_id, candidate_id, asset_type, path, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          randomUUID(),
-          input.promptId ?? null,
-          input.candidateId ?? null,
-          input.assetType,
-          input.path,
-          new Date().toISOString()
-        ]
-      );
-      await db.save();
+      return rowToSnippet(row);
     },
 
     async getAnalytics(): Promise<UsageAnalytics> {
-      const promptCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM prompts')?.count ?? 0;
+      const snippetCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM snippets')?.count ?? 0;
+      const skillCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM skills')?.count ?? 0;
       const candidateCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM candidates')?.count ?? 0;
-      const exportedAssetCount =
-        db.get<CountRow>('SELECT COUNT(*) AS count FROM exported_assets')?.count ?? 0;
       const totalCopies =
         db.get<CountRow>("SELECT COUNT(*) AS count FROM usage_events WHERE action = 'copy'")?.count ?? 0;
-      const topPrompts = db.all<{ id: string; title: string; copyCount: number }>(
-        `SELECT prompts.id AS id, prompts.title AS title, COUNT(usage_events.id) AS copyCount
+      const topSnippets = db.all<{ id: string; title: string; copyCount: number }>(
+        `SELECT snippets.id AS id, snippets.title AS title, COUNT(usage_events.id) AS copyCount
          FROM usage_events
-         JOIN prompts ON prompts.id = usage_events.prompt_id
+         JOIN snippets ON snippets.id = usage_events.snippet_id
          WHERE usage_events.action = 'copy'
-         GROUP BY prompts.id, prompts.title
-         ORDER BY copyCount DESC, prompts.title ASC
+         GROUP BY snippets.id, snippets.title
+         ORDER BY copyCount DESC, snippets.title ASC
          LIMIT 5`
       );
 
       return {
-        promptCount,
+        snippetCount,
+        skillCount,
         candidateCount,
-        exportedAssetCount,
         totalCopies,
-        topPrompts
+        topSnippets
       };
     }
   };
 }
 
-function rowToPrompt(row: PromptRow): Prompt {
+function rowToSnippet(row: SnippetRow): Snippet {
   return {
     id: row.id,
     slug: row.slug,
     title: row.title,
     body: row.body,
     description: row.description,
-    promptType: row.prompt_type as Prompt['promptType'],
     tags: JSON.parse(row.tags) as string[],
     source: row.source,
     createdAt: row.created_at,

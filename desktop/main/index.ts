@@ -1,9 +1,8 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
-import type { ExportablePrompt, ExportTarget } from '../shared/types';
+import type { SkillPlatform } from '../shared/types';
 import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
 import {
   DEFAULT_APP_SETTINGS,
@@ -11,11 +10,11 @@ import {
   normalizeShortcutAccelerator
 } from '../shared/settings';
 import { openAppDatabase } from './services/database';
-import { previewExport, writeExport } from './services/exporter';
-import { createPromptService } from './services/promptService';
+import { createSnippetService } from './services/snippetService';
 import { generateCandidates } from './services/ranker';
 import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './services/scanner';
 import { createSettingsService, type SettingsService } from './services/settingsService';
+import { createSkillService, defaultSkillRoots } from './services/skillService';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -93,24 +92,34 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 async function bootstrap(): Promise<void> {
   databasePath = join(app.getPath('userData'), 'agent-prompt-miner.sqlite');
   const db = await openAppDatabase(databasePath);
-  const promptService = createPromptService(db);
-  settingsService = createSettingsService(db);
-  await promptService.seedStarterPrompts();
-
-  ipcMain.handle('prompts:search', (_event, query: string) => promptService.searchPrompts(query ?? ''));
-  ipcMain.handle('prompts:list', () => promptService.listPrompts());
-  ipcMain.handle('prompts:popular', (_event, limit?: number) => promptService.listPopularPrompts(limit ?? 6));
-  ipcMain.handle('prompts:copy', async (_event, promptId: string) => {
-    const prompt = await promptService.copyPrompt(promptId);
-    clipboard.writeText(prompt.body);
-    floatingWindow?.hide();
-    return prompt;
+  const snippetService = createSnippetService(db);
+  const skillService = createSkillService(db, {
+    roots: defaultSkillRoots(),
+    packageDirectory: join(app.getPath('userData'), 'skill-packages')
   });
-  ipcMain.handle('candidates:list', () => promptService.listCandidates());
+  settingsService = createSettingsService(db);
+  await snippetService.seedStarterSnippets();
+
+  ipcMain.handle('snippets:search', (_event, query: string) => snippetService.searchSnippets(query ?? ''));
+  ipcMain.handle('snippets:list', () => snippetService.listSnippets());
+  ipcMain.handle('snippets:popular', (_event, limit?: number) => snippetService.listPopularSnippets(limit ?? 6));
+  ipcMain.handle('snippets:copy', async (_event, snippetId: string) => {
+    const snippet = await snippetService.copySnippet(snippetId);
+    clipboard.writeText(snippet.body);
+    floatingWindow?.hide();
+    return snippet;
+  });
+  ipcMain.handle('candidates:list', () => snippetService.listCandidates());
   ipcMain.handle('candidates:promote', (_event, candidateId: string) =>
-    promptService.promoteCandidate(candidateId)
+    snippetService.promoteCandidate(candidateId)
   );
-  ipcMain.handle('analytics:get', () => promptService.getAnalytics());
+  ipcMain.handle('analytics:get', () => snippetService.getAnalytics());
+  ipcMain.handle('skills:list', () => skillService.listSkills());
+  ipcMain.handle('skills:scan', () => skillService.scanSkills());
+  ipcMain.handle('skills:package', (_event, skillId: string) => skillService.packageSkill(skillId));
+  ipcMain.handle('skills:install', (_event, skillId: string, targetPlatform: SkillPlatform) =>
+    skillService.installSkill(skillId, targetPlatform)
+  );
   ipcMain.handle('settings:get', () => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
@@ -120,11 +129,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('settings:info', () => ({
     databasePath,
     historyRoots: defaultHistoryRoots(),
-    exportTargets: [
-      { label: 'Snippet', path: defaultExportBase('snippet') },
-      { label: 'Claude Skill', path: defaultExportBase('claude-skill') },
-      { label: 'Codex Skill', path: defaultExportBase('codex-skill') }
-    ]
+    skillRoots: skillService.getSkillRoots()
   }));
   ipcMain.handle('settings:update', async (_event, patch: Partial<AppSettings>) => {
     if (!settingsService) {
@@ -167,7 +172,7 @@ async function bootstrap(): Promise<void> {
     }
 
     const candidates = generateCandidates(allPrompts);
-    await promptService.saveCandidates(candidates);
+    await snippetService.saveCandidates(candidates);
 
     return {
       id: randomUUID(),
@@ -177,45 +182,9 @@ async function bootstrap(): Promise<void> {
       warningCount: summaries.reduce((total, source) => total + source.warningCount, 0)
     };
   });
-  ipcMain.handle(
-    'export:preview',
-    (_event, prompt: ExportablePrompt, target: ExportTarget, baseDirectory?: string) =>
-      previewExport(prompt, target, baseDirectory ?? defaultExportBase(target))
-  );
-  ipcMain.handle(
-    'export:write',
-    async (
-      _event,
-      prompt: ExportablePrompt,
-      target: ExportTarget,
-      baseDirectory?: string,
-      promptId?: string | null,
-      candidateId?: string | null
-    ) => {
-      const result = await writeExport(prompt, target, baseDirectory ?? defaultExportBase(target));
-      await promptService.recordExport({
-        promptId,
-        candidateId,
-        assetType: target,
-        path: result.path
-      });
-      return result;
-    }
-  );
   ipcMain.handle('floating:close', () => {
     floatingWindow?.hide();
   });
-}
-
-function defaultExportBase(target: ExportTarget): string {
-  const home = homedir();
-  if (target === 'snippet') {
-    return join(home, '.apm', 'snippets');
-  }
-  if (target === 'claude-skill') {
-    return join(home, '.claude', 'skills');
-  }
-  return join(home, '.codex', 'skills');
 }
 
 function registerDesktopControls(): void {
