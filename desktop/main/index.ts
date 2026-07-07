@@ -10,11 +10,12 @@ import {
   normalizeShortcutAccelerator
 } from '../shared/settings';
 import { openAppDatabase } from './services/database';
-import { createSnippetService } from './services/snippetService';
+import { createSpellService } from './services/spellService';
 import { generateCandidates } from './services/ranker';
 import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './services/scanner';
 import { createSettingsService, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
+import { createSpellbookPaths } from './services/spellbookPaths';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -30,7 +31,7 @@ async function createWindow(): Promise<void> {
     height: 760,
     minWidth: 980,
     minHeight: 640,
-    title: 'Prompt Miner',
+    title: 'Spellbook',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -57,7 +58,7 @@ async function createFloatingWindow(): Promise<void> {
     minHeight: 360,
     maxWidth: 680,
     maxHeight: 520,
-    title: 'Prompt Miner',
+    title: 'Spellbook',
     show: false,
     frame: false,
     resizable: false,
@@ -90,30 +91,31 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 }
 
 async function bootstrap(): Promise<void> {
-  databasePath = join(app.getPath('userData'), 'agent-prompt-miner.sqlite');
+  const spellbookPaths = createSpellbookPaths();
+  databasePath = spellbookPaths.databasePath;
   const db = await openAppDatabase(databasePath);
-  const snippetService = createSnippetService(db);
+  const spellService = createSpellService(db);
   const skillService = createSkillService(db, {
     roots: defaultSkillRoots(),
-    packageDirectory: join(app.getPath('userData'), 'skill-packages')
+    packageDirectory: spellbookPaths.packageDirectory
   });
   settingsService = createSettingsService(db);
-  await snippetService.seedStarterSnippets();
+  await spellService.seedStarterSpells();
 
-  ipcMain.handle('snippets:search', (_event, query: string) => snippetService.searchSnippets(query ?? ''));
-  ipcMain.handle('snippets:list', () => snippetService.listSnippets());
-  ipcMain.handle('snippets:popular', (_event, limit?: number) => snippetService.listPopularSnippets(limit ?? 6));
-  ipcMain.handle('snippets:copy', async (_event, snippetId: string) => {
-    const snippet = await snippetService.copySnippet(snippetId);
-    clipboard.writeText(snippet.body);
+  ipcMain.handle('spells:search', (_event, query: string) => spellService.searchSpells(query ?? ''));
+  ipcMain.handle('spells:list', () => spellService.listSpells());
+  ipcMain.handle('spells:popular', (_event, limit?: number) => spellService.listPopularSpells(limit ?? 6));
+  ipcMain.handle('spells:copy', async (_event, spellId: string) => {
+    const spell = await spellService.copySpell(spellId);
+    clipboard.writeText(spell.body);
     floatingWindow?.hide();
-    return snippet;
+    return spell;
   });
-  ipcMain.handle('candidates:list', () => snippetService.listCandidates());
+  ipcMain.handle('candidates:list', () => spellService.listCandidates());
   ipcMain.handle('candidates:promote', (_event, candidateId: string) =>
-    snippetService.promoteCandidate(candidateId)
+    spellService.promoteCandidate(candidateId)
   );
-  ipcMain.handle('analytics:get', () => snippetService.getAnalytics());
+  ipcMain.handle('analytics:get', () => spellService.getAnalytics());
   ipcMain.handle('skills:list', () => skillService.listSkills());
   ipcMain.handle('skills:scan', () => skillService.scanSkills());
   ipcMain.handle('skills:package', (_event, skillId: string) => skillService.packageSkill(skillId));
@@ -172,7 +174,7 @@ async function bootstrap(): Promise<void> {
     }
 
     const candidates = generateCandidates(allPrompts);
-    await snippetService.saveCandidates(candidates);
+    await spellService.saveCandidates(candidates);
 
     return {
       id: randomUUID(),
@@ -198,7 +200,7 @@ function registerDesktopControls(): void {
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4AWP4z8Dwn4ECwESJ5lEDRg0YNWDUgFEDBg0A2b4DHXcCpJcAAAAASUVORK5CYII='
   );
   tray = new Tray(trayIcon);
-  tray.setToolTip('Prompt Miner');
+  tray.setToolTip('Spellbook 魔法书');
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show', click: () => mainWindow?.show() },

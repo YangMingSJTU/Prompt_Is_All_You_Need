@@ -3,9 +3,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../desktop/main/services/database';
-import { createSkillService } from '../desktop/main/services/skillService';
+import { createSkillService, defaultSkillRoots } from '../desktop/main/services/skillService';
 
 describe('skill service', () => {
+  it('uses official user skill roots for Claude and Codex', () => {
+    expect(defaultSkillRoots()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ platform: 'claude', path: expect.stringContaining(join('.claude', 'skills')) }),
+        expect.objectContaining({ platform: 'codex', path: expect.stringContaining(join('.agents', 'skills')) })
+      ])
+    );
+  });
+
   it('scans Claude and Codex skill packages from local roots', async () => {
     const fixture = await createSkillFixture();
     const db = await createTestDatabase();

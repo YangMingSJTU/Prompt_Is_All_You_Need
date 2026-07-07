@@ -1,7 +1,7 @@
 import { Clipboard, Search } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Snippet } from '../../shared/types';
+import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 
 interface FloatingPanelProps {
@@ -10,7 +10,7 @@ interface FloatingPanelProps {
 
 export function FloatingPanel({ t }: FloatingPanelProps) {
   const [query, setQuery] = useState('');
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [spells, setSpells] = useState<Spell[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [status, setStatus] = useState(t('status.ready'));
   const inputRef = useRef<HTMLInputElement>(null);
@@ -18,9 +18,9 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   const loadPrompts = useCallback(async (value: string) => {
     const trimmed = value.trim();
     const results = trimmed
-      ? await window.apm.searchSnippets(trimmed)
-      : await window.apm.listPopularSnippets(6);
-    setSnippets(results);
+      ? await window.spellbook.searchSpells(trimmed)
+      : await window.spellbook.listPopularSpells(6);
+    setSpells(results);
     setSelectedIndex(0);
   }, []);
 
@@ -29,7 +29,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   }, [loadPrompts, query]);
 
   useEffect(() => {
-    const dispose = window.apm.onFloatingFocus(() => {
+    const dispose = window.spellbook.onFloatingFocus(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
     });
@@ -37,22 +37,22 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     return dispose;
   }, []);
 
-  const selected = useMemo(() => snippets[selectedIndex] ?? null, [snippets, selectedIndex]);
+  const selected = useMemo(() => spells[selectedIndex] ?? null, [spells, selectedIndex]);
 
-  async function copySnippet(snippet: Snippet): Promise<void> {
-    await window.apm.copySnippet(snippet.id);
-    setStatus(`${t('status.copied')} ${snippet.title}`);
+  async function copySpell(spell: Spell): Promise<void> {
+    await window.spellbook.copySpell(spell.id);
+    setStatus(`${t('status.copied')} ${spell.title}`);
   }
 
   async function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): Promise<void> {
     if (event.key === 'Escape') {
       event.preventDefault();
-      await window.apm.closeFloatingWindow();
+      await window.spellbook.closeFloatingWindow();
       return;
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setSelectedIndex((current) => Math.min(current + 1, Math.max(snippets.length - 1, 0)));
+      setSelectedIndex((current) => Math.min(current + 1, Math.max(spells.length - 1, 0)));
       return;
     }
     if (event.key === 'ArrowUp') {
@@ -62,7 +62,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     }
     if (event.key === 'Enter' && selected) {
       event.preventDefault();
-      await copySnippet(selected);
+      await copySpell(selected);
     }
   }
 
@@ -85,24 +85,24 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
         />
       </label>
       <section className="floating-results">
-        {snippets.map((snippet, index) => (
+        {spells.map((spell, index) => (
           <button
             className={index === selectedIndex ? 'floating-row selected' : 'floating-row'}
-            key={snippet.id}
+            key={spell.id}
             onClick={() => {
               setSelectedIndex(index);
-              void copySnippet(snippet);
+              void copySpell(spell);
             }}
             type="button"
           >
             <span>
-              <strong>{snippet.title}</strong>
-              <small>{snippet.description}</small>
+              <strong>{spell.title}</strong>
+              <small>{spell.description}</small>
             </span>
             <Clipboard size={15} />
           </button>
         ))}
-        {snippets.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
+        {spells.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
       </section>
     </main>
   );

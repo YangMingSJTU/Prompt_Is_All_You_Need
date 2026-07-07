@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 import type { SkillPlatform, SkillRecord } from '../../shared/types';
 import type { AppDatabase } from './database';
+import { createSpellbookPaths } from './spellbookPaths';
 import { writeZipFile } from './zipWriter';
 
 export interface SkillRoot {
@@ -39,13 +40,13 @@ export function defaultSkillRoots(): SkillRoot[] {
   const home = homedir();
   return [
     { platform: 'claude', path: join(home, '.claude', 'skills') },
-    { platform: 'codex', path: join(home, '.codex', 'skills') }
+    { platform: 'codex', path: join(home, '.agents', 'skills') }
   ];
 }
 
 export function createSkillService(db: AppDatabase, options: SkillServiceOptions = {}) {
   const roots = options.roots ?? defaultSkillRoots();
-  const packageDirectory = options.packageDirectory ?? join(homedir(), '.apm', 'skill-packages');
+  const packageDirectory = options.packageDirectory ?? createSpellbookPaths().packageDirectory;
 
   return {
     getSkillRoots(): SkillRoot[] {
@@ -234,7 +235,7 @@ function skillId(platform: SkillPlatform, rootPath: string): string {
 }
 
 function defaultRootFor(platform: SkillPlatform): string {
-  return join(homedir(), platform === 'claude' ? '.claude' : '.codex', 'skills');
+  return join(homedir(), platform === 'claude' ? '.claude' : '.agents', 'skills');
 }
 
 async function pathExists(path: string): Promise<boolean> {

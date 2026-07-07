@@ -57,7 +57,7 @@ export function SettingsView({ settings, onSettingsChanged, onMessage, t }: Sett
   const shortcutButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    void window.apm.getSettingsInfo().then(setInfo);
+    void window.spellbook.getSettingsInfo().then(setInfo);
   }, []);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function SettingsView({ settings, onSettingsChanged, onMessage, t }: Sett
   async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
     setSaving(true);
     try {
-      const result = await window.apm.updateSettings(patch);
+      const result = await window.spellbook.updateSettings(patch);
       onSettingsChanged(result.settings);
       onMessage(result.warning ?? t('settings.saved'));
     } finally {

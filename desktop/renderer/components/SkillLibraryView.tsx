@@ -26,7 +26,7 @@ export function SkillLibraryView({ skills, onChanged, onMessage, t }: SkillLibra
   async function scanSkills(): Promise<void> {
     setScanning(true);
     try {
-      const result = await window.apm.scanSkills();
+      const result = await window.spellbook.scanSkills();
       onMessage(`${t('status.skillScanFinished')}: ${result.length}`);
       await onChanged();
     } finally {
@@ -37,7 +37,7 @@ export function SkillLibraryView({ skills, onChanged, onMessage, t }: SkillLibra
   async function packageSkill(skill: SkillRecord): Promise<void> {
     setBusyAction(`${skill.id}:package`);
     try {
-      const result = await window.apm.packageSkill(skill.id);
+      const result = await window.spellbook.packageSkill(skill.id);
       onMessage(`${t('status.packaged')} ${result.path}`);
     } finally {
       setBusyAction(null);
@@ -47,7 +47,7 @@ export function SkillLibraryView({ skills, onChanged, onMessage, t }: SkillLibra
   async function installSkill(skill: SkillRecord, platform: SkillPlatform): Promise<void> {
     setBusyAction(`${skill.id}:install:${platform}`);
     try {
-      const result = await window.apm.installSkill(skill.id, platform);
+      const result = await window.spellbook.installSkill(skill.id, platform);
       onMessage(result.warning ?? `${t('status.installed')} ${result.path}`);
       await onChanged();
     } finally {

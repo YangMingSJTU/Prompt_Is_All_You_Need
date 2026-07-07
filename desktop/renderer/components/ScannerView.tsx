@@ -23,7 +23,7 @@ export function ScannerView({ onChanged, onMessage, t }: ScannerViewProps) {
   async function runScan(): Promise<void> {
     setRunning(true);
     try {
-      const result = await window.apm.runScan();
+      const result = await window.spellbook.runScan();
       setScanState(result);
       onMessage(`${t('status.scanFinished')}: ${result.scannedPrompts}`);
       await onChanged();
@@ -45,7 +45,7 @@ export function ScannerView({ onChanged, onMessage, t }: ScannerViewProps) {
       </div>
       <div className="summary-strip">
         <div className="summary-item">
-          <span>{t('metric.snippets')}</span>
+          <span>{t('metric.spells')}</span>
           <strong>{scanState?.scannedPrompts ?? 0}</strong>
         </div>
         <div className="summary-item">
@@ -64,7 +64,7 @@ export function ScannerView({ onChanged, onMessage, t }: ScannerViewProps) {
       <div className="source-table">
         <div className="source-row source-header">
           <span>{t('metric.sources')}</span>
-          <strong>{t('metric.snippets')}</strong>
+          <strong>{t('metric.spells')}</strong>
           <small>{t('metric.path')}</small>
         </div>
         {(scanState?.sourceFiles ?? []).map((source) => (

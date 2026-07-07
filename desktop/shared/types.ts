@@ -2,9 +2,9 @@ export type SkillPlatform = 'claude' | 'codex';
 
 export type SourceTool = SkillPlatform | 'manual';
 
-export type AssetType = 'snippet' | 'skill';
+export type AssetType = 'spell' | 'skill';
 
-export type CandidateType = 'snippet';
+export type CandidateType = 'spell';
 
 export type CandidateStatus = 'pending' | 'saved' | 'ignored';
 
@@ -23,7 +23,7 @@ export interface ExtractedPrompt {
   hash: string;
 }
 
-export interface Snippet {
+export interface Spell {
   id: string;
   slug: string;
   title: string;
@@ -82,11 +82,11 @@ export interface SkillRecord {
 }
 
 export interface UsageAnalytics {
-  snippetCount: number;
+  spellCount: number;
   skillCount: number;
   candidateCount: number;
   totalCopies: number;
-  topSnippets: Array<{
+  topSpells: Array<{
     id: string;
     title: string;
     copyCount: number;

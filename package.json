@@ -1,7 +1,8 @@
 {
   "name": "prompt-is-all-you-need",
   "version": "0.1.0",
-  "description": "Local-first desktop prompt launcher and miner for Codex and Claude Code.",
+  "productName": "Spellbook",
+  "description": "Local-first desktop spell and skill manager for AI agents.",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {

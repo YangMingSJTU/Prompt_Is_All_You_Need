@@ -1,14 +1,14 @@
-import { BarChart3, Database, Library, Package, Search, Settings } from 'lucide-react';
+import { BarChart3, BookOpen, Database, Library, Package, Search, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
-import type { Candidate, SkillRecord, Snippet, UsageAnalytics } from '../shared/types';
+import type { Candidate, SkillRecord, Spell, UsageAnalytics } from '../shared/types';
 import { AnalyticsView } from './components/AnalyticsView';
 import { FloatingPanel } from './components/FloatingPanel';
 import { LibraryView } from './components/LibraryView';
 import { ScannerView } from './components/ScannerView';
 import { SettingsView } from './components/SettingsView';
 import { SkillLibraryView } from './components/SkillLibraryView';
-import { SnippetPanel } from './components/SnippetPanel';
+import { SpellPanel } from './components/SpellPanel';
 import { createTranslator, resolveLocalePreference } from './i18n';
 
 type View = 'panel' | 'library' | 'skills' | 'scanner' | 'analytics' | 'settings';
@@ -33,7 +33,7 @@ export function App() {
   );
   const mode = useMemo(() => new URLSearchParams(globalThis.location.search).get('mode'), []);
   const [view, setView] = useState<View>('panel');
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [spells, setSpells] = useState<Spell[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [analytics, setAnalytics] = useState<UsageAnalytics | null>(null);
@@ -44,13 +44,13 @@ export function App() {
   }
 
   const refresh = useCallback(async () => {
-    const [snippetList, candidateList, usage, skillList] = await Promise.all([
-      window.apm.listSnippets(),
-      window.apm.listCandidates(),
-      window.apm.getAnalytics(),
-      window.apm.listSkills()
+    const [spellList, candidateList, usage, skillList] = await Promise.all([
+      window.spellbook.listSpells(),
+      window.spellbook.listCandidates(),
+      window.spellbook.getAnalytics(),
+      window.spellbook.listSkills()
     ]);
-    setSnippets(snippetList);
+    setSpells(spellList);
     setCandidates(candidateList);
     setAnalytics(usage);
     setSkills(skillList);
@@ -61,14 +61,14 @@ export function App() {
   }, [refresh]);
 
   useEffect(() => {
-    void window.apm.getSettings().then(setSettings);
+    void window.spellbook.getSettings().then(setSettings);
   }, []);
 
   const selectedView = useMemo(() => {
     if (view === 'library') {
       return (
         <LibraryView
-          snippets={snippets}
+          spells={spells}
           candidates={candidates}
           onChanged={refresh}
           onMessage={setMessage}
@@ -95,8 +95,8 @@ export function App() {
         />
       );
     }
-    return <SnippetPanel snippets={snippets} onChanged={refresh} onMessage={setMessage} t={t} />;
-  }, [analytics, candidates, refresh, settings, skills, snippets, t, view]);
+    return <SpellPanel spells={spells} onChanged={refresh} onMessage={setMessage} t={t} />;
+  }, [analytics, candidates, refresh, settings, skills, spells, t, view]);
 
   const selectedNavItem =
     view === 'settings'
@@ -108,8 +108,13 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">PM</div>
-          <h1>{t('app.brand')}</h1>
+          <div className="brand-mark">
+            <BookOpen size={17} />
+          </div>
+          <div className="brand-copy">
+            <h1>{t('app.brand')}</h1>
+            <small>{t('app.subtitle')}</small>
+          </div>
         </div>
         <nav className="nav-list" aria-label="Navigation">
           {NAV_ITEMS.map((item) => {

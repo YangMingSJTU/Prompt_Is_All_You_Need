@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Candidate, Snippet, UsageAnalytics } from '../../shared/types';
+import type { Candidate, Spell, UsageAnalytics } from '../../shared/types';
 import type { AppDatabase } from './database';
 
-interface SnippetRow extends Record<string, unknown> {
+interface SpellRow extends Record<string, unknown> {
   id: string;
   slug: string;
   title: string;
@@ -33,7 +33,7 @@ interface CandidateRow extends Record<string, unknown> {
   updated_at: string;
 }
 
-const STARTER_SNIPPETS: Array<Omit<Snippet, 'id' | 'createdAt' | 'updatedAt'>> = [
+const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt'>> = [
   {
     slug: 'review-diff',
     title: 'Review current diff',
@@ -66,23 +66,23 @@ const STARTER_SNIPPETS: Array<Omit<Snippet, 'id' | 'createdAt' | 'updatedAt'>> =
   }
 ];
 
-export function createSnippetService(db: AppDatabase) {
+export function createSpellService(db: AppDatabase) {
   return {
-    async seedStarterSnippets(): Promise<void> {
+    async seedStarterSpells(): Promise<void> {
       const now = new Date().toISOString();
-      for (const snippet of STARTER_SNIPPETS) {
+      for (const spell of STARTER_SPELLS) {
         db.run(
-          `INSERT OR IGNORE INTO snippets
+          `INSERT OR IGNORE INTO spells
             (id, slug, title, body, description, tags, source, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             randomUUID(),
-            snippet.slug,
-            snippet.title,
-            snippet.body,
-            snippet.description,
-            JSON.stringify(snippet.tags),
-            snippet.source,
+            spell.slug,
+            spell.title,
+            spell.body,
+            spell.description,
+            JSON.stringify(spell.tags),
+            spell.source,
             now,
             now
           ]
@@ -91,11 +91,11 @@ export function createSnippetService(db: AppDatabase) {
       await db.save();
     },
 
-    async searchSnippets(query: string): Promise<Snippet[]> {
+    async searchSpells(query: string): Promise<Spell[]> {
       const normalized = `%${query.toLowerCase()}%`;
       return db
-        .all<SnippetRow>(
-          `SELECT * FROM snippets
+        .all<SpellRow>(
+          `SELECT * FROM spells
            WHERE lower(title) LIKE ?
               OR lower(body) LIKE ?
               OR lower(description) LIKE ?
@@ -103,40 +103,40 @@ export function createSnippetService(db: AppDatabase) {
            ORDER BY updated_at DESC, title ASC`,
           [normalized, normalized, normalized, normalized]
         )
-        .map(rowToSnippet);
+        .map(rowToSpell);
     },
 
-    async listSnippets(): Promise<Snippet[]> {
+    async listSpells(): Promise<Spell[]> {
       return db
-        .all<SnippetRow>('SELECT * FROM snippets ORDER BY updated_at DESC, title ASC')
-        .map(rowToSnippet);
+        .all<SpellRow>('SELECT * FROM spells ORDER BY updated_at DESC, title ASC')
+        .map(rowToSpell);
     },
 
-    async listPopularSnippets(limit = 6): Promise<Snippet[]> {
+    async listPopularSpells(limit = 6): Promise<Spell[]> {
       return db
-        .all<SnippetRow>(
-          `SELECT snippets.*
-           FROM snippets
-           LEFT JOIN usage_events ON usage_events.snippet_id = snippets.id AND usage_events.action = 'copy'
-           GROUP BY snippets.id
-           ORDER BY COUNT(usage_events.id) DESC, snippets.updated_at DESC, snippets.title ASC
+        .all<SpellRow>(
+          `SELECT spells.*
+           FROM spells
+           LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
+           GROUP BY spells.id
+           ORDER BY COUNT(usage_events.id) DESC, spells.updated_at DESC, spells.title ASC
            LIMIT ?`,
           [limit]
         )
-        .map(rowToSnippet);
+        .map(rowToSpell);
     },
 
-    async copySnippet(snippetId: string): Promise<Snippet> {
-      const row = db.get<SnippetRow>('SELECT * FROM snippets WHERE id = ?', [snippetId]);
+    async copySpell(spellId: string): Promise<Spell> {
+      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
       if (!row) {
-        throw new Error(`Snippet not found: ${snippetId}`);
+        throw new Error(`Spell not found: ${spellId}`);
       }
       db.run(
-        'INSERT INTO usage_events (id, snippet_id, action, created_at) VALUES (?, ?, ?, ?)',
-        [randomUUID(), snippetId, 'copy', new Date().toISOString()]
+        'INSERT INTO usage_events (id, spell_id, action, created_at) VALUES (?, ?, ?, ?)',
+        [randomUUID(), spellId, 'copy', new Date().toISOString()]
       );
       await db.save();
-      return rowToSnippet(row);
+      return rowToSpell(row);
     },
 
     async saveCandidates(candidates: Candidate[]): Promise<void> {
@@ -172,14 +172,14 @@ export function createSnippetService(db: AppDatabase) {
         .map(rowToCandidate);
     },
 
-    async promoteCandidate(candidateId: string): Promise<Snippet> {
+    async promoteCandidate(candidateId: string): Promise<Spell> {
       const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
       if (!candidate) {
         throw new Error(`Candidate not found: ${candidateId}`);
       }
       const now = new Date().toISOString();
       db.run(
-        `INSERT OR REPLACE INTO snippets
+        `INSERT OR REPLACE INTO spells
           (id, slug, title, body, description, tags, source, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -196,41 +196,41 @@ export function createSnippetService(db: AppDatabase) {
       );
       db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
       await db.save();
-      const row = db.get<SnippetRow>('SELECT * FROM snippets WHERE slug = ?', [candidate.slug]);
+      const row = db.get<SpellRow>('SELECT * FROM spells WHERE slug = ?', [candidate.slug]);
       if (!row) {
-        throw new Error(`Promoted snippet not found: ${candidate.slug}`);
+        throw new Error(`Promoted spell not found: ${candidate.slug}`);
       }
-      return rowToSnippet(row);
+      return rowToSpell(row);
     },
 
     async getAnalytics(): Promise<UsageAnalytics> {
-      const snippetCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM snippets')?.count ?? 0;
+      const spellCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM spells')?.count ?? 0;
       const skillCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM skills')?.count ?? 0;
       const candidateCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM candidates')?.count ?? 0;
       const totalCopies =
         db.get<CountRow>("SELECT COUNT(*) AS count FROM usage_events WHERE action = 'copy'")?.count ?? 0;
-      const topSnippets = db.all<{ id: string; title: string; copyCount: number }>(
-        `SELECT snippets.id AS id, snippets.title AS title, COUNT(usage_events.id) AS copyCount
+      const topSpells = db.all<{ id: string; title: string; copyCount: number }>(
+        `SELECT spells.id AS id, spells.title AS title, COUNT(usage_events.id) AS copyCount
          FROM usage_events
-         JOIN snippets ON snippets.id = usage_events.snippet_id
+         JOIN spells ON spells.id = usage_events.spell_id
          WHERE usage_events.action = 'copy'
-         GROUP BY snippets.id, snippets.title
-         ORDER BY copyCount DESC, snippets.title ASC
+         GROUP BY spells.id, spells.title
+         ORDER BY copyCount DESC, spells.title ASC
          LIMIT 5`
       );
 
       return {
-        snippetCount,
+        spellCount,
         skillCount,
         candidateCount,
         totalCopies,
-        topSnippets
+        topSpells
       };
     }
   };
 }
 
-function rowToSnippet(row: SnippetRow): Snippet {
+function rowToSpell(row: SpellRow): Spell {
   return {
     id: row.id,
     slug: row.slug,

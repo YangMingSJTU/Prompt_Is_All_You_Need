@@ -11,8 +11,8 @@ export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
     <section className="stack">
       <div className="summary-strip">
         <div className="summary-item">
-          <span>{t('metric.snippets')}</span>
-          <strong>{analytics?.snippetCount ?? 0}</strong>
+          <span>{t('metric.spells')}</span>
+          <strong>{analytics?.spellCount ?? 0}</strong>
         </div>
         <div className="summary-item">
           <span>{t('metric.skills')}</span>
@@ -33,15 +33,15 @@ export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
         </div>
       </div>
       <div className="candidate-list">
-        {(analytics?.topSnippets ?? []).map((snippet) => (
-          <article className="candidate-row" key={snippet.id}>
+        {(analytics?.topSpells ?? []).map((spell) => (
+          <article className="candidate-row" key={spell.id}>
             <div>
-              <strong>{snippet.title}</strong>
-              <p>{snippet.copyCount} {t('metric.copies')}</p>
+              <strong>{spell.title}</strong>
+              <p>{spell.copyCount} {t('metric.copies')}</p>
             </div>
           </article>
         ))}
-        {analytics && analytics.topSnippets.length === 0 ? (
+        {analytics && analytics.topSpells.length === 0 ? (
           <div className="empty-state">{t('analytics.empty')}</div>
         ) : null}
       </div>

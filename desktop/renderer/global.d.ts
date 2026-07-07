@@ -7,20 +7,20 @@ import type {
   Candidate,
   SkillPlatform,
   SkillRecord,
-  Snippet,
+  Spell,
   SourceFileSummary,
   UsageAnalytics
 } from '../shared/types';
 
 declare global {
   interface Window {
-    apm: {
-      searchSnippets(query: string): Promise<Snippet[]>;
-      listSnippets(): Promise<Snippet[]>;
-      listPopularSnippets(limit?: number): Promise<Snippet[]>;
-      copySnippet(snippetId: string): Promise<Snippet>;
+    spellbook: {
+      searchSpells(query: string): Promise<Spell[]>;
+      listSpells(): Promise<Spell[]>;
+      listPopularSpells(limit?: number): Promise<Spell[]>;
+      copySpell(spellId: string): Promise<Spell>;
       listCandidates(): Promise<Candidate[]>;
-      promoteCandidate(candidateId: string): Promise<Snippet>;
+      promoteCandidate(candidateId: string): Promise<Spell>;
       runScan(): Promise<{
         id: string;
         scannedPrompts: number;

@@ -1,9 +1,9 @@
 import { Clipboard, Plus } from 'lucide-react';
-import type { Candidate, Snippet } from '../../shared/types';
+import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 
 interface LibraryViewProps {
-  snippets: Snippet[];
+  spells: Spell[];
   candidates: Candidate[];
   onChanged(): Promise<void>;
   onMessage(message: string): void;
@@ -11,21 +11,21 @@ interface LibraryViewProps {
 }
 
 export function LibraryView({
-  snippets,
+  spells,
   candidates,
   onChanged,
   onMessage,
   t
 }: LibraryViewProps) {
   async function promote(candidate: Candidate): Promise<void> {
-    await window.apm.promoteCandidate(candidate.id);
-    onMessage(`Saved ${candidate.title} to library`);
+    await window.spellbook.promoteCandidate(candidate.id);
+    onMessage(`${t('library.saved')} ${candidate.title}`);
     await onChanged();
   }
 
-  async function copy(snippet: Snippet): Promise<void> {
-    await window.apm.copySnippet(snippet.id);
-    onMessage(`${t('status.copied')} ${snippet.title}`);
+  async function copy(spell: Spell): Promise<void> {
+    await window.spellbook.copySpell(spell.id);
+    onMessage(`${t('status.copied')} ${spell.title}`);
     await onChanged();
   }
 
@@ -35,19 +35,19 @@ export function LibraryView({
         <div>
           <h3>{t('library.title')}</h3>
         </div>
-        <span className="count-pill">{snippets.length} {t('metric.snippets')}</span>
+        <span className="count-pill">{spells.length} {t('metric.spells')}</span>
       </div>
       <div className="card-grid">
-        {snippets.map((snippet) => (
-          <article className="prompt-card" key={snippet.id}>
+        {spells.map((spell) => (
+          <article className="prompt-card" key={spell.id}>
             <div>
-              <p className="eyebrow">Snippet</p>
-              <h4>{snippet.title}</h4>
-              <p>{snippet.description}</p>
+              <p className="eyebrow">{t('metric.spells')}</p>
+              <h4>{spell.title}</h4>
+              <p>{spell.description}</p>
             </div>
-            <button className="secondary-button" onClick={() => copy(snippet)} type="button">
+            <button className="secondary-button" onClick={() => copy(spell)} type="button">
               <Clipboard size={16} />
-              {t('snippet.copy')}
+              {t('spell.copy')}
             </button>
           </article>
         ))}

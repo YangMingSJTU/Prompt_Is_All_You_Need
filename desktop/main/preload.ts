@@ -2,11 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { AppSettings } from '../shared/settings';
 import type { SkillPlatform } from '../shared/types';
 
-contextBridge.exposeInMainWorld('apm', {
-  searchSnippets: (query: string) => ipcRenderer.invoke('snippets:search', query),
-  listSnippets: () => ipcRenderer.invoke('snippets:list'),
-  listPopularSnippets: (limit?: number) => ipcRenderer.invoke('snippets:popular', limit),
-  copySnippet: (snippetId: string) => ipcRenderer.invoke('snippets:copy', snippetId),
+contextBridge.exposeInMainWorld('spellbook', {
+  searchSpells: (query: string) => ipcRenderer.invoke('spells:search', query),
+  listSpells: () => ipcRenderer.invoke('spells:list'),
+  listPopularSpells: (limit?: number) => ipcRenderer.invoke('spells:popular', limit),
+  copySpell: (spellId: string) => ipcRenderer.invoke('spells:copy', spellId),
   listCandidates: () => ipcRenderer.invoke('candidates:list'),
   promoteCandidate: (candidateId: string) => ipcRenderer.invoke('candidates:promote', candidateId),
   runScan: () => ipcRenderer.invoke('scanner:run'),
