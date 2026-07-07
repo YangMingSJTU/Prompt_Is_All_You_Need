@@ -17,7 +17,7 @@ import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './servi
 import { createSettingsService, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
-import { getAppIconPath } from './services/appAssets';
+import { getAppIconPath, getTrayIconPath } from './services/appAssets';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -204,7 +204,7 @@ function registerDesktopControls(): void {
     registerQuickPanelShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut);
   }
 
-  const trayIcon = nativeImage.createFromPath(getAppIconPath()).resize({ width: 16, height: 16 });
+  const trayIcon = nativeImage.createFromPath(getTrayIconPath()).resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
   tray.setToolTip(getCurrentAppName());
   tray.setContextMenu(

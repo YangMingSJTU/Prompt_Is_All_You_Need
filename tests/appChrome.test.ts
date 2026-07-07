@@ -11,4 +11,12 @@ describe('app chrome defaults', () => {
     expect(mainProcess).not.toContain('createFromDataURL');
     expect(mainProcess).not.toContain('iVBORw0KGgo');
   });
+
+  it('starts sidebar navigation at the top after removing the brand header', () => {
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const navList = styles.match(/\.nav-list\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(navList).toContain('margin-top: 0;');
+    expect(navList).not.toContain('margin-top: 42px;');
+  });
 });
