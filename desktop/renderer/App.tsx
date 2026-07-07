@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { resolveAppName } from '../shared/appIdentity';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
 import type { Candidate, SkillRecord, Spell, UsageAnalytics } from '../shared/types';
+import appIconUrl from '../../assets/icons/app-icon.png';
 import { AnalyticsView } from './components/AnalyticsView';
 import { FeedbackToastProvider } from './components/FeedbackToast';
 import { FloatingPanel } from './components/FloatingPanel';
@@ -113,44 +114,53 @@ export function App() {
 
   return (
     <FeedbackToastProvider>
-      <div className="app-shell">
-        <aside className="sidebar">
-          <nav className="nav-list" aria-label="Navigation">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  className={view === item.id ? 'nav-item active' : 'nav-item'}
-                  key={item.id}
-                  onClick={() => setView(item.id)}
-                  type="button"
-                >
-                  <Icon size={18} />
-                  <span>{t(item.labelKey)}</span>
-                </button>
-              );
-            })}
-          </nav>
-          <div className="sidebar-footer">
-            <button
-              className={view === 'settings' ? 'settings-entry active' : 'settings-entry'}
-              onClick={() => setView('settings')}
-              type="button"
-            >
-              <Settings size={16} />
-              <span>{t('settings.title')}</span>
-            </button>
+      <div className="app-frame">
+        <header className="app-titlebar">
+          <div className="titlebar-brand">
+            <img alt="" src={appIconUrl} />
+            <span>{resolveAppName(settings.language, globalThis.navigator?.language)}</span>
           </div>
-        </aside>
-        <main className="workspace">
-          <header className="topbar">
-            <div className="topbar-title">
-              <PageIcon size={16} />
-              <h2>{t(selectedNavItem.labelKey)}</h2>
+          <div className="titlebar-window-controls" aria-hidden />
+        </header>
+        <div className="app-shell">
+          <aside className="sidebar">
+            <nav className="nav-list" aria-label="Navigation">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    className={view === item.id ? 'nav-item active' : 'nav-item'}
+                    key={item.id}
+                    onClick={() => setView(item.id)}
+                    type="button"
+                  >
+                    <Icon size={18} />
+                    <span>{t(item.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="sidebar-footer">
+              <button
+                className={view === 'settings' ? 'settings-entry active' : 'settings-entry'}
+                onClick={() => setView('settings')}
+                type="button"
+              >
+                <Settings size={16} />
+                <span>{t('settings.title')}</span>
+              </button>
             </div>
-          </header>
-          {selectedView}
-        </main>
+          </aside>
+          <main className="workspace">
+            <header className="topbar">
+              <div className="topbar-title">
+                <PageIcon size={16} />
+                <h2>{t(selectedNavItem.labelKey)}</h2>
+              </div>
+            </header>
+            {selectedView}
+          </main>
+        </div>
       </div>
     </FeedbackToastProvider>
   );

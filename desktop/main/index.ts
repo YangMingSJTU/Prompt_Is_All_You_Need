@@ -36,6 +36,12 @@ async function createWindow(): Promise<void> {
     minHeight: 640,
     title: appName,
     icon: getAppIconPath(),
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#0f1115',
+      symbolColor: '#f5f0df',
+      height: 40
+    },
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

@@ -48,12 +48,69 @@ p {
   margin: 0;
 }
 
-.app-shell {
+.app-frame {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
   height: 100vh;
   min-width: 980px;
   min-height: 640px;
+  overflow: hidden;
+  background: #0f1115;
+}
+
+.app-titlebar {
+  -webkit-app-region: drag;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #24262d;
+  background: #0f1115;
+  color: #f5f0df;
+  padding: 0 138px 0 10px;
+}
+
+.titlebar-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.titlebar-brand img {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.titlebar-brand span {
+  min-width: 0;
+  overflow: hidden;
+  color: #f5f0df;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-window-controls {
+  -webkit-app-region: no-drag;
+  width: 138px;
+  height: 40px;
+  flex: 0 0 auto;
+  margin-right: -138px;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  height: calc(100vh - 40px);
+  min-width: 980px;
+  min-height: 600px;
   background: var(--background);
 }
 
