@@ -26,6 +26,52 @@ describe('parser', () => {
     expect(result.warningCount).toBe(0);
   });
 
+  it('extracts user prompts from Codex response item payloads', () => {
+    const jsonl = [
+      JSON.stringify({
+        type: 'response_item',
+        timestamp: '2026-07-07T00:00:00.000Z',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'scan Codex sessions and import useful prompts'
+            }
+          ]
+        }
+      }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'assistant answer' }]
+        }
+      }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          output: 'tool output'
+        }
+      })
+    ].join('\n');
+
+    const result = extractPromptsFromJsonl(jsonl, {
+      sourceTool: 'codex',
+      sourceFile: 'codex-session.jsonl'
+    });
+
+    expect(result.prompts).toHaveLength(1);
+    expect(result.prompts[0]).toMatchObject({
+      rawText: 'scan Codex sessions and import useful prompts',
+      timestamp: '2026-07-07T00:00:00.000Z',
+      turnIndex: 0
+    });
+  });
+
   it('redacts secrets before persistence', () => {
     const redacted = redactSecrets('API_KEY=sk-test123456 TOKEN=ghp_abcdef123456');
 

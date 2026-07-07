@@ -132,14 +132,27 @@ export function isLowValuePrompt(text: string): boolean {
 }
 
 function getRole(record: Record<string, unknown>): string | null {
+  const payload = asRecord(record.payload);
+  const payloadItem = asRecord(payload?.item);
   const nestedMessage = asRecord(record.message);
-  const raw = record.role ?? record.type ?? nestedMessage?.role;
+  const raw = record.role ?? payloadItem?.role ?? payload?.role ?? nestedMessage?.role ?? record.type;
   return typeof raw === 'string' ? raw.toLowerCase() : null;
 }
 
 function extractText(record: Record<string, unknown>): string | null {
+  const payload = asRecord(record.payload);
+  const payloadItem = asRecord(payload?.item);
   const nestedMessage = asRecord(record.message);
-  const candidates = [nestedMessage?.content, record.content, record.text];
+  const candidates = [
+    payloadItem?.content,
+    payload?.content,
+    nestedMessage?.content,
+    record.content,
+    record.text,
+    payloadItem?.text,
+    payload?.text,
+    nestedMessage?.text
+  ];
 
   for (const candidate of candidates) {
     if (typeof candidate === 'string' && candidate.trim()) {
