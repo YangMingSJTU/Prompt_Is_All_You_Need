@@ -8,6 +8,7 @@ import type {
   SkillPlatform,
   SkillRecord,
   Spell,
+  SpellUpdatePatch,
   SourceFileSummary,
   UsageAnalytics
 } from '../shared/types';
@@ -19,6 +20,7 @@ declare global {
       listSpells(): Promise<Spell[]>;
       listPopularSpells(limit?: number): Promise<Spell[]>;
       copySpell(spellId: string): Promise<Spell>;
+      updateSpell(spellId: string, patch: SpellUpdatePatch): Promise<Spell>;
       listCandidates(): Promise<Candidate[]>;
       promoteCandidate(candidateId: string): Promise<Spell>;
       runScan(): Promise<{

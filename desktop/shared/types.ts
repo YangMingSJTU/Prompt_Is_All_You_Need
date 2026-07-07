@@ -25,10 +25,18 @@ export interface ExtractedPrompt {
 
 export interface Spell {
   id: string;
+  alias: string;
   body: string;
+  tags: string[];
   source: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SpellUpdatePatch {
+  alias?: string;
+  body?: string;
+  tags?: string[];
 }
 
 export interface Candidate {

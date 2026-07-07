@@ -1,4 +1,5 @@
-import { Clipboard, Plus } from 'lucide-react';
+import { Clipboard, Plus, Save, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
@@ -11,15 +12,30 @@ interface LibraryViewProps {
   t: TFunction;
 }
 
-export function LibraryView({
-  spells,
-  candidates,
-  onChanged,
-  onMessage,
-  t
-}: LibraryViewProps) {
+interface SpellDraft {
+  alias: string;
+  body: string;
+  tags: string;
+}
+
+export function LibraryView({ spells, candidates, onChanged, onMessage, t }: LibraryViewProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
+  const selectedSpell = useMemo(
+    () => spells.find((spell) => spell.id === selectedId) ?? spells[0] ?? null,
+    [selectedId, spells]
+  );
+  const [draft, setDraft] = useState<SpellDraft>(() => createDraft(selectedSpell));
+
+  useEffect(() => {
+    if (selectedSpell) {
+      setSelectedId(selectedSpell.id);
+    }
+    setDraft(createDraft(selectedSpell));
+  }, [selectedSpell?.id]);
+
   async function promote(candidate: Candidate): Promise<void> {
-    await window.spellbook.promoteCandidate(candidate.id);
+    const spell = await window.spellbook.promoteCandidate(candidate.id);
+    setSelectedId(spell.id);
     onMessage(t('library.saved'));
     await onChanged();
   }
@@ -30,47 +46,184 @@ export function LibraryView({
     await onChanged();
   }
 
+  async function saveSelected(): Promise<void> {
+    if (!selectedSpell) {
+      return;
+    }
+    await window.spellbook.updateSpell(selectedSpell.id, {
+      alias: draft.alias,
+      body: draft.body,
+      tags: parseTagInput(draft.tags)
+    });
+    onMessage(t('spell.saved'));
+    await onChanged();
+  }
+
+  function resetDraft(): void {
+    setDraft(createDraft(selectedSpell));
+  }
+
   return (
-    <section className="stack">
-      <div className="section-heading">
-        <div>
-          <h3>{t('library.title')}</h3>
+    <section className="spell-library-grid">
+      <div className="spell-list-pane">
+        <div className="section-heading">
+          <div>
+            <h3>{t('library.title')}</h3>
+          </div>
+          <span className="count-pill">
+            {spells.length} {t('metric.spells')}
+          </span>
         </div>
-        <span className="count-pill">{spells.length} {t('metric.spells')}</span>
-      </div>
-      <div className="card-grid">
-        {spells.map((spell) => (
-          <article className="spell-card" key={spell.id}>
-            <pre className="spell-text-block">{getSpellDisplayText(spell)}</pre>
-            <button className="secondary-button" onClick={() => copy(spell)} type="button">
-              <Clipboard size={16} />
-              {t('spell.copy')}
-            </button>
-          </article>
-        ))}
-      </div>
-      <div className="section-heading">
-        <div>
-          <h3>{t('library.candidates')}</h3>
+        <div className="spell-list">
+          {spells.map((spell) => (
+            <article className={selectedSpell?.id === spell.id ? 'spell-list-row selected' : 'spell-list-row'} key={spell.id}>
+              <button className="spell-row-main" onClick={() => setSelectedId(spell.id)} type="button">
+                <div className="spell-row-title" title={getSpellTitle(spell, t)}>
+                  {getSpellTitle(spell, t)}
+                </div>
+                <p className="spell-preview-line" title={getSpellDisplayText(spell)}>
+                  {formatPreview(spell.body)}
+                </p>
+                {spell.tags.length ? (
+                  <div className="tag-strip compact">
+                    {spell.tags.slice(0, 3).map((tag) => (
+                      <span key={tag} title={tag}>
+                        {tag}
+                      </span>
+                    ))}
+                    {spell.tags.length > 3 ? <span>+{spell.tags.length - 3}</span> : null}
+                  </div>
+                ) : null}
+              </button>
+              <button
+                aria-label={t('spell.copy')}
+                className="icon-button"
+                onClick={() => void copy(spell)}
+                title={t('spell.copy')}
+                type="button"
+              >
+                <Clipboard size={15} />
+              </button>
+            </article>
+          ))}
+          {spells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
         </div>
-        <span className="count-pill">{candidates.length} {t('metric.candidates')}</span>
-      </div>
-      <div className="candidate-list">
-        {candidates.map((candidate) => (
-          <article className="candidate-row" key={candidate.id}>
-            <div>
-              <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
-              <small>
-                {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
-              </small>
+        {candidates.length ? (
+          <div className="candidate-dock">
+            <div className="section-heading compact">
+              <div>
+                <h3>{t('library.candidates')}</h3>
+              </div>
+              <span className="count-pill">
+                {candidates.length} {t('metric.candidates')}
+              </span>
             </div>
-            <button className="primary-button" onClick={() => promote(candidate)} type="button">
-              <Plus size={16} />
-              {t('library.save')}
-            </button>
-          </article>
-        ))}
+            <div className="candidate-list compact">
+              {candidates.map((candidate) => (
+                <article className="candidate-row" key={candidate.id}>
+                  <div>
+                    <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
+                    <small>
+                      {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
+                    </small>
+                  </div>
+                  <button className="primary-button" onClick={() => void promote(candidate)} type="button">
+                    <Plus size={16} />
+                    {t('library.save')}
+                  </button>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="spell-editor-pane">
+        {selectedSpell ? (
+          <form
+            className="spell-editor-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveSelected();
+            }}
+          >
+            <div className="detail-heading">
+              <div className="detail-title">
+                <h3>{getSpellTitle(selectedSpell, t)}</h3>
+              </div>
+              <div className="button-row">
+                <button className="secondary-button" onClick={() => void copy(selectedSpell)} type="button">
+                  <Clipboard size={16} />
+                  {t('spell.copy')}
+                </button>
+                <button className="secondary-button" onClick={resetDraft} type="button">
+                  <X size={16} />
+                  {t('spell.cancel')}
+                </button>
+                <button className="primary-button" disabled={!draft.body.trim()} type="submit">
+                  <Save size={16} />
+                  {t('spell.save')}
+                </button>
+              </div>
+            </div>
+            <label className="field-row">
+              <span>{t('spell.alias')}</span>
+              <input
+                onChange={(event) => setDraft((current) => ({ ...current, alias: event.target.value }))}
+                placeholder={t('spell.aliasPlaceholder')}
+                value={draft.alias}
+              />
+            </label>
+            <label className="field-row">
+              <span>{t('spell.tags')}</span>
+              <input
+                onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))}
+                placeholder={t('spell.tagsPlaceholder')}
+                value={draft.tags}
+              />
+            </label>
+            <label className="field-row fill">
+              <span>{t('spell.body')}</span>
+              <textarea
+                onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
+                value={draft.body}
+              />
+            </label>
+          </form>
+        ) : (
+          <div className="empty-state">{t('spell.empty')}</div>
+        )}
       </div>
     </section>
   );
+}
+
+function createDraft(spell: Spell | null): SpellDraft {
+  return {
+    alias: spell?.alias ?? '',
+    body: spell?.body ?? '',
+    tags: spell?.tags.join(', ') ?? ''
+  };
+}
+
+function getSpellTitle(spell: Spell, t: TFunction): string {
+  return spell.alias || firstLine(spell.body) || t('spell.untitled');
+}
+
+function firstLine(value: string): string {
+  return value.split(/\r?\n/).find((line) => line.trim())?.trim() ?? '';
+}
+
+function formatPreview(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function parseTagInput(value: string): string[] {
+  const tags: string[] = [];
+  for (const tag of value.split(/[,，\n]/)) {
+    const normalized = tag.trim();
+    if (normalized && !tags.includes(normalized)) {
+      tags.push(normalized);
+    }
+  }
+  return tags;
 }

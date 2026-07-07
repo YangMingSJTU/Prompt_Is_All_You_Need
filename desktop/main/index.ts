@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { resolveAppName } from '../shared/appIdentity';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
-import type { SkillPlatform } from '../shared/types';
+import type { SkillPlatform, SpellUpdatePatch } from '../shared/types';
 import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
 import {
   DEFAULT_APP_SETTINGS,
@@ -118,6 +118,9 @@ async function bootstrap(): Promise<void> {
     floatingWindow?.hide();
     return spell;
   });
+  ipcMain.handle('spells:update', (_event, spellId: string, patch: SpellUpdatePatch) =>
+    spellService.updateSpell(spellId, patch)
+  );
   ipcMain.handle('candidates:list', () => spellService.listCandidates());
   ipcMain.handle('candidates:promote', (_event, candidateId: string) =>
     spellService.promoteCandidate(candidateId)

@@ -515,6 +515,196 @@ p {
   padding: 16px 20px 24px;
 }
 
+.spell-library-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
+  height: calc(100vh - 53px);
+  min-height: 0;
+  background: var(--surface);
+}
+
+.spell-list-pane,
+.spell-editor-pane {
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.spell-list-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-right: 1px solid var(--border);
+  padding: 16px 14px;
+}
+
+.spell-editor-pane {
+  overflow: hidden;
+  padding: 16px 18px;
+}
+
+.spell-list {
+  display: grid;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.spell-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 8px;
+  min-width: 0;
+  min-height: 72px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 8px 8px 8px 11px;
+  transition: background 120ms ease;
+}
+
+.spell-list-row:last-child {
+  border-bottom: 0;
+}
+
+.spell-list-row.selected,
+.spell-list-row:hover {
+  background: var(--hover);
+}
+
+.spell-row-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.spell-row-title,
+.spell-preview-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spell-row-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.spell-preview-line {
+  margin: 0;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tag-strip.compact {
+  max-width: 100%;
+  margin-top: 1px;
+}
+
+.tag-strip.compact span {
+  max-width: 96px;
+}
+
+.candidate-dock {
+  display: grid;
+  flex: 0 0 min(220px, 28vh);
+  min-height: 0;
+  gap: 8px;
+}
+
+.candidate-list.compact {
+  min-height: 0;
+  overflow: auto;
+}
+
+.section-heading.compact {
+  min-height: 28px;
+}
+
+.spell-editor-form {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.spell-editor-form .detail-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-title h3 {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-row {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.field-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-row input,
+.field-row textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.field-row input {
+  height: 34px;
+}
+
+.field-row textarea {
+  height: 100%;
+  min-height: 0;
+  resize: none;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.65;
+}
+
+.field-row.fill {
+  flex: 1;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
 .section-heading {
   min-height: 36px;
 }
@@ -565,7 +755,6 @@ p {
   white-space: nowrap;
 }
 
-.card-grid,
 .candidate-list,
 .source-table,
 .skill-table {
@@ -576,7 +765,6 @@ p {
   background: var(--surface);
 }
 
-.spell-card,
 .candidate-row,
 .source-row,
 .skill-row {
@@ -587,14 +775,12 @@ p {
   background: var(--surface);
 }
 
-.spell-card:last-child,
 .candidate-row:last-child,
 .source-row:last-child,
 .skill-row:last-child {
   border-bottom: 0;
 }
 
-.spell-card,
 .candidate-row {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
@@ -603,7 +789,6 @@ p {
   padding: 10px 12px;
 }
 
-.spell-card .secondary-button,
 .candidate-row .primary-button {
   margin-top: 2px;
 }

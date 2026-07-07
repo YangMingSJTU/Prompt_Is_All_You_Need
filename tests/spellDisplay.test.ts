@@ -6,7 +6,9 @@ describe('spell display text', () => {
   it('uses the raw spell body as the library display text', () => {
     const spell: Spell = {
       id: 'spell-1',
+      alias: 'Reviewer',
       body: '# Role\n\nAct as a concise reviewer.',
+      tags: ['review'],
       source: 'manual',
       createdAt: '2026-07-07T00:00:00.000Z',
       updatedAt: '2026-07-07T00:00:00.000Z'
