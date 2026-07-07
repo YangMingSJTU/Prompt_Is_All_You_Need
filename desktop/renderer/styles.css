@@ -233,7 +233,6 @@ p {
   white-space: nowrap;
 }
 
-.status-pill,
 .count-pill {
   display: inline-flex;
   max-width: 360px;
@@ -359,6 +358,70 @@ p {
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.feedback-target {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.feedback-tooltip {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  display: block;
+  max-width: min(320px, 54vw);
+  overflow: hidden;
+  border: 1px solid rgba(24, 24, 27, 0.08);
+  border-radius: 7px;
+  background: #18181b;
+  box-shadow: 0 10px 24px rgba(24, 24, 27, 0.16);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 7px 9px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.feedback-tooltip::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  background: #18181b;
+  content: "";
+  transform: translate(-50%, -4px) rotate(45deg);
+}
+
+.feedback-tooltip.left {
+  right: auto;
+  left: 0;
+  transform: none;
+}
+
+.feedback-tooltip.right {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.feedback-tooltip.left::after {
+  left: 16px;
+}
+
+.feedback-tooltip.right::after {
+  right: 16px;
+  left: auto;
+  transform: translate(0, -4px) rotate(45deg);
 }
 
 .result-row.selected,
@@ -1126,7 +1189,7 @@ p {
 .settings-segmented {
   display: inline-flex;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--muted-surface);
@@ -1134,6 +1197,7 @@ p {
 }
 
 .settings-segmented button {
+  position: relative;
   height: 28px;
   min-width: 0;
   border: 0;
@@ -1170,6 +1234,7 @@ p {
 }
 
 .shortcut-capture {
+  position: relative;
   display: grid;
   height: 44px;
   min-width: 0;
@@ -1391,6 +1456,7 @@ p {
 }
 
 .floating-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
@@ -1411,6 +1477,30 @@ p {
 .floating-row.selected,
 .floating-row:hover {
   background: var(--hover);
+}
+
+.spell-list .feedback-tooltip,
+.floating-row .feedback-tooltip,
+.candidate-row .feedback-tooltip,
+.skill-actions .feedback-tooltip,
+.settings-card .feedback-tooltip {
+  top: 50%;
+  right: calc(100% + 7px);
+  bottom: auto;
+  left: auto;
+  max-width: min(260px, 42vw);
+  transform: translateY(-50%);
+}
+
+.spell-list .feedback-tooltip::after,
+.floating-row .feedback-tooltip::after,
+.candidate-row .feedback-tooltip::after,
+.skill-actions .feedback-tooltip::after,
+.settings-card .feedback-tooltip::after {
+  top: 50%;
+  right: -4px;
+  left: auto;
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .floating-empty {

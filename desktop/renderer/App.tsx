@@ -38,7 +38,6 @@ export function App() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [analytics, setAnalytics] = useState<UsageAnalytics | null>(null);
-  const [message, setMessage] = useState('');
 
   if (mode === 'floating') {
     return <FloatingPanel t={t} />;
@@ -76,16 +75,15 @@ export function App() {
           spells={spells}
           candidates={candidates}
           onChanged={refresh}
-          onMessage={setMessage}
           t={t}
         />
       );
     }
     if (view === 'skills') {
-      return <SkillLibraryView skills={skills} onChanged={refresh} onMessage={setMessage} t={t} />;
+      return <SkillLibraryView skills={skills} onChanged={refresh} t={t} />;
     }
     if (view === 'scanner') {
-      return <ScannerView onChanged={refresh} onMessage={setMessage} t={t} />;
+      return <ScannerView onChanged={refresh} t={t} />;
     }
     if (view === 'analytics') {
       return <AnalyticsView analytics={analytics} t={t} />;
@@ -95,12 +93,11 @@ export function App() {
         <SettingsView
           settings={settings}
           onSettingsChanged={setSettings}
-          onMessage={setMessage}
           t={t}
         />
       );
     }
-    return <SpellPanel spells={spells} onChanged={refresh} onMessage={setMessage} t={t} />;
+    return <SpellPanel spells={spells} onChanged={refresh} t={t} />;
   }, [analytics, candidates, refresh, settings, skills, spells, t, view]);
 
   const selectedNavItem =
@@ -145,7 +142,6 @@ export function App() {
             <PageIcon size={16} />
             <h2>{t(selectedNavItem.labelKey)}</h2>
           </div>
-          {message ? <div className="status-pill">{message}</div> : null}
         </header>
         {selectedView}
       </main>

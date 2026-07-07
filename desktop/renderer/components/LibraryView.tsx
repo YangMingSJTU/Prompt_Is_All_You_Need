@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
+import { FeedbackTarget, useFeedbackTooltip } from './FeedbackTooltip';
 
 interface LibraryViewProps {
   spells: Spell[];
   candidates: Candidate[];
   onChanged(): Promise<void>;
-  onMessage(message: string): void;
   t: TFunction;
 }
 
@@ -18,8 +18,9 @@ interface SpellDraft {
   tags: string;
 }
 
-export function LibraryView({ spells, candidates, onChanged, onMessage, t }: LibraryViewProps) {
+export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
+  const { showFeedback, tooltipFor } = useFeedbackTooltip();
   const selectedSpell = useMemo(
     () => spells.find((spell) => spell.id === selectedId) ?? spells[0] ?? null,
     [selectedId, spells]
@@ -36,13 +37,13 @@ export function LibraryView({ spells, candidates, onChanged, onMessage, t }: Lib
   async function promote(candidate: Candidate): Promise<void> {
     const spell = await window.spellbook.promoteCandidate(candidate.id);
     setSelectedId(spell.id);
-    onMessage(t('library.saved'));
+    showFeedback(`candidate:${candidate.id}`, t('library.saved'));
     await onChanged();
   }
 
-  async function copy(spell: Spell): Promise<void> {
+  async function copy(spell: Spell, feedbackKey: string): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    onMessage(t('status.copied'));
+    showFeedback(feedbackKey, t('status.copied'));
     await onChanged();
   }
 
@@ -55,7 +56,7 @@ export function LibraryView({ spells, candidates, onChanged, onMessage, t }: Lib
       body: draft.body,
       tags: parseTagInput(draft.tags)
     });
-    onMessage(t('spell.saved'));
+    showFeedback('editor:save', t('spell.saved'));
     await onChanged();
   }
 
@@ -95,15 +96,17 @@ export function LibraryView({ spells, candidates, onChanged, onMessage, t }: Lib
                   </div>
                 ) : null}
               </button>
-              <button
-                aria-label={t('spell.copy')}
-                className="icon-button"
-                onClick={() => void copy(spell)}
-                title={t('spell.copy')}
-                type="button"
-              >
-                <Clipboard size={15} />
-              </button>
+              <FeedbackTarget align="right" message={tooltipFor(`spell:${spell.id}:copy`)}>
+                <button
+                  aria-label={t('spell.copy')}
+                  className="icon-button"
+                  onClick={() => void copy(spell, `spell:${spell.id}:copy`)}
+                  title={t('spell.copy')}
+                  type="button"
+                >
+                  <Clipboard size={15} />
+                </button>
+              </FeedbackTarget>
             </article>
           ))}
           {spells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
@@ -127,10 +130,12 @@ export function LibraryView({ spells, candidates, onChanged, onMessage, t }: Lib
                       {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
                     </small>
                   </div>
-                  <button className="primary-button" onClick={() => void promote(candidate)} type="button">
-                    <Plus size={16} />
-                    {t('library.save')}
-                  </button>
+                  <FeedbackTarget align="right" message={tooltipFor(`candidate:${candidate.id}`)}>
+                    <button className="primary-button" onClick={() => void promote(candidate)} type="button">
+                      <Plus size={16} />
+                      {t('library.save')}
+                    </button>
+                  </FeedbackTarget>
                 </article>
               ))}
             </div>
@@ -151,18 +156,26 @@ export function LibraryView({ spells, candidates, onChanged, onMessage, t }: Lib
                 <h3>{getSpellTitle(selectedSpell, t)}</h3>
               </div>
               <div className="button-row">
-                <button className="secondary-button" onClick={() => void copy(selectedSpell)} type="button">
-                  <Clipboard size={16} />
-                  {t('spell.copy')}
-                </button>
+                <FeedbackTarget message={tooltipFor('editor:copy')}>
+                  <button
+                    className="secondary-button"
+                    onClick={() => void copy(selectedSpell, 'editor:copy')}
+                    type="button"
+                  >
+                    <Clipboard size={16} />
+                    {t('spell.copy')}
+                  </button>
+                </FeedbackTarget>
                 <button className="secondary-button" onClick={resetDraft} type="button">
                   <X size={16} />
                   {t('spell.cancel')}
                 </button>
-                <button className="primary-button" disabled={!draft.body.trim()} type="submit">
-                  <Save size={16} />
-                  {t('spell.save')}
-                </button>
+                <FeedbackTarget align="right" message={tooltipFor('editor:save')}>
+                  <button className="primary-button" disabled={!draft.body.trim()} type="submit">
+                    <Save size={16} />
+                    {t('spell.save')}
+                  </button>
+                </FeedbackTarget>
               </div>
             </div>
             <label className="field-row">

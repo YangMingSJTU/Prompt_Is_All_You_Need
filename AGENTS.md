@@ -2,13 +2,13 @@
 
 ## Project Structure & Module Organization
 
-This repository is a lightweight skeleton. Root files:
+This repository contains the Spellbook desktop app. Root files include `README.md`, `LICENSE`, package/tooling configuration, and `AGENTS.md`.
 
-- `README.md` for title and description.
-- `LICENSE` with Apache 2.0 terms.
-- `AGENTS.md` for contributor and agent guidance.
-
-No implementation directories exist yet. When adding work, use `src/` for code, `tests/` for tests that mirror `src/`, `docs/` for design notes, and `assets/` for images or sample data. Keep root-level files limited to metadata and tooling configuration.
+- `desktop/main/` contains Electron main-process services and IPC.
+- `desktop/renderer/` contains the React UI.
+- `desktop/shared/` contains shared types and app settings helpers.
+- `tests/` contains Vitest coverage for services, UI structure, and shared helpers.
+- `assets/` and `docs/` contain app assets and product notes.
 
 ## Development Stage
 
@@ -16,25 +16,28 @@ The project is in active development and has no online users. Favor simple curre
 
 ## Build, Test, and Development Commands
 
-No build system, package manager, or test runner is configured yet. Until tooling exists, use Git checks:
+Use the npm scripts defined in `package.json`:
 
-- `git status --short` shows changed and untracked files.
-- `git diff` reviews unstaged edits.
-- `git log --oneline -5` checks recent commit style.
+- `npm test` runs the Vitest suite.
+- `npm run typecheck` runs TypeScript checks for renderer and main code.
+- `npm run build` runs typecheck and builds the Electron app.
+- `npm run dev` starts the local Electron development app.
 
-When introducing a language stack, add canonical commands to `README.md` and keep this section in sync, for example `npm test`, `pytest`, or `make build`.
+Use `git status --short` and `git diff` before staging changes.
 
 ## Coding Style & Naming Conventions
 
 Use Markdown for documentation. Keep headings descriptive, paragraphs short, and examples runnable where possible. Prefer ASCII unless a file already uses another character set or content requires it.
 
-For future code, follow the formatter and linter standard for the chosen language. Name files and directories in lowercase with hyphens or underscores unless the ecosystem has a stronger convention.
+Follow the existing TypeScript and React style. Keep UI state local unless it is shared app state, and prefer small reusable components over repeated JSX for common interaction patterns.
+
+## UI Interaction Guidance
+
+For click-triggered success feedback such as copy, save, scan, package, or install, use a short Tooltip anchored to the triggering control. Do not show routine confirmations as a global status pill or other persistent topbar/global status text. Reserve inline messages for actionable errors, validation problems, or warnings the user must fix.
 
 ## Testing Guidelines
 
-No automated tests are present yet. Add tests with the first non-trivial implementation. Place them under `tests/`, mirror source layout, and name files according to the selected framework, such as `test_*.py`, `*.test.ts`, or `*_test.go`.
-
-Document how to run the full suite and any focused test command before merging new code.
+Add or update tests for non-trivial behavior changes. Place tests under `tests/` and use `*.test.ts` naming. For UI-only constraints that are hard to exercise in DOM tests, static structure tests are acceptable when they directly protect a known regression.
 
 ## Commit & Pull Request Guidelines
 

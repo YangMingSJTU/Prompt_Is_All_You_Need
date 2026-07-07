@@ -3,17 +3,18 @@ import { useMemo, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { getSpellDisplayText } from '../spellDisplay';
+import { FeedbackTarget, useFeedbackTooltip } from './FeedbackTooltip';
 
 interface SpellPanelProps {
   spells: Spell[];
   onChanged(): Promise<void>;
-  onMessage(message: string): void;
   t: TFunction;
 }
 
-export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps) {
+export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
+  const { showFeedback, tooltipFor } = useFeedbackTooltip();
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -27,7 +28,7 @@ export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps)
 
   async function copySelected(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    onMessage(t('status.copied'));
+    showFeedback('panel:copy', t('status.copied'));
     await onChanged();
   }
 
@@ -67,10 +68,12 @@ export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps)
             <div className="detail-heading">
               <div className="detail-title" />
               <div className="button-row">
-                <button className="primary-button" onClick={() => copySelected(selected)} type="button">
-                  <Clipboard size={16} />
-                  {t('spell.copy')}
-                </button>
+                <FeedbackTarget align="right" message={tooltipFor('panel:copy')}>
+                  <button className="primary-button" onClick={() => copySelected(selected)} type="button">
+                    <Clipboard size={16} />
+                    {t('spell.copy')}
+                  </button>
+                </FeedbackTarget>
               </div>
             </div>
             <pre className="spell-preview">{getSpellDisplayText(selected)}</pre>
