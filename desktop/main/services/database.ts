@@ -73,7 +73,7 @@ function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
 
 function createSchema(db: SqlJsDatabase): void {
   const version = getUserVersion(db);
-  if (version > 0 && version < 5) {
+  if (version > 0 && version < 6) {
     db.exec(`
       DROP TABLE IF EXISTS spells;
       DROP TABLE IF EXISTS candidates;
@@ -87,7 +87,7 @@ function createSchema(db: SqlJsDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS spells (
       id TEXT PRIMARY KEY,
-      alias TEXT NOT NULL,
+      name TEXT NOT NULL,
       body TEXT NOT NULL,
       tags TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -149,7 +149,7 @@ function createSchema(db: SqlJsDatabase): void {
       updated_at TEXT NOT NULL
     );
 
-    PRAGMA user_version = 5;
+    PRAGMA user_version = 6;
   `);
 }
 

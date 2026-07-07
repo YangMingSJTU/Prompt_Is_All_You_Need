@@ -121,6 +121,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('spells:update', (_event, spellId: string, patch: SpellUpdatePatch) =>
     spellService.updateSpell(spellId, patch)
   );
+  ipcMain.handle('spells:delete', (_event, spellId: string) => spellService.deleteSpell(spellId));
   ipcMain.handle('candidates:list', () => spellService.listCandidates());
   ipcMain.handle('candidates:promote', (_event, candidateId: string) =>
     spellService.promoteCandidate(candidateId)

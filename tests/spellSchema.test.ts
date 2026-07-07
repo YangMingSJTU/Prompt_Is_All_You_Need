@@ -9,7 +9,7 @@ describe('spell schema', () => {
       .all<{ name: string }>('PRAGMA table_info(spells)')
       .map((column) => column.name);
 
-    expect(columns).toEqual(['id', 'alias', 'body', 'tags', 'source', 'created_at', 'updated_at']);
+    expect(columns).toEqual(['id', 'name', 'body', 'tags', 'source', 'created_at', 'updated_at']);
     expect(columns).not.toContain('slug');
     expect(columns).not.toContain('title');
     expect(columns).not.toContain('description');

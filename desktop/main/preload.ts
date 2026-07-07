@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('spellbook', {
   listPopularSpells: (limit?: number) => ipcRenderer.invoke('spells:popular', limit),
   copySpell: (spellId: string) => ipcRenderer.invoke('spells:copy', spellId),
   updateSpell: (spellId: string, patch: SpellUpdatePatch) => ipcRenderer.invoke('spells:update', spellId, patch),
+  deleteSpell: (spellId: string) => ipcRenderer.invoke('spells:delete', spellId),
   listCandidates: () => ipcRenderer.invoke('candidates:list'),
   promoteCandidate: (candidateId: string) => ipcRenderer.invoke('candidates:promote', candidateId),
   runScan: () => ipcRenderer.invoke('scanner:run'),

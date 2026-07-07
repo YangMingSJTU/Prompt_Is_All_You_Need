@@ -17,4 +17,27 @@ describe('spell library UI structure', () => {
     expect(styles.match(/\.spell-list\s*\{[^}]+overflow: auto;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles.match(/\.spell-preview-line\s*\{[^}]+text-overflow: ellipsis;[^}]+\}/s)?.[0]).toBeTruthy();
   });
+
+  it('uses search tag filters name editing and delete confirmation without redundant headings', () => {
+    const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+
+    expect(component).toContain('spell-library-toolbar');
+    expect(component).toContain('spell-filter-search');
+    expect(component).toContain('tag-filter-row');
+    expect(component).toContain('selectedTags');
+    expect(component).toContain('tag-editor');
+    expect(component).toContain('tag-add-button');
+    expect(component).toContain('deleteSpell');
+    expect(component).toContain('delete-confirm-popover');
+    expect(component).toContain('spell.name');
+    expect(component).not.toContain('spell.alias');
+    expect(component).not.toContain('<h3>{t(\'library.title\')}</h3>');
+    expect(component).not.toContain('{spells.length} {t(\'metric.spells\')}');
+    expect(component).not.toContain('<h3>{getSpellTitle(selectedSpell, t)}</h3>');
+
+    expect(styles).toContain('.spell-library-toolbar');
+    expect(styles).toContain('.tag-editor');
+    expect(styles).toContain('.delete-confirm-popover');
+  });
 });

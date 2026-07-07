@@ -21,6 +21,7 @@ declare global {
       listPopularSpells(limit?: number): Promise<Spell[]>;
       copySpell(spellId: string): Promise<Spell>;
       updateSpell(spellId: string, patch: SpellUpdatePatch): Promise<Spell>;
+      deleteSpell(spellId: string): Promise<void>;
       listCandidates(): Promise<Candidate[]>;
       promoteCandidate(candidateId: string): Promise<Spell>;
       runScan(): Promise<{

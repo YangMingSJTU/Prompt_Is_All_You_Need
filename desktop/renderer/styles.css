@@ -610,6 +610,103 @@ p {
   padding: 16px 18px;
 }
 
+.spell-library-toolbar {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.spell-filter-search {
+  display: flex;
+  height: 34px;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0 10px;
+}
+
+.spell-filter-search svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.spell-filter-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.tag-filter-row,
+.tag-editor {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+}
+
+.tag-filter-row {
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.tag-filter-row button,
+.tag-editor button {
+  display: inline-flex;
+  max-width: 150px;
+  height: 24px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-filter-row button.active,
+.tag-filter-row button:hover,
+.tag-editor button:hover {
+  border-color: #e5d3a2;
+  background: var(--accent-soft);
+  color: #725313;
+}
+
+.tag-editor {
+  flex-wrap: wrap;
+}
+
+.tag-editor input {
+  width: 128px;
+  height: 24px;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 9px;
+}
+
+.tag-editor .tag-add-button {
+  border-style: dashed;
+  color: var(--muted);
+}
+
 .spell-list {
   display: grid;
   align-content: start;
@@ -712,8 +809,8 @@ p {
 .spell-editor-form .detail-heading {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 12px;
 }
 
@@ -758,6 +855,14 @@ p {
   height: 34px;
 }
 
+.field-row .tag-editor input {
+  width: 128px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 0 9px;
+}
+
 .field-row textarea {
   height: 100%;
   min-height: 0;
@@ -770,6 +875,54 @@ p {
   flex: 1;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+}
+
+.danger-button {
+  color: #b42318;
+}
+
+.danger-button:hover {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.delete-action {
+  position: relative;
+}
+
+.delete-confirm-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  min-width: 180px;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(24, 24, 27, 0.14);
+  padding: 8px;
+}
+
+.delete-confirm-popover button {
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.delete-confirm-popover .danger-confirm {
+  border-color: #9f1239;
+  background: #9f1239;
+  color: #ffffff;
 }
 
 .section-heading {

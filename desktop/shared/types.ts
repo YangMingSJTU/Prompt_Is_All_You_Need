@@ -25,7 +25,7 @@ export interface ExtractedPrompt {
 
 export interface Spell {
   id: string;
-  alias: string;
+  name: string;
   body: string;
   tags: string[];
   source: string;
@@ -34,7 +34,7 @@ export interface Spell {
 }
 
 export interface SpellUpdatePatch {
-  alias?: string;
+  name?: string;
   body?: string;
   tags?: string[];
 }

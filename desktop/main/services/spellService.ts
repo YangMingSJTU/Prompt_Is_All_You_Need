@@ -4,7 +4,7 @@ import type { AppDatabase } from './database';
 
 interface SpellRow extends Record<string, unknown> {
   id: string;
-  alias: string;
+  name: string;
   body: string;
   tags: string;
   source: string;
@@ -33,7 +33,7 @@ interface CandidateRow extends Record<string, unknown> {
 
 const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt'>> = [
   {
-    alias: 'Review current diff',
+    name: 'Review current diff',
     body: [
       'Review the current git diff.',
       '',
@@ -45,13 +45,13 @@ const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt'>> = [
     source: 'starter'
   },
   {
-    alias: 'Debug failing tests',
+    name: 'Debug failing tests',
     body: 'Investigate the failing tests, identify the failing behavior, decide whether implementation or tests are wrong, and propose the smallest safe fix.',
     tags: ['debug', 'test'],
     source: 'starter'
   },
   {
-    alias: 'Generate commit message',
+    name: 'Generate commit message',
     body: 'Generate a concise commit message for the current changes.\n\nFormat:\n<type>: <summary>\n\nBody:\n- What changed\n- Why it changed\n- Testing notes',
     tags: ['git', 'commit'],
     source: 'starter'
@@ -65,11 +65,11 @@ export function createSpellService(db: AppDatabase) {
       for (const spell of STARTER_SPELLS) {
         db.run(
           `INSERT OR IGNORE INTO spells
-            (id, alias, body, tags, source, created_at, updated_at)
+            (id, name, body, tags, source, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             randomUUID(),
-            spell.alias,
+            spell.name,
             spell.body,
             JSON.stringify(spell.tags),
             spell.source,
@@ -86,7 +86,7 @@ export function createSpellService(db: AppDatabase) {
       return db
         .all<SpellRow>(
           `SELECT * FROM spells
-           WHERE lower(alias) LIKE ?
+           WHERE lower(name) LIKE ?
               OR lower(body) LIKE ?
               OR lower(tags) LIKE ?
            ORDER BY updated_at DESC, body ASC`,
@@ -137,14 +137,14 @@ export function createSpellService(db: AppDatabase) {
       if (!body.trim()) {
         throw new Error('Spell body cannot be empty');
       }
-      const alias = patch.alias === undefined ? current.alias : patch.alias.trim();
+      const name = patch.name === undefined ? current.name : patch.name.trim();
       const tags = patch.tags === undefined ? parseTags(current.tags) : normalizeTags(patch.tags);
       const now = new Date().toISOString();
       db.run(
         `UPDATE spells
-         SET alias = ?, body = ?, tags = ?, updated_at = ?
+         SET name = ?, body = ?, tags = ?, updated_at = ?
          WHERE id = ?`,
-        [alias, body, JSON.stringify(tags), now, spellId]
+        [name, body, JSON.stringify(tags), now, spellId]
       );
       await db.save();
       const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
@@ -152,6 +152,16 @@ export function createSpellService(db: AppDatabase) {
         throw new Error(`Updated spell not found: ${spellId}`);
       }
       return rowToSpell(row);
+    },
+
+    async deleteSpell(spellId: string): Promise<void> {
+      const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+      if (!current) {
+        throw new Error(`Spell not found: ${spellId}`);
+      }
+      db.run('DELETE FROM usage_events WHERE spell_id = ?', [spellId]);
+      db.run('DELETE FROM spells WHERE id = ?', [spellId]);
+      await db.save();
     },
 
     async saveCandidates(candidates: Candidate[]): Promise<void> {
@@ -196,7 +206,7 @@ export function createSpellService(db: AppDatabase) {
       const spellId = randomUUID();
       db.run(
         `INSERT OR REPLACE INTO spells
-          (id, alias, body, tags, source, created_at, updated_at)
+          (id, name, body, tags, source, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           spellId,
@@ -247,7 +257,7 @@ export function createSpellService(db: AppDatabase) {
 function rowToSpell(row: SpellRow): Spell {
   return {
     id: row.id,
-    alias: row.alias ?? '',
+    name: row.name ?? '',
     body: row.body,
     tags: parseTags(row.tags),
     source: row.source,
