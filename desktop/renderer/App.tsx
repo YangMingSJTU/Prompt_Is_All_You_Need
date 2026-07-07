@@ -1,14 +1,16 @@
-import { BarChart3, Database, Library, Search } from 'lucide-react';
+import { BarChart3, Database, Library, Search, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
 import type { Candidate, Prompt, UsageAnalytics } from '../shared/types';
 import { AnalyticsView } from './components/AnalyticsView';
 import { FloatingPanel } from './components/FloatingPanel';
 import { LibraryView } from './components/LibraryView';
 import { PromptPanel } from './components/PromptPanel';
 import { ScannerView } from './components/ScannerView';
-import { createTranslator, detectLocale } from './i18n';
+import { SettingsView } from './components/SettingsView';
+import { createTranslator, resolveLocalePreference } from './i18n';
 
-type View = 'panel' | 'library' | 'scanner' | 'analytics';
+type View = 'panel' | 'library' | 'scanner' | 'analytics' | 'settings';
 
 const NAV_ITEMS: Array<{ id: View; labelKey: 'nav.panel' | 'nav.library' | 'nav.scanner' | 'nav.analytics'; icon: typeof Search }> = [
   { id: 'panel', labelKey: 'nav.panel', icon: Search },
@@ -18,9 +20,10 @@ const NAV_ITEMS: Array<{ id: View; labelKey: 'nav.panel' | 'nav.library' | 'nav.
 ];
 
 export function App() {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const t = useMemo(
-    () => createTranslator(detectLocale(globalThis.navigator?.language)),
-    []
+    () => createTranslator(resolveLocalePreference(settings.language, globalThis.navigator?.language)),
+    [settings.language]
   );
   const mode = useMemo(() => new URLSearchParams(globalThis.location.search).get('mode'), []);
   const [view, setView] = useState<View>('panel');
@@ -48,6 +51,10 @@ export function App() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    void window.apm.getSettings().then(setSettings);
+  }, []);
+
   const selectedView = useMemo(() => {
     if (view === 'library') {
       return (
@@ -66,20 +73,33 @@ export function App() {
     if (view === 'analytics') {
       return <AnalyticsView analytics={analytics} t={t} />;
     }
+    if (view === 'settings') {
+      return (
+        <SettingsView
+          settings={settings}
+          onSettingsChanged={setSettings}
+          onMessage={setMessage}
+          t={t}
+        />
+      );
+    }
     return <PromptPanel prompts={prompts} onChanged={refresh} onMessage={setMessage} t={t} />;
-  }, [analytics, candidates, prompts, refresh, t, view]);
+  }, [analytics, candidates, prompts, refresh, settings, t, view]);
+
+  const selectedNavItem =
+    view === 'settings'
+      ? { id: 'settings' as const, labelKey: 'settings.title' as const, icon: Settings }
+      : NAV_ITEMS.find((item) => item.id === view) ?? NAV_ITEMS[0];
+  const PageIcon = selectedNavItem.icon;
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">APM</div>
-          <div>
-            <h1>Agent Prompt Miner</h1>
-            <p>{t('app.subtitle')}</p>
-          </div>
+          <div className="brand-mark">PM</div>
+          <h1>{t('app.brand')}</h1>
         </div>
-        <nav className="nav-list" aria-label="Primary">
+        <nav className="nav-list" aria-label="Navigation">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
@@ -95,16 +115,22 @@ export function App() {
             );
           })}
         </nav>
-        <div className="shortcut-note">
-          <span>{t('shortcut.label')}</span>
-          <strong>{t('shortcut.value')}</strong>
+        <div className="sidebar-footer">
+          <button
+            className={view === 'settings' ? 'settings-entry active' : 'settings-entry'}
+            onClick={() => setView('settings')}
+            type="button"
+          >
+            <Settings size={16} />
+            <span>{t('settings.title')}</span>
+          </button>
         </div>
       </aside>
       <main className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">{t('app.version')}</p>
-            <h2>{t(NAV_ITEMS.find((item) => item.id === view)?.labelKey ?? 'nav.panel')}</h2>
+          <div className="topbar-title">
+            <PageIcon size={16} />
+            <h2>{t(selectedNavItem.labelKey)}</h2>
           </div>
           <div className="status-pill">{message}</div>
         </header>

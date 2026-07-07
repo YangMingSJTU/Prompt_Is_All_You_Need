@@ -33,41 +33,44 @@ export function ScannerView({ onChanged, onMessage, t }: ScannerViewProps) {
   }
 
   return (
-    <section className="stack">
+    <section className="stack scanner-view">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">{t('scanner.localOnly')}</p>
           <h3>{t('scanner.title')}</h3>
-          <p className="muted">{t('scanner.description')}</p>
         </div>
         <button className="primary-button" disabled={running} onClick={runScan} type="button">
           <RotateCw size={16} />
           {running ? t('scanner.running') : t('scanner.run')}
         </button>
       </div>
-      <div className="metric-grid">
-        <div className="metric-card">
+      <div className="summary-strip">
+        <div className="summary-item">
           <span>{t('metric.prompts')}</span>
           <strong>{scanState?.scannedPrompts ?? 0}</strong>
         </div>
-        <div className="metric-card">
+        <div className="summary-item">
           <span>{t('metric.sources')}</span>
           <strong>{scanState?.sourceFiles.length ?? 0}</strong>
         </div>
-        <div className="metric-card">
+        <div className="summary-item">
           <span>{t('metric.candidates')}</span>
           <strong>{scanState?.candidates.length ?? 0}</strong>
         </div>
-        <div className="metric-card">
+        <div className="summary-item">
           <span>{t('metric.warnings')}</span>
           <strong>{scanState?.warningCount ?? 0}</strong>
         </div>
       </div>
       <div className="source-table">
+        <div className="source-row source-header">
+          <span>{t('metric.sources')}</span>
+          <strong>{t('metric.prompts')}</strong>
+          <small>{t('metric.path')}</small>
+        </div>
         {(scanState?.sourceFiles ?? []).map((source) => (
           <div className="source-row" key={source.id}>
             <span>{source.sourceTool}</span>
-            <strong>{source.promptCount} prompts</strong>
+            <strong>{source.promptCount}</strong>
             <small>{source.path}</small>
           </div>
         ))}

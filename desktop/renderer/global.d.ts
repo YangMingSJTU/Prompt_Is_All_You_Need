@@ -1,4 +1,9 @@
 import type {
+  AppSettings,
+  SettingsInfo,
+  SettingsUpdateResult,
+} from '../shared/settings';
+import type {
   Candidate,
   ExportablePrompt,
   ExportPreview,
@@ -25,6 +30,9 @@ declare global {
         warningCount: number;
       }>;
       getAnalytics(): Promise<UsageAnalytics>;
+      getSettings(): Promise<AppSettings>;
+      getSettingsInfo(): Promise<SettingsInfo>;
+      updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;
       previewExport(
         prompt: ExportablePrompt,
         target: ExportTarget,

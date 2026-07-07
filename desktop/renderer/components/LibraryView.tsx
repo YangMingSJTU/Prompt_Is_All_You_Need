@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { FileDown, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Candidate, Prompt } from '../../shared/types';
 import type { TFunction } from '../i18n';
@@ -31,7 +31,6 @@ export function LibraryView({
     <section className="stack">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">{t('library.assets')}</p>
           <h3>{t('library.title')}</h3>
         </div>
         <span className="count-pill">{prompts.length} {t('metric.prompts')}</span>
@@ -45,6 +44,7 @@ export function LibraryView({
               <p>{prompt.description}</p>
             </div>
             <button className="secondary-button" onClick={() => setExportPrompt(prompt)} type="button">
+              <FileDown size={16} />
               {t('prompt.export')}
             </button>
           </article>
@@ -52,7 +52,6 @@ export function LibraryView({
       </div>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">{t('library.fromHistory')}</p>
           <h3>{t('library.candidates')}</h3>
         </div>
         <span className="count-pill">{candidates.length} {t('metric.candidates')}</span>
@@ -64,7 +63,7 @@ export function LibraryView({
               <strong>{candidate.title}</strong>
               <p>{candidate.description}</p>
               <small>
-                {candidate.sourceCount} sources · score {candidate.score}
+                {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
               </small>
             </div>
             <button className="primary-button" onClick={() => promote(candidate)} type="button">

@@ -70,7 +70,6 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     <main className="floating-shell">
       <header className="floating-header">
         <div>
-          <p className="eyebrow">{query.trim() ? t('nav.panel') : t('floating.default')}</p>
           <h1>{t('floating.title')}</h1>
         </div>
         <span>{status}</span>
@@ -105,7 +104,6 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
         ))}
         {prompts.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
       </section>
-      <footer className="floating-footer">{t('floating.hint')}</footer>
     </main>
   );
 }

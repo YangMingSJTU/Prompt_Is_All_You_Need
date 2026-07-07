@@ -1,9 +1,12 @@
+import type { AppLanguage } from '../shared/settings';
+
 export type Locale = 'zh' | 'en';
 
 const resources = {
   zh: {
-    'app.subtitle': '本地提示词启动器',
-    'app.version': '桌面版 v0.1',
+    'app.brand': 'Prompt Miner',
+    'app.subtitle': '',
+    'app.version': '',
     'status.ready': '就绪',
     'status.copied': '已复制',
     'status.exported': '已导出',
@@ -12,10 +15,25 @@ const resources = {
     'nav.library': '提示词库',
     'nav.scanner': '本地扫描',
     'nav.analytics': '使用分析',
+    'settings.title': '设置',
+    'settings.preferences': '偏好',
+    'settings.shortcut': '快捷键',
+    'settings.localData': '本地数据',
+    'settings.language': '界面语言',
+    'settings.language.description': '切换后立即应用到当前界面。',
+    'settings.language.system': '跟随系统',
+    'settings.language.zh': '中文',
+    'settings.language.en': 'English',
+    'settings.quickPanelShortcut': '快捷面板',
+    'settings.shortcut.description': '选择用于打开浮动提示词面板的全局快捷键。',
+    'settings.databasePath': '数据库',
+    'settings.historyRoot': '历史目录',
+    'settings.loading': '加载中',
+    'settings.saved': '设置已保存',
     'shortcut.label': '快捷键',
     'shortcut.value': 'Ctrl Shift Space',
-    'home.title': '先搜索，再复制',
-    'home.description': '默认展示最常用提示词；输入关键词可搜索整个本地库。',
+    'home.title': '',
+    'home.description': '',
     'home.scanCta': '扫描本地历史',
     'home.manageCta': '管理提示词',
     'prompt.placeholder': '搜索标题、标签或内容',
@@ -32,15 +50,17 @@ const resources = {
     'library.candidates': '候选提示词',
     'library.fromHistory': '来自本地历史',
     'library.save': '保存',
-    'scanner.localOnly': '仅本地处理',
+    'scanner.localOnly': '',
     'scanner.title': '历史扫描',
-    'scanner.description': '扫描 Claude 和 Codex JSONL 文件，不上传数据。',
+    'scanner.description': '',
     'scanner.run': '开始扫描',
     'scanner.running': '扫描中',
     'metric.prompts': '提示词',
     'metric.sources': '来源',
     'metric.candidates': '候选',
     'metric.warnings': '警告',
+    'metric.path': '路径',
+    'metric.score': '分数',
     'metric.copies': '复制',
     'metric.exports': '导出',
     'analytics.usage': '使用情况',
@@ -56,8 +76,9 @@ const resources = {
     'export.writing': '写入中'
   },
   en: {
-    'app.subtitle': 'Local prompt launcher',
-    'app.version': 'Desktop v0.1',
+    'app.brand': 'Prompt Miner',
+    'app.subtitle': '',
+    'app.version': '',
     'status.ready': 'Ready',
     'status.copied': 'Copied',
     'status.exported': 'Exported',
@@ -66,10 +87,25 @@ const resources = {
     'nav.library': 'Library',
     'nav.scanner': 'Scanner',
     'nav.analytics': 'Analytics',
+    'settings.title': 'Settings',
+    'settings.preferences': 'Preferences',
+    'settings.shortcut': 'Shortcut',
+    'settings.localData': 'Local Data',
+    'settings.language': 'Language',
+    'settings.language.description': 'Applies to the current interface immediately.',
+    'settings.language.system': 'System',
+    'settings.language.zh': '中文',
+    'settings.language.en': 'English',
+    'settings.quickPanelShortcut': 'Quick Panel',
+    'settings.shortcut.description': 'Choose the global shortcut that opens the floating prompt panel.',
+    'settings.databasePath': 'Database',
+    'settings.historyRoot': 'History Root',
+    'settings.loading': 'Loading',
+    'settings.saved': 'Settings saved',
     'shortcut.label': 'Hotkey',
     'shortcut.value': 'Ctrl Shift Space',
-    'home.title': 'Search, then copy',
-    'home.description': 'Most used prompts appear first. Type to search your local library.',
+    'home.title': '',
+    'home.description': '',
     'home.scanCta': 'Scan local history',
     'home.manageCta': 'Manage prompts',
     'prompt.placeholder': 'Search titles, tags, or content',
@@ -86,15 +122,17 @@ const resources = {
     'library.candidates': 'Candidates',
     'library.fromHistory': 'From local history',
     'library.save': 'Save',
-    'scanner.localOnly': 'Local only',
+    'scanner.localOnly': '',
     'scanner.title': 'History Scanner',
-    'scanner.description': 'Scans Claude and Codex JSONL files without uploading data.',
+    'scanner.description': '',
     'scanner.run': 'Run Scan',
     'scanner.running': 'Scanning',
     'metric.prompts': 'Prompts',
     'metric.sources': 'Sources',
     'metric.candidates': 'Candidates',
     'metric.warnings': 'Warnings',
+    'metric.path': 'Path',
+    'metric.score': 'Score',
     'metric.copies': 'Copies',
     'metric.exports': 'Exports',
     'analytics.usage': 'Usage',
@@ -121,6 +159,13 @@ export function detectLocale(language: string | undefined | null): Locale {
     return 'en';
   }
   return 'zh';
+}
+
+export function resolveLocalePreference(preference: AppLanguage, systemLanguage: string | undefined | null): Locale {
+  if (preference === 'zh' || preference === 'en') {
+    return preference;
+  }
+  return detectLocale(systemLanguage);
 }
 
 export function createTranslator(locale: Locale): TFunction {

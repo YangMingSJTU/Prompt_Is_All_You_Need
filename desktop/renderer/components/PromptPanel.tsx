@@ -1,4 +1,4 @@
-import { Clipboard, Search } from 'lucide-react';
+import { Clipboard, FileDown, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Prompt } from '../../shared/types';
 import type { TFunction } from '../i18n';
@@ -40,10 +40,9 @@ export function PromptPanel({ prompts, onChanged, onMessage, t }: PromptPanelPro
   return (
     <section className="panel-grid">
       <div className="search-pane">
-        <div className="quick-start">
-          <p className="eyebrow">{t('home.title')}</p>
+        <div className="pane-toolbar">
           <h3>{t('nav.panel')}</h3>
-          <p>{t('home.description')}</p>
+          <span className="count-pill">{filtered.length}/{prompts.length}</span>
         </div>
         <label className="search-box">
           <Search size={18} />
@@ -75,9 +74,15 @@ export function PromptPanel({ prompts, onChanged, onMessage, t }: PromptPanelPro
         {selected ? (
           <>
             <div className="detail-heading">
-              <div>
-                <p className="eyebrow">{selected.tags.join(' / ')}</p>
+              <div className="detail-title">
                 <h3>{selected.title}</h3>
+                {selected.tags.length > 0 ? (
+                  <div className="tag-strip">
+                    {selected.tags.map((tag) => (
+                      <span key={tag}>{tag}</span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="button-row">
                 <button className="primary-button" onClick={() => copySelected(selected)} type="button">
@@ -85,6 +90,7 @@ export function PromptPanel({ prompts, onChanged, onMessage, t }: PromptPanelPro
                   {t('prompt.copy')}
                 </button>
                 <button className="secondary-button" onClick={() => setExportPrompt(selected)} type="button">
+                  <FileDown size={16} />
                   {t('prompt.export')}
                 </button>
               </div>

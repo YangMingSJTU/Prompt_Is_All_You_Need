@@ -9,27 +9,26 @@ interface AnalyticsViewProps {
 export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
   return (
     <section className="stack">
-      <div className="metric-grid">
-        <div className="metric-card">
+      <div className="summary-strip">
+        <div className="summary-item">
           <span>{t('metric.prompts')}</span>
           <strong>{analytics?.promptCount ?? 0}</strong>
         </div>
-        <div className="metric-card">
+        <div className="summary-item">
           <span>{t('metric.candidates')}</span>
           <strong>{analytics?.candidateCount ?? 0}</strong>
         </div>
-        <div className="metric-card">
+        <div className="summary-item">
           <span>{t('metric.copies')}</span>
           <strong>{analytics?.totalCopies ?? 0}</strong>
         </div>
-        <div className="metric-card">
+        <div className="summary-item">
           <span>{t('metric.exports')}</span>
           <strong>{analytics?.exportedAssetCount ?? 0}</strong>
         </div>
       </div>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">{t('analytics.usage')}</p>
           <h3>{t('analytics.topCopied')}</h3>
         </div>
       </div>

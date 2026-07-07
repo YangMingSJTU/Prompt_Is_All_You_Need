@@ -3,24 +3,31 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ExportablePrompt, ExportTarget } from '../shared/types';
+import type { AppSettings, ShortcutId } from '../shared/settings';
+import { getShortcutOption, isShortcutId } from '../shared/settings';
 import { openAppDatabase } from './services/database';
 import { previewExport, writeExport } from './services/exporter';
 import { createPromptService } from './services/promptService';
 import { generateCandidates } from './services/ranker';
 import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './services/scanner';
+import { createSettingsService, type SettingsService } from './services/settingsService';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let settingsService: SettingsService | null = null;
+let databasePath = '';
+let activeQuickPanelShortcut: ShortcutId | null = null;
 
 async function createWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 760,
-    minWidth: 900,
-    minHeight: 620,
-    title: 'Agent Prompt Miner',
+    minWidth: 980,
+    minHeight: 640,
+    title: 'Prompt Miner',
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: preloadPath,
@@ -46,7 +53,7 @@ async function createFloatingWindow(): Promise<void> {
     minHeight: 360,
     maxWidth: 680,
     maxHeight: 520,
-    title: 'Agent Prompt Miner Quick Panel',
+    title: 'Prompt Miner',
     show: false,
     frame: false,
     resizable: false,
@@ -79,8 +86,10 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 }
 
 async function bootstrap(): Promise<void> {
-  const db = await openAppDatabase(join(app.getPath('userData'), 'agent-prompt-miner.sqlite'));
+  databasePath = join(app.getPath('userData'), 'agent-prompt-miner.sqlite');
+  const db = await openAppDatabase(databasePath);
   const promptService = createPromptService(db);
+  settingsService = createSettingsService(db);
   await promptService.seedStarterPrompts();
 
   ipcMain.handle('prompts:search', (_event, query: string) => promptService.searchPrompts(query ?? ''));
@@ -97,6 +106,42 @@ async function bootstrap(): Promise<void> {
     promptService.promoteCandidate(candidateId)
   );
   ipcMain.handle('analytics:get', () => promptService.getAnalytics());
+  ipcMain.handle('settings:get', () => {
+    if (!settingsService) {
+      throw new Error('Settings service is not ready');
+    }
+    return settingsService.getSettings();
+  });
+  ipcMain.handle('settings:info', () => ({
+    databasePath,
+    historyRoots: defaultHistoryRoots(),
+    exportTargets: [
+      { label: 'Snippet', path: defaultExportBase('snippet') },
+      { label: 'Claude Skill', path: defaultExportBase('claude-skill') },
+      { label: 'Codex Skill', path: defaultExportBase('codex-skill') }
+    ]
+  }));
+  ipcMain.handle('settings:update', async (_event, patch: Partial<AppSettings>) => {
+    if (!settingsService) {
+      throw new Error('Settings service is not ready');
+    }
+    const current = settingsService.getSettings();
+    if (
+      patch.quickPanelShortcut &&
+      isShortcutId(patch.quickPanelShortcut) &&
+      patch.quickPanelShortcut !== current.quickPanelShortcut
+    ) {
+      const registered = registerQuickPanelShortcut(patch.quickPanelShortcut);
+      if (!registered) {
+        return {
+          settings: current,
+          warning: `Shortcut unavailable: ${getShortcutOption(patch.quickPanelShortcut).display}`
+        };
+      }
+    }
+    const settings = await settingsService.updateSettings(patch);
+    return { settings };
+  });
   ipcMain.handle('scanner:run', async () => {
     const roots = defaultHistoryRoots();
     const summaries = [];
@@ -162,32 +207,13 @@ function defaultExportBase(target: ExportTarget): string {
 }
 
 function registerDesktopControls(): void {
-  globalShortcut.register('CommandOrControl+Shift+Space', () => {
-    if (!floatingWindow) {
-      return;
-    }
-    if (floatingWindow.isVisible()) {
-      floatingWindow.hide();
-    } else {
-      const focusedWindow = BrowserWindow.getFocusedWindow();
-      const bounds = focusedWindow?.getBounds();
-      if (bounds) {
-        floatingWindow.setPosition(
-          Math.round(bounds.x + bounds.width / 2 - 280),
-          Math.round(bounds.y + 110)
-        );
-      }
-      floatingWindow.show();
-      floatingWindow.focus();
-      floatingWindow.webContents.send('floating:focus-search');
-    }
-  });
+  registerQuickPanelShortcut(settingsService?.getSettings().quickPanelShortcut ?? 'ctrl-shift-space');
 
   const trayIcon = nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4AWP4z8Dwn4ECwESJ5lEDRg0YNWDUgFEDBg0A2b4DHXcCpJcAAAAASUVORK5CYII='
   );
   tray = new Tray(trayIcon);
-  tray.setToolTip('Agent Prompt Miner');
+  tray.setToolTip('Prompt Miner');
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show', click: () => mainWindow?.show() },
@@ -199,7 +225,45 @@ function registerDesktopControls(): void {
   );
 }
 
+function registerQuickPanelShortcut(shortcutId: ShortcutId): boolean {
+  if (activeQuickPanelShortcut === shortcutId) {
+    return true;
+  }
+  const accelerator = getShortcutOption(shortcutId).accelerator;
+  const registered = globalShortcut.register(accelerator, toggleFloatingWindow);
+  if (!registered) {
+    return false;
+  }
+  if (activeQuickPanelShortcut) {
+    globalShortcut.unregister(getShortcutOption(activeQuickPanelShortcut).accelerator);
+  }
+  activeQuickPanelShortcut = shortcutId;
+  return true;
+}
+
+function toggleFloatingWindow(): void {
+  if (!floatingWindow) {
+    return;
+  }
+  if (floatingWindow.isVisible()) {
+    floatingWindow.hide();
+    return;
+  }
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  const bounds = focusedWindow?.getBounds();
+  if (bounds) {
+    floatingWindow.setPosition(
+      Math.round(bounds.x + bounds.width / 2 - 280),
+      Math.round(bounds.y + 110)
+    );
+  }
+  floatingWindow.show();
+  floatingWindow.focus();
+  floatingWindow.webContents.send('floating:focus-search');
+}
+
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   await bootstrap();
   await createWindow();
   await createFloatingWindow();

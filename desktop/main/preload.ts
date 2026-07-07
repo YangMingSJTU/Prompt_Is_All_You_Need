@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { AppSettings } from '../shared/settings';
 import type { ExportablePrompt, ExportTarget } from '../shared/types';
 
 contextBridge.exposeInMainWorld('apm', {
@@ -10,6 +11,9 @@ contextBridge.exposeInMainWorld('apm', {
   promoteCandidate: (candidateId: string) => ipcRenderer.invoke('candidates:promote', candidateId),
   runScan: () => ipcRenderer.invoke('scanner:run'),
   getAnalytics: () => ipcRenderer.invoke('analytics:get'),
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  getSettingsInfo: () => ipcRenderer.invoke('settings:info'),
+  updateSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('settings:update', patch),
   previewExport: (prompt: ExportablePrompt, target: ExportTarget, baseDirectory?: string) =>
     ipcRenderer.invoke('export:preview', prompt, target, baseDirectory),
   writeExport: (
