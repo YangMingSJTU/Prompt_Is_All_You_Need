@@ -82,11 +82,7 @@ Codex 路径遵循官方 Agent Skills 文档：[Agent Skills](https://developers
 ```ts
 type Spell = {
   id: string;
-  slug: string;
-  title: string;
   body: string;
-  description: string;
-  tags: string[];
   source: string;
   createdAt: string;
   updatedAt: string;
@@ -125,6 +121,8 @@ SQLite 表：
 - `source_files`
 - `skills`
 - `app_settings`
+
+`spells` 只保存咒语原文 `body` 和必要系统字段；不保存标题、描述、标签或文件化元数据。
 
 `usage_events` 使用 `spell_id` 关联咒语复制事件。
 

@@ -378,20 +378,12 @@ p {
 }
 
 .result-row span,
-.candidate-row div,
-.prompt-card div {
+.candidate-row div {
   min-width: 0;
 }
 
-.result-row strong,
-.result-row small,
-.floating-row strong,
-.floating-row small,
-.candidate-row strong,
 .candidate-row p,
 .candidate-row small,
-.prompt-card h4,
-.prompt-card p,
 .source-row span,
 .source-row strong,
 .source-row small {
@@ -401,21 +393,22 @@ p {
   white-space: nowrap;
 }
 
-.result-row strong,
-.candidate-row strong,
-.prompt-card h4 {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.result-row small,
 .candidate-row p,
-.candidate-row small,
-.prompt-card p {
-  margin-top: 3px;
+.candidate-row small {
+  margin: 6px 0 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.spell-result-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-row.selected,
@@ -544,7 +537,7 @@ p {
   background: var(--hover);
 }
 
-.prompt-preview,
+.spell-preview,
 .export-preview {
   overflow: auto;
   margin: 14px 0 0;
@@ -558,7 +551,7 @@ p {
   white-space: pre-wrap;
 }
 
-.prompt-preview {
+.spell-preview {
   max-height: calc(100vh - 158px);
 }
 
@@ -633,7 +626,7 @@ p {
   background: var(--surface);
 }
 
-.prompt-card,
+.spell-card,
 .candidate-row,
 .source-row,
 .skill-row {
@@ -644,23 +637,42 @@ p {
   background: var(--surface);
 }
 
-.prompt-card:last-child,
+.spell-card:last-child,
 .candidate-row:last-child,
 .source-row:last-child,
 .skill-row:last-child {
   border-bottom: 0;
 }
 
-.prompt-card,
+.spell-card,
 .candidate-row {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
+  align-items: start;
   min-height: 58px;
   padding: 10px 12px;
 }
 
-.prompt-card .eyebrow {
-  margin-bottom: 6px;
+.spell-card .secondary-button,
+.candidate-row .primary-button {
+  margin-top: 2px;
+}
+
+.spell-text-block {
+  min-width: 0;
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.spell-text-block.compact {
+  max-height: 96px;
 }
 
 .source-row {

@@ -73,26 +73,21 @@ function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
 
 function createSchema(db: SqlJsDatabase): void {
   const version = getUserVersion(db);
-  if (version < 3) {
+  if (version > 0 && version < 4) {
     db.exec(`
-      DROP TABLE IF EXISTS prompts;
-      DROP TABLE IF EXISTS snippets;
+      DROP TABLE IF EXISTS spells;
       DROP TABLE IF EXISTS candidates;
       DROP TABLE IF EXISTS usage_events;
       DROP TABLE IF EXISTS source_files;
-      DROP TABLE IF EXISTS exported_assets;
       DROP TABLE IF EXISTS skills;
+      DROP TABLE IF EXISTS app_settings;
     `);
   }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS spells (
       id TEXT PRIMARY KEY,
-      slug TEXT UNIQUE NOT NULL,
-      title TEXT NOT NULL,
       body TEXT NOT NULL,
-      description TEXT NOT NULL,
-      tags TEXT NOT NULL,
       source TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -152,7 +147,7 @@ function createSchema(db: SqlJsDatabase): void {
       updated_at TEXT NOT NULL
     );
 
-    PRAGMA user_version = 3;
+    PRAGMA user_version = 4;
   `);
 }
 

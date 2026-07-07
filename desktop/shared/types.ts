@@ -25,11 +25,7 @@ export interface ExtractedPrompt {
 
 export interface Spell {
   id: string;
-  slug: string;
-  title: string;
   body: string;
-  description: string;
-  tags: string[];
   source: string;
   createdAt: string;
   updatedAt: string;
@@ -88,7 +84,7 @@ export interface UsageAnalytics {
   totalCopies: number;
   topSpells: Array<{
     id: string;
-    title: string;
+    body: string;
     copyCount: number;
   }>;
 }

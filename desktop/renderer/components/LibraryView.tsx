@@ -1,6 +1,7 @@
 import { Clipboard, Plus } from 'lucide-react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
+import { getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
 
 interface LibraryViewProps {
   spells: Spell[];
@@ -19,13 +20,13 @@ export function LibraryView({
 }: LibraryViewProps) {
   async function promote(candidate: Candidate): Promise<void> {
     await window.spellbook.promoteCandidate(candidate.id);
-    onMessage(`${t('library.saved')} ${candidate.title}`);
+    onMessage(t('library.saved'));
     await onChanged();
   }
 
   async function copy(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    onMessage(`${t('status.copied')} ${spell.title}`);
+    onMessage(t('status.copied'));
     await onChanged();
   }
 
@@ -39,12 +40,8 @@ export function LibraryView({
       </div>
       <div className="card-grid">
         {spells.map((spell) => (
-          <article className="prompt-card" key={spell.id}>
-            <div>
-              <p className="eyebrow">{t('metric.spells')}</p>
-              <h4>{spell.title}</h4>
-              <p>{spell.description}</p>
-            </div>
+          <article className="spell-card" key={spell.id}>
+            <pre className="spell-text-block">{getSpellDisplayText(spell)}</pre>
             <button className="secondary-button" onClick={() => copy(spell)} type="button">
               <Clipboard size={16} />
               {t('spell.copy')}
@@ -62,8 +59,7 @@ export function LibraryView({
         {candidates.map((candidate) => (
           <article className="candidate-row" key={candidate.id}>
             <div>
-              <strong>{candidate.title}</strong>
-              <p>{candidate.description}</p>
+              <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
               <small>
                 {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
               </small>

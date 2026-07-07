@@ -10,7 +10,7 @@ describe('spell service', () => {
 
     const results = await service.searchSpells('review');
 
-    expect(results.some((spell) => spell.slug === 'review-diff')).toBe(true);
+    expect(results.some((spell) => spell.body.includes('Review the current git diff.'))).toBe(true);
   });
 
   it('records usage and returns analytics', async () => {
@@ -40,7 +40,10 @@ describe('spell service', () => {
 
     const popular = await service.listPopularSpells(2);
 
-    expect(popular.map((spell) => spell.slug)).toEqual(['commit-message', 'review-diff']);
+    expect(popular.map((spell) => spell.body.split('\n')[0])).toEqual([
+      'Generate a concise commit message for the current changes.',
+      'Review the current git diff.'
+    ]);
   });
 
   it('copies the raw spell body without title slug or frontmatter', async () => {
@@ -49,15 +52,11 @@ describe('spell service', () => {
     const body = '# Role\n\nAct as a concise reviewer.';
     db.run(
       `INSERT INTO spells
-        (id, slug, title, body, description, tags, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, body, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         'spell-1',
-        'reviewer-role',
-        'Reviewer role',
         body,
-        'A raw text spell',
-        JSON.stringify(['review']),
         'manual',
         '2026-07-07T00:00:00.000Z',
         '2026-07-07T00:00:00.000Z'
@@ -67,7 +66,5 @@ describe('spell service', () => {
     const copied = await service.copySpell('spell-1');
 
     expect(copied.body).toBe(body);
-    expect(copied.body).not.toContain('slug: reviewer-role');
-    expect(copied.body).not.toContain('title: Reviewer role');
   });
 });

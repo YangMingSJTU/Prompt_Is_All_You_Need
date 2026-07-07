@@ -1,5 +1,6 @@
 import type { UsageAnalytics } from '../../shared/types';
 import type { TFunction } from '../i18n';
+import { getSpellDisplayText } from '../spellDisplay';
 
 interface AnalyticsViewProps {
   analytics: UsageAnalytics | null;
@@ -36,7 +37,7 @@ export function AnalyticsView({ analytics, t }: AnalyticsViewProps) {
         {(analytics?.topSpells ?? []).map((spell) => (
           <article className="candidate-row" key={spell.id}>
             <div>
-              <strong>{spell.title}</strong>
+              <pre className="spell-text-block compact">{getSpellDisplayText(spell)}</pre>
               <p>{spell.copyCount} {t('metric.copies')}</p>
             </div>
           </article>

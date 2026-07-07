@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
+import { getSpellDisplayText } from '../spellDisplay';
 
 interface FloatingPanelProps {
   t: TFunction;
@@ -41,7 +42,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
   async function copySpell(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    setStatus(`${t('status.copied')} ${spell.title}`);
+    setStatus(t('status.copied'));
   }
 
   async function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): Promise<void> {
@@ -95,10 +96,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
             }}
             type="button"
           >
-            <span>
-              <strong>{spell.title}</strong>
-              <small>{spell.description}</small>
-            </span>
+            <span className="spell-result-text">{getSpellDisplayText(spell)}</span>
             <Clipboard size={15} />
           </button>
         ))}

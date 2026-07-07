@@ -2,6 +2,7 @@ import { Clipboard, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
+import { getSpellDisplayText } from '../spellDisplay';
 
 interface SpellPanelProps {
   spells: Spell[];
@@ -19,19 +20,14 @@ export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps)
     if (!normalized) {
       return spells;
     }
-    return spells.filter((spell) =>
-      [spell.title, spell.description, spell.body, spell.tags.join(' ')]
-        .join(' ')
-        .toLowerCase()
-        .includes(normalized)
-    );
+    return spells.filter((spell) => getSpellDisplayText(spell).toLowerCase().includes(normalized));
   }, [spells, query]);
 
   const selected = filtered.find((spell) => spell.id === selectedId) ?? filtered[0] ?? null;
 
   async function copySelected(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
-    onMessage(`${t('status.copied')} ${spell.title}`);
+    onMessage(t('status.copied'));
     await onChanged();
   }
 
@@ -59,10 +55,7 @@ export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps)
               onClick={() => setSelectedId(spell.id)}
               type="button"
             >
-              <span>
-                <strong>{spell.title}</strong>
-                <small>{spell.description}</small>
-              </span>
+              <span className="spell-result-text">{getSpellDisplayText(spell)}</span>
               <em>{t('metric.spells')}</em>
             </button>
           ))}
@@ -72,16 +65,7 @@ export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps)
         {selected ? (
           <>
             <div className="detail-heading">
-              <div className="detail-title">
-                <h3>{selected.title}</h3>
-                {selected.tags.length > 0 ? (
-                  <div className="tag-strip">
-                    {selected.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              <div className="detail-title" />
               <div className="button-row">
                 <button className="primary-button" onClick={() => copySelected(selected)} type="button">
                   <Clipboard size={16} />
@@ -89,7 +73,7 @@ export function SpellPanel({ spells, onChanged, onMessage, t }: SpellPanelProps)
                 </button>
               </div>
             </div>
-            <pre className="prompt-preview">{selected.body}</pre>
+            <pre className="spell-preview">{getSpellDisplayText(selected)}</pre>
           </>
         ) : (
           <div className="empty-state">{t('spell.empty')}</div>

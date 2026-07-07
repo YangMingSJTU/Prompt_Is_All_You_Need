@@ -4,11 +4,7 @@ import type { AppDatabase } from './database';
 
 interface SpellRow extends Record<string, unknown> {
   id: string;
-  slug: string;
-  title: string;
   body: string;
-  description: string;
-  tags: string;
   source: string;
   created_at: string;
   updated_at: string;
@@ -35,8 +31,6 @@ interface CandidateRow extends Record<string, unknown> {
 
 const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt'>> = [
   {
-    slug: 'review-diff',
-    title: 'Review current diff',
     body: [
       'Review the current git diff.',
       '',
@@ -44,24 +38,14 @@ const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt'>> = [
       '',
       'Do not modify files yet. Return prioritized findings.'
     ].join('\n'),
-    description: 'Review current changes for bugs, edge cases, regressions, and missing tests.',
-    tags: ['review', 'codex', 'claude', 'diff'],
     source: 'starter'
   },
   {
-    slug: 'debug-failing-tests',
-    title: 'Debug failing tests',
     body: 'Investigate the failing tests, identify the failing behavior, decide whether implementation or tests are wrong, and propose the smallest safe fix.',
-    description: 'Debug failing tests with minimal, verified changes.',
-    tags: ['tests', 'debug', 'codex', 'claude'],
     source: 'starter'
   },
   {
-    slug: 'commit-message',
-    title: 'Generate commit message',
     body: 'Generate a concise commit message for the current changes.\n\nFormat:\n<type>: <summary>\n\nBody:\n- What changed\n- Why it changed\n- Testing notes',
-    description: 'Generate a concise commit message from the current diff.',
-    tags: ['git', 'commit', 'summary'],
     source: 'starter'
   }
 ];
@@ -73,15 +57,11 @@ export function createSpellService(db: AppDatabase) {
       for (const spell of STARTER_SPELLS) {
         db.run(
           `INSERT OR IGNORE INTO spells
-            (id, slug, title, body, description, tags, source, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, body, source, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
           [
             randomUUID(),
-            spell.slug,
-            spell.title,
             spell.body,
-            spell.description,
-            JSON.stringify(spell.tags),
             spell.source,
             now,
             now
@@ -96,19 +76,16 @@ export function createSpellService(db: AppDatabase) {
       return db
         .all<SpellRow>(
           `SELECT * FROM spells
-           WHERE lower(title) LIKE ?
-              OR lower(body) LIKE ?
-              OR lower(description) LIKE ?
-              OR lower(tags) LIKE ?
-           ORDER BY updated_at DESC, title ASC`,
-          [normalized, normalized, normalized, normalized]
+           WHERE lower(body) LIKE ?
+           ORDER BY updated_at DESC, body ASC`,
+          [normalized]
         )
         .map(rowToSpell);
     },
 
     async listSpells(): Promise<Spell[]> {
       return db
-        .all<SpellRow>('SELECT * FROM spells ORDER BY updated_at DESC, title ASC')
+        .all<SpellRow>('SELECT * FROM spells ORDER BY updated_at DESC, body ASC')
         .map(rowToSpell);
     },
 
@@ -119,7 +96,7 @@ export function createSpellService(db: AppDatabase) {
            FROM spells
            LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
            GROUP BY spells.id
-           ORDER BY COUNT(usage_events.id) DESC, spells.updated_at DESC, spells.title ASC
+           ORDER BY COUNT(usage_events.id) DESC, spells.updated_at DESC, spells.body ASC
            LIMIT ?`,
           [limit]
         )
@@ -178,17 +155,14 @@ export function createSpellService(db: AppDatabase) {
         throw new Error(`Candidate not found: ${candidateId}`);
       }
       const now = new Date().toISOString();
+      const spellId = randomUUID();
       db.run(
         `INSERT OR REPLACE INTO spells
-          (id, slug, title, body, description, tags, source, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, body, source, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
         [
-          randomUUID(),
-          candidate.slug,
-          candidate.title,
+          spellId,
           candidate.template,
-          candidate.description,
-          JSON.stringify(['candidate']),
           'candidate',
           now,
           now
@@ -196,9 +170,9 @@ export function createSpellService(db: AppDatabase) {
       );
       db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
       await db.save();
-      const row = db.get<SpellRow>('SELECT * FROM spells WHERE slug = ?', [candidate.slug]);
+      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
       if (!row) {
-        throw new Error(`Promoted spell not found: ${candidate.slug}`);
+        throw new Error(`Promoted spell not found: ${spellId}`);
       }
       return rowToSpell(row);
     },
@@ -209,13 +183,13 @@ export function createSpellService(db: AppDatabase) {
       const candidateCount = db.get<CountRow>('SELECT COUNT(*) AS count FROM candidates')?.count ?? 0;
       const totalCopies =
         db.get<CountRow>("SELECT COUNT(*) AS count FROM usage_events WHERE action = 'copy'")?.count ?? 0;
-      const topSpells = db.all<{ id: string; title: string; copyCount: number }>(
-        `SELECT spells.id AS id, spells.title AS title, COUNT(usage_events.id) AS copyCount
+      const topSpells = db.all<{ id: string; body: string; copyCount: number }>(
+        `SELECT spells.id AS id, spells.body AS body, COUNT(usage_events.id) AS copyCount
          FROM usage_events
          JOIN spells ON spells.id = usage_events.spell_id
          WHERE usage_events.action = 'copy'
-         GROUP BY spells.id, spells.title
-         ORDER BY copyCount DESC, spells.title ASC
+         GROUP BY spells.id, spells.body
+         ORDER BY copyCount DESC, spells.body ASC
          LIMIT 5`
       );
 
@@ -233,11 +207,7 @@ export function createSpellService(db: AppDatabase) {
 function rowToSpell(row: SpellRow): Spell {
   return {
     id: row.id,
-    slug: row.slug,
-    title: row.title,
     body: row.body,
-    description: row.description,
-    tags: JSON.parse(row.tags) as string[],
     source: row.source,
     createdAt: row.created_at,
     updatedAt: row.updated_at
