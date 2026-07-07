@@ -1,12 +1,14 @@
 import { Database, FolderSearch, Keyboard, Languages } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  SHORTCUT_OPTIONS,
+  DEFAULT_APP_SETTINGS,
+  formatShortcutDisplay,
+  shortcutFromKeyInput,
   type AppLanguage,
   type AppSettings,
-  type SettingsInfo,
-  type ShortcutId
+  type QuickPanelPlacement,
+  type SettingsInfo
 } from '../../shared/settings';
 import type { TFunction } from '../i18n';
 
@@ -38,14 +40,31 @@ const LANGUAGE_OPTIONS: Array<{
   { value: 'en', labelKey: 'settings.language.en' }
 ];
 
+const PLACEMENT_OPTIONS: Array<{
+  value: QuickPanelPlacement;
+  labelKey: 'settings.placement.center' | 'settings.placement.mouse';
+}> = [
+  { value: 'center', labelKey: 'settings.placement.center' },
+  { value: 'mouse', labelKey: 'settings.placement.mouse' }
+];
+
 export function SettingsView({ settings, onSettingsChanged, onMessage, t }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('preferences');
   const [info, setInfo] = useState<SettingsInfo | null>(null);
   const [saving, setSaving] = useState(false);
+  const [recordingShortcut, setRecordingShortcut] = useState(false);
+  const [shortcutError, setShortcutError] = useState<string | null>(null);
+  const shortcutButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     void window.apm.getSettingsInfo().then(setInfo);
   }, []);
+
+  useEffect(() => {
+    if (recordingShortcut) {
+      shortcutButtonRef.current?.focus();
+    }
+  }, [recordingShortcut]);
 
   async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
     setSaving(true);
@@ -102,17 +121,52 @@ export function SettingsView({ settings, onSettingsChanged, onMessage, t }: Sett
 
         {activeTab === 'shortcut' ? (
           <SettingsSection title={t('settings.shortcut')} icon={Keyboard}>
-            <SettingRow label={t('settings.quickPanelShortcut')} description={t('settings.shortcut.description')}>
-              <div className="settings-segmented shortcut-options">
-                {SHORTCUT_OPTIONS.map((option) => (
+            <SettingRow label={t('settings.quickPanelShortcut')}>
+              <div className="shortcut-editor">
+                <button
+                  aria-label={t('settings.shortcut.change')}
+                  className={
+                    recordingShortcut ? 'shortcut-capture recording' : 'shortcut-capture'
+                  }
+                  disabled={saving}
+                  onClick={startRecordingShortcut}
+                  onKeyDown={handleShortcutKeyDown}
+                  ref={shortcutButtonRef}
+                  title={formatShortcutDisplay(settings.quickPanelShortcut)}
+                  type="button"
+                >
+                  <span>
+                    {recordingShortcut
+                      ? t('settings.shortcut.recording')
+                      : formatShortcutDisplay(settings.quickPanelShortcut)}
+                  </span>
+                  {recordingShortcut ? <small>{t('settings.shortcut.recordingHint')}</small> : null}
+                </button>
+                <button
+                  className="secondary-button shortcut-reset"
+                  disabled={
+                    saving ||
+                    settings.quickPanelShortcut === DEFAULT_APP_SETTINGS.quickPanelShortcut
+                  }
+                  onClick={() => void updateShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut)}
+                  type="button"
+                >
+                  {t('settings.shortcut.reset')}
+                </button>
+                {shortcutError ? <span className="settings-error">{shortcutError}</span> : null}
+              </div>
+            </SettingRow>
+            <SettingRow label={t('settings.quickPanelPlacement')}>
+              <div className="settings-segmented placement-options">
+                {PLACEMENT_OPTIONS.map((option) => (
                   <button
-                    className={settings.quickPanelShortcut === option.id ? 'active' : ''}
+                    className={settings.quickPanelPlacement === option.value ? 'active' : ''}
                     disabled={saving}
-                    key={option.id}
-                    onClick={() => void updateShortcut(option.id)}
+                    key={option.value}
+                    onClick={() => void updateSettings({ quickPanelPlacement: option.value })}
                     type="button"
                   >
-                    {option.display}
+                    {t(option.labelKey)}
                   </button>
                 ))}
               </div>
@@ -139,8 +193,47 @@ export function SettingsView({ settings, onSettingsChanged, onMessage, t }: Sett
     </section>
   );
 
-  async function updateShortcut(shortcutId: ShortcutId): Promise<void> {
-    await updateSettings({ quickPanelShortcut: shortcutId });
+  function startRecordingShortcut(): void {
+    setShortcutError(null);
+    setRecordingShortcut(true);
+  }
+
+  function handleShortcutKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
+    if (!recordingShortcut) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.key === 'Escape') {
+      setRecordingShortcut(false);
+      setShortcutError(null);
+      return;
+    }
+    if (event.key === 'Control' || event.key === 'Shift' || event.key === 'Alt' || event.key === 'Meta') {
+      return;
+    }
+
+    const shortcut = shortcutFromKeyInput({
+      key: event.key,
+      code: event.code,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey
+    });
+    if (!shortcut) {
+      setShortcutError(t('settings.shortcut.invalid'));
+      return;
+    }
+
+    setRecordingShortcut(false);
+    setShortcutError(null);
+    void updateShortcut(shortcut.accelerator);
+  }
+
+  async function updateShortcut(accelerator: string): Promise<void> {
+    await updateSettings({ quickPanelShortcut: accelerator });
   }
 }
 
@@ -170,14 +263,14 @@ function SettingRow({
   children
 }: {
   label: string;
-  description: string;
+  description?: string;
   children: ReactNode;
 }) {
   return (
     <div className="setting-row">
       <div>
         <strong>{label}</strong>
-        <span>{description}</span>
+        {description ? <span>{description}</span> : null}
       </div>
       <div className="setting-control">{children}</div>
     </div>

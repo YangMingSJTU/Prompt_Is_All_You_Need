@@ -35,11 +35,15 @@ describe('i18n', () => {
 
     expect(zh('app.brand')).toBe('Prompt Miner');
     expect(en('app.brand')).toBe('Prompt Miner');
+    expect(zh('status.ready')).toBe('');
+    expect(en('status.ready')).toBe('');
     expect(zh('app.subtitle')).toBe('');
     expect(zh('app.version')).toBe('');
     expect(zh('home.title')).toBe('');
     expect(zh('home.description')).toBe('');
     expect(zh('scanner.localOnly')).toBe('');
     expect(zh('scanner.description')).toBe('');
+    expect(zh('settings.shortcut.description')).toBe('');
+    expect(en('settings.shortcut.description')).toBe('');
   });
 });

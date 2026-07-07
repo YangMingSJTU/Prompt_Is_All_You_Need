@@ -17,20 +17,42 @@ describe('settings service', () => {
 
     await service.updateSettings({
       language: 'en',
-      quickPanelShortcut: 'ctrl-alt-p'
+      quickPanelShortcut: 'CommandOrControl+Alt+K',
+      quickPanelPlacement: 'mouse'
     });
 
     expect(createSettingsService(db).getSettings()).toEqual({
       language: 'en',
-      quickPanelShortcut: 'ctrl-alt-p'
+      quickPanelShortcut: 'CommandOrControl+Alt+K',
+      quickPanelPlacement: 'mouse'
     });
+  });
+
+  it('loads legacy shortcut ids as accelerators', async () => {
+    const db = await createTestDatabase();
+    db.run(
+      'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)',
+      ['quickPanelShortcut', 'ctrl-alt-p', '2026-07-07T00:00:00.000Z']
+    );
+
+    expect(createSettingsService(db).getSettings().quickPanelShortcut).toBe('CommandOrControl+Alt+P');
   });
 
   it('falls back to defaults for invalid stored values', async () => {
     const db = await createTestDatabase();
     db.run(
-      'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?), (?, ?, ?)',
-      ['language', 'fr', '2026-07-07T00:00:00.000Z', 'quickPanelShortcut', 'ctrl-k', '2026-07-07T00:00:00.000Z']
+      'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)',
+      [
+        'language',
+        'fr',
+        '2026-07-07T00:00:00.000Z',
+        'quickPanelShortcut',
+        'ctrl-k',
+        '2026-07-07T00:00:00.000Z',
+        'quickPanelPlacement',
+        'corner',
+        '2026-07-07T00:00:00.000Z'
+      ]
     );
 
     expect(createSettingsService(db).getSettings()).toEqual(DEFAULT_APP_SETTINGS);

@@ -860,8 +860,71 @@ p {
   opacity: 0.6;
 }
 
-.shortcut-options {
-  flex-wrap: nowrap;
+.shortcut-editor {
+  display: grid;
+  width: min(430px, 44vw);
+  min-width: 0;
+  grid-template-columns: minmax(210px, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.shortcut-capture {
+  display: grid;
+  height: 44px;
+  min-width: 0;
+  align-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.shortcut-capture:hover,
+.shortcut-capture:focus-visible,
+.shortcut-capture.recording {
+  border-color: var(--primary);
+  outline: 0;
+}
+
+.shortcut-capture:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.shortcut-capture span,
+.shortcut-capture small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut-capture span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shortcut-capture small {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.shortcut-reset {
+  height: 44px;
+}
+
+.settings-error {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: #b42318;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-info-row code {

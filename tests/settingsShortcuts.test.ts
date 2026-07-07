@@ -1,32 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { getShortcutOption, SHORTCUT_OPTIONS } from '../desktop/shared/settings';
+import {
+  DEFAULT_APP_SETTINGS,
+  formatShortcutDisplay,
+  isShortcutAccelerator,
+  normalizeShortcutAccelerator,
+  shortcutFromKeyInput
+} from '../desktop/shared/settings';
 
 describe('settings shortcuts', () => {
-  it('maps shortcut ids to Electron accelerators and display labels', () => {
-    expect(getShortcutOption('ctrl-shift-space')).toMatchObject({
-      accelerator: 'CommandOrControl+Shift+Space',
-      display: 'Ctrl Shift Space'
+  it('uses a default shortcut accelerator with compact display text', () => {
+    expect(DEFAULT_APP_SETTINGS.quickPanelShortcut).toBe('CommandOrControl+Shift+Space');
+    expect(formatShortcutDisplay(DEFAULT_APP_SETTINGS.quickPanelShortcut)).toBe('Ctrl Shift Space');
+  });
+
+  it('normalizes legacy shortcut ids and user-entered accelerator text', () => {
+    expect(normalizeShortcutAccelerator('ctrl-alt-p')).toBe('CommandOrControl+Alt+P');
+    expect(normalizeShortcutAccelerator('Ctrl Shift K')).toBe('CommandOrControl+Shift+K');
+    expect(normalizeShortcutAccelerator('CommandOrControl+Alt+Space')).toBe(
+      'CommandOrControl+Alt+Space'
+    );
+  });
+
+  it('builds a shortcut from keyboard input', () => {
+    expect(shortcutFromKeyInput({ key: 'k', ctrlKey: true, shiftKey: true })).toEqual({
+      accelerator: 'CommandOrControl+Shift+K',
+      display: 'Ctrl Shift K'
     });
-    expect(getShortcutOption('ctrl-alt-space')).toMatchObject({
+    expect(shortcutFromKeyInput({ key: ' ', ctrlKey: true, altKey: true })).toEqual({
       accelerator: 'CommandOrControl+Alt+Space',
       display: 'Ctrl Alt Space'
     });
-    expect(getShortcutOption('ctrl-shift-p')).toMatchObject({
-      accelerator: 'CommandOrControl+Shift+P',
-      display: 'Ctrl Shift P'
-    });
-    expect(getShortcutOption('ctrl-alt-p')).toMatchObject({
-      accelerator: 'CommandOrControl+Alt+P',
-      display: 'Ctrl Alt P'
-    });
   });
 
-  it('only exposes fixed first-version shortcut choices', () => {
-    expect(SHORTCUT_OPTIONS.map((option) => option.id)).toEqual([
-      'ctrl-shift-space',
-      'ctrl-alt-space',
-      'ctrl-shift-p',
-      'ctrl-alt-p'
-    ]);
+  it('rejects ambiguous global shortcuts', () => {
+    expect(shortcutFromKeyInput({ key: 'k' })).toBeNull();
+    expect(shortcutFromKeyInput({ key: 'Shift', shiftKey: true })).toBeNull();
+    expect(isShortcutAccelerator('P')).toBe(false);
+    expect(isShortcutAccelerator('CommandOrControl+Alt+P')).toBe(true);
   });
 });

@@ -30,7 +30,7 @@ export function App() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [analytics, setAnalytics] = useState<UsageAnalytics | null>(null);
-  const [message, setMessage] = useState(t('status.ready'));
+  const [message, setMessage] = useState('');
 
   if (mode === 'floating') {
     return <FloatingPanel t={t} />;
@@ -132,7 +132,7 @@ export function App() {
             <PageIcon size={16} />
             <h2>{t(selectedNavItem.labelKey)}</h2>
           </div>
-          <div className="status-pill">{message}</div>
+          {message ? <div className="status-pill">{message}</div> : null}
         </header>
         {selectedView}
       </main>

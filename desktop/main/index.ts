@@ -1,10 +1,15 @@
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
 import type { ExportablePrompt, ExportTarget } from '../shared/types';
-import type { AppSettings, ShortcutId } from '../shared/settings';
-import { getShortcutOption, isShortcutId } from '../shared/settings';
+import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
+import {
+  DEFAULT_APP_SETTINGS,
+  formatShortcutDisplay,
+  normalizeShortcutAccelerator
+} from '../shared/settings';
 import { openAppDatabase } from './services/database';
 import { previewExport, writeExport } from './services/exporter';
 import { createPromptService } from './services/promptService';
@@ -17,7 +22,7 @@ let floatingWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let databasePath = '';
-let activeQuickPanelShortcut: ShortcutId | null = null;
+let activeQuickPanelShortcut: ShortcutAccelerator | null = null;
 
 async function createWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
@@ -126,20 +131,27 @@ async function bootstrap(): Promise<void> {
       throw new Error('Settings service is not ready');
     }
     const current = settingsService.getSettings();
-    if (
-      patch.quickPanelShortcut &&
-      isShortcutId(patch.quickPanelShortcut) &&
-      patch.quickPanelShortcut !== current.quickPanelShortcut
-    ) {
-      const registered = registerQuickPanelShortcut(patch.quickPanelShortcut);
-      if (!registered) {
+    const nextPatch: Partial<AppSettings> = { ...patch };
+    if ('quickPanelShortcut' in patch) {
+      const requestedShortcut = normalizeShortcutAccelerator(patch.quickPanelShortcut);
+      if (!requestedShortcut) {
         return {
           settings: current,
-          warning: `Shortcut unavailable: ${getShortcutOption(patch.quickPanelShortcut).display}`
+          warning: 'Invalid shortcut'
         };
       }
+      if (requestedShortcut !== current.quickPanelShortcut) {
+        const registered = registerQuickPanelShortcut(requestedShortcut);
+        if (!registered) {
+          return {
+            settings: current,
+            warning: `Shortcut conflict: ${formatShortcutDisplay(requestedShortcut)}`
+          };
+        }
+      }
+      nextPatch.quickPanelShortcut = requestedShortcut;
     }
-    const settings = await settingsService.updateSettings(patch);
+    const settings = await settingsService.updateSettings(nextPatch);
     return { settings };
   });
   ipcMain.handle('scanner:run', async () => {
@@ -207,7 +219,11 @@ function defaultExportBase(target: ExportTarget): string {
 }
 
 function registerDesktopControls(): void {
-  registerQuickPanelShortcut(settingsService?.getSettings().quickPanelShortcut ?? 'ctrl-shift-space');
+  const shortcut = settingsService?.getSettings().quickPanelShortcut ?? DEFAULT_APP_SETTINGS.quickPanelShortcut;
+  const registered = registerQuickPanelShortcut(shortcut);
+  if (!registered && shortcut !== DEFAULT_APP_SETTINGS.quickPanelShortcut) {
+    registerQuickPanelShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut);
+  }
 
   const trayIcon = nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4AWP4z8Dwn4ECwESJ5lEDRg0YNWDUgFEDBg0A2b4DHXcCpJcAAAAASUVORK5CYII='
@@ -225,19 +241,22 @@ function registerDesktopControls(): void {
   );
 }
 
-function registerQuickPanelShortcut(shortcutId: ShortcutId): boolean {
-  if (activeQuickPanelShortcut === shortcutId) {
+function registerQuickPanelShortcut(shortcut: ShortcutAccelerator): boolean {
+  const accelerator = normalizeShortcutAccelerator(shortcut);
+  if (!accelerator) {
+    return false;
+  }
+  if (activeQuickPanelShortcut === accelerator) {
     return true;
   }
-  const accelerator = getShortcutOption(shortcutId).accelerator;
   const registered = globalShortcut.register(accelerator, toggleFloatingWindow);
   if (!registered) {
     return false;
   }
   if (activeQuickPanelShortcut) {
-    globalShortcut.unregister(getShortcutOption(activeQuickPanelShortcut).accelerator);
+    globalShortcut.unregister(activeQuickPanelShortcut);
   }
-  activeQuickPanelShortcut = shortcutId;
+  activeQuickPanelShortcut = accelerator;
   return true;
 }
 
@@ -249,17 +268,27 @@ function toggleFloatingWindow(): void {
     floatingWindow.hide();
     return;
   }
-  const focusedWindow = BrowserWindow.getFocusedWindow();
-  const bounds = focusedWindow?.getBounds();
-  if (bounds) {
-    floatingWindow.setPosition(
-      Math.round(bounds.x + bounds.width / 2 - 280),
-      Math.round(bounds.y + 110)
-    );
-  }
+  positionFloatingWindow();
   floatingWindow.show();
   floatingWindow.focus();
   floatingWindow.webContents.send('floating:focus-search');
+}
+
+function positionFloatingWindow(): void {
+  if (!floatingWindow) {
+    return;
+  }
+  const cursorPoint = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursorPoint);
+  const bounds = floatingWindow.getBounds();
+  const placement = settingsService?.getSettings().quickPanelPlacement ?? DEFAULT_APP_SETTINGS.quickPanelPlacement;
+  const position = calculateFloatingPanelPosition({
+    placement,
+    cursorPoint,
+    workArea: display.workArea,
+    panelBounds: bounds
+  });
+  floatingWindow.setPosition(position.x, position.y);
 }
 
 app.whenReady().then(async () => {
