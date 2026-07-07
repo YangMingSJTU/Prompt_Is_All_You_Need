@@ -6,5 +6,5 @@ export function getAppIconPath(appRoot = process.cwd(), platform = process.platf
 }
 
 export function getTrayIconPath(appRoot = process.cwd()): string {
-  return join(appRoot, 'assets', 'icons', 'app-icon.png');
+  return join(appRoot, 'assets', 'icons', 'tray-icon.png');
 }

@@ -2,13 +2,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { getAppIconPath } from '../desktop/main/services/appAssets';
+import { getAppIconPath, getTrayIconPath } from '../desktop/main/services/appAssets';
 
 describe('app assets', () => {
   it('uses a Windows icon file for window and taskbar chrome', () => {
     const iconPath = getAppIconPath(process.cwd(), 'win32');
 
     expect(normalize(iconPath)).toBe(normalize(join(process.cwd(), 'assets', 'icons', 'app-icon.ico')));
+    expect(iconPath).not.toContain('docs');
+    expect(existsSync(iconPath)).toBe(true);
+  });
+
+  it('uses a separate transparent icon for the tray', () => {
+    const iconPath = getTrayIconPath(process.cwd());
+
+    expect(normalize(iconPath)).toBe(normalize(join(process.cwd(), 'assets', 'icons', 'tray-icon.png')));
     expect(iconPath).not.toContain('docs');
     expect(existsSync(iconPath)).toBe(true);
   });
@@ -20,6 +28,29 @@ describe('app assets', () => {
 
     expect(png.colorType).toBe(6);
     expect(corner.a).toBe(0);
+  });
+
+  it('renders a full app tile with enough taskbar visual weight', () => {
+    const pngPath = join(process.cwd(), 'assets', 'icons', 'app-icon.png');
+    const center = readPngPixel(pngPath, 512, 512);
+    const tileSamples = [
+      readPngPixel(pngPath, 128, 512),
+      readPngPixel(pngPath, 896, 512),
+      readPngPixel(pngPath, 512, 128),
+      readPngPixel(pngPath, 512, 896)
+    ];
+
+    expect(center.a).toBeGreaterThanOrEqual(230);
+
+    for (const sample of tileSamples) {
+      expect(sample.a).toBeGreaterThanOrEqual(230);
+      expect(sample.r).toBeGreaterThanOrEqual(18);
+      expect(sample.r).toBeLessThanOrEqual(58);
+      expect(sample.g).toBeGreaterThanOrEqual(18);
+      expect(sample.g).toBeLessThanOrEqual(52);
+      expect(sample.b).toBeGreaterThanOrEqual(20);
+      expect(sample.b).toBeLessThanOrEqual(48);
+    }
   });
 });
 
