@@ -40,6 +40,7 @@ export function App() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [analytics, setAnalytics] = useState<UsageAnalytics | null>(null);
+  const [libraryCreateRequestId, setLibraryCreateRequestId] = useState(0);
 
   if (mode === 'floating') {
     return (
@@ -74,12 +75,18 @@ export function App() {
     document.title = resolveAppName(settings.language, globalThis.navigator?.language);
   }, [settings.language]);
 
+  const openNewSpellDraft = useCallback(() => {
+    setView('library');
+    setLibraryCreateRequestId((current) => current + 1);
+  }, []);
+
   const selectedView = useMemo(() => {
     if (view === 'library') {
       return (
         <LibraryView
           spells={spells}
           candidates={candidates}
+          createRequestId={libraryCreateRequestId}
           onChanged={refresh}
           t={t}
         />
@@ -103,8 +110,8 @@ export function App() {
         />
       );
     }
-    return <SpellPanel spells={spells} onChanged={refresh} t={t} />;
-  }, [analytics, candidates, refresh, settings, skills, spells, t, view]);
+    return <SpellPanel spells={spells} onCreateSpell={openNewSpellDraft} onChanged={refresh} t={t} />;
+  }, [analytics, candidates, libraryCreateRequestId, openNewSpellDraft, refresh, settings, skills, spells, t, view]);
 
   const selectedNavItem =
     view === 'settings'

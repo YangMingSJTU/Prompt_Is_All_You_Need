@@ -2,6 +2,33 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('spell library UI structure', () => {
+  it('keeps the quick panel focused on spell names with traits and a new action', () => {
+    const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
+    const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
+    const library = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
+
+    expect(component).toContain('onCreateSpell');
+    expect(component).toContain("t('spell.new')");
+    expect(component).toContain('selectedTags');
+    expect(component).toContain('allTags');
+    expect(component).toContain("t('spell.allTags')");
+    expect(component).toContain('deriveSpellName');
+    expect(component).toContain('spell.body.toLowerCase().includes(normalizedQuery)');
+    expect(component).toContain('spell.tags.some');
+    expect(component).not.toContain('count-pill');
+    expect(component).not.toContain("t('metric.spells')");
+    expect(component).not.toContain('spell-result-text');
+
+    expect(app).toContain('libraryCreateRequestId');
+    expect(app).toContain('openNewSpellDraft');
+    expect(app).toContain('onCreateSpell={openNewSpellDraft}');
+    expect(app).toContain('createRequestId={libraryCreateRequestId}');
+
+    expect(library).toContain('createRequestId');
+    expect(library).toContain('startNewSpell();');
+    expect(library).toContain('[createRequestId]');
+  });
+
   it('uses a scrollable list and editor layout instead of full raw text cards', () => {
     const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');

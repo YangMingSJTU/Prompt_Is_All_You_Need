@@ -290,23 +290,6 @@ p {
   white-space: nowrap;
 }
 
-.count-pill {
-  display: inline-flex;
-  max-width: 360px;
-  height: 28px;
-  align-items: center;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 0 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .panel-grid {
   display: grid;
   grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
@@ -406,7 +389,8 @@ p {
   font-size: 12px;
 }
 
-.spell-result-text {
+.spell-result-text,
+.spell-result-name {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -415,6 +399,10 @@ p {
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.quick-panel-traits {
+  margin-top: 8px;
 }
 
 .feedback-toast-viewport {
@@ -488,17 +476,6 @@ p {
 .result-row.selected,
 .result-row:hover {
   background: var(--hover);
-}
-
-.result-row em {
-  max-width: 96px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .detail-pane {

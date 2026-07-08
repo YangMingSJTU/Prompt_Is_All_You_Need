@@ -8,6 +8,7 @@ import { useFeedbackToast } from './FeedbackToast';
 interface LibraryViewProps {
   spells: Spell[];
   candidates: Candidate[];
+  createRequestId?: number;
   onChanged(): Promise<void>;
   t: TFunction;
 }
@@ -18,7 +19,7 @@ interface SpellDraft {
   tags: string[];
 }
 
-export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewProps) {
+export function LibraryView({ spells, candidates, createRequestId = 0, onChanged, t }: LibraryViewProps) {
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
@@ -71,6 +72,13 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
     setNewTag('');
     setDraft(createDraft(selectedSpell));
   }, [isCreating, selectedSpell?.id]);
+
+  useEffect(() => {
+    if (!createRequestId) {
+      return;
+    }
+    startNewSpell();
+  }, [createRequestId]);
 
   async function promote(candidate: Candidate): Promise<void> {
     const spell = await window.spellbook.promoteCandidate(candidate.id);
