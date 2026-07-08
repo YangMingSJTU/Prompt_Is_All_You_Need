@@ -15,6 +15,8 @@ describe('spell library UI structure', () => {
     expect(component).toContain('SpellSortMenu');
     expect(component).toContain('sortSpells');
     expect(component).toContain('variant="button"');
+    expect(component).toContain('quick-panel-controls');
+    expect(component).not.toContain('toolbar-actions');
     expect(component).toContain('deriveSpellName');
     expect(component).toContain('spell.body.toLowerCase().includes(normalizedQuery)');
     expect(component).toContain('spell.tags.some');
@@ -106,5 +108,19 @@ describe('spell library UI structure', () => {
     expect(spellList).toContain('flex: 1 1 auto;');
     expect(spellList).toContain('min-height: 0;');
     expect(spellList).toContain('overflow: auto;');
+  });
+
+  it('keeps quick panel controls aligned without a visible trait scrollbar', () => {
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const controls = styles.match(/\.quick-panel-controls\s*\{[^}]+\}/s)?.[0] ?? '';
+    const traits = styles.match(/\.quick-panel-traits\s*\{[^}]+\}/s)?.[0] ?? '';
+    const webkitScrollbar = styles.match(/\.quick-panel-traits::-webkit-scrollbar\s*\{[^}]+\}/s)?.[0] ?? '';
+
+    expect(controls).toContain('display: grid;');
+    expect(controls).toContain('grid-template-columns: minmax(0, 1fr) auto auto;');
+    expect(controls).toContain('align-items: center;');
+    expect(traits).toContain('scrollbar-width: none;');
+    expect(traits).toContain('padding-bottom: 0;');
+    expect(webkitScrollbar).toContain('display: none;');
   });
 });

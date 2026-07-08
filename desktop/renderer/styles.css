@@ -312,14 +312,6 @@ p {
   margin-bottom: 10px;
 }
 
-.toolbar-actions {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .search-box {
   display: flex;
   height: 34px;
@@ -408,6 +400,20 @@ p {
 
 .quick-panel-traits {
   margin-top: 8px;
+  padding-bottom: 0;
+  scrollbar-width: none;
+}
+
+.quick-panel-traits::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-panel-controls {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .feedback-toast-viewport {

@@ -65,29 +65,29 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
       <div className="search-pane">
         <div className="pane-toolbar">
           <h3>{t('nav.panel')}</h3>
-          <div className="toolbar-actions">
-            <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
-            <button
-              aria-label={t('spell.new')}
-              className="secondary-button new-spell-button"
-              onClick={onCreateSpell}
-              title={t('spell.new')}
-              type="button"
-            >
-              <Plus size={16} />
-              <span>{t('spell.new')}</span>
-            </button>
-          </div>
         </div>
-        <label className="search-box">
-          <Search size={18} />
-          <input
-            autoFocus
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t('spell.placeholder')}
-            value={query}
-          />
-        </label>
+        <div className="quick-panel-controls">
+          <label className="search-box">
+            <Search size={18} />
+            <input
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t('spell.placeholder')}
+              value={query}
+            />
+          </label>
+          <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
+          <button
+            aria-label={t('spell.new')}
+            className="secondary-button new-spell-button"
+            onClick={onCreateSpell}
+            title={t('spell.new')}
+            type="button"
+          >
+            <Plus size={16} />
+            <span>{t('spell.new')}</span>
+          </button>
+        </div>
         {allTags.length ? (
           <div className="tag-filter-row quick-panel-traits" aria-label={t('spell.tags')}>
             <button
