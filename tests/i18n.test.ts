@@ -73,4 +73,37 @@ describe('i18n', () => {
     expect(visibleCopy).not.toContain('Snippet');
     expect(visibleCopy).not.toContain('snippet');
   });
+
+  it('uses spell traits copy instead of tags in the library UI', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+    const zhCopy = [
+      zh('spell.placeholder'),
+      zh('spell.search'),
+      zh('spell.tags'),
+      zh('spell.tagPlaceholder'),
+      zh('spell.addTag'),
+      zh('spell.allTags')
+    ].join(' ');
+    const enCopy = [
+      en('spell.placeholder'),
+      en('spell.search'),
+      en('spell.tags'),
+      en('spell.tagPlaceholder'),
+      en('spell.addTag'),
+      en('spell.allTags')
+    ].join(' ');
+
+    expect(zh('spell.tags')).toBe('属性');
+    expect(zh('spell.tagPlaceholder')).toBe('输入属性');
+    expect(zh('spell.addTag')).toBe('添加属性');
+    expect(zh('spell.allTags')).toBe('全部属性');
+    expect(zhCopy).not.toContain('标签');
+    expect(en('spell.tags')).toBe('Traits');
+    expect(en('spell.tagPlaceholder')).toBe('Enter trait');
+    expect(en('spell.addTag')).toBe('Add trait');
+    expect(en('spell.allTags')).toBe('All traits');
+    expect(enCopy).not.toContain('Tags');
+    expect(enCopy).not.toContain('tags');
+  });
 });

@@ -18,7 +18,7 @@ describe('spell library UI structure', () => {
     expect(styles.match(/\.spell-preview-line\s*\{[^}]+text-overflow: ellipsis;[^}]+\}/s)?.[0]).toBeTruthy();
   });
 
-  it('uses search tag filters name editing and delete confirmation without redundant headings', () => {
+  it('uses search trait filters name editing and delete confirmation without redundant headings', () => {
     const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
 
@@ -57,5 +57,21 @@ describe('spell library UI structure', () => {
     expect(styles).toContain('.spell-toolbar-row');
     expect(styles).toContain('.new-spell-button');
     expect(styles.match(/\.new-spell-button\s*\{[^}]+height: 34px;[^}]+\}/s)?.[0]).toBeTruthy();
+  });
+
+  it('keeps the spell library panes from touching the window bottom', () => {
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const libraryGrid = styles.match(/\.spell-library-grid\s*\{[^}]+\}/s)?.[0] ?? '';
+    const listPane = styles.match(/\.spell-list-pane\s*\{[^}]+\}/s)?.[0] ?? '';
+    const editorPane = styles.match(/\.spell-editor-pane\s*\{\s*overflow: hidden;[^}]+\}/s)?.[0] ?? '';
+    const spellList = styles.match(/\.spell-list\s*\{[^}]+\}/s)?.[0] ?? '';
+
+    expect(libraryGrid).toContain('height: 100%;');
+    expect(libraryGrid).not.toContain('calc(100vh - 53px)');
+    expect(listPane).toContain('padding: 16px 14px 18px;');
+    expect(editorPane).toContain('padding: 16px 18px 18px;');
+    expect(spellList).toContain('flex: 1 1 auto;');
+    expect(spellList).toContain('min-height: 0;');
+    expect(spellList).toContain('overflow: auto;');
   });
 });

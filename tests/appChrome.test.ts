@@ -39,4 +39,16 @@ describe('app chrome defaults', () => {
     expect(styles.match(/\.titlebar-window-controls\s*\{[^}]+-webkit-app-region: no-drag;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles.match(/\.app-shell\s*\{[^}]+height: calc\(100vh - 40px\);[^}]+\}/s)?.[0]).toBeTruthy();
   });
+
+  it('lets workspace content layouts use the remaining grid height instead of viewport math', () => {
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const contentSelectors = ['panel-grid', 'stack', 'spell-library-grid', 'settings-layout'];
+
+    for (const selector of contentSelectors) {
+      const block = styles.match(new RegExp(`\\.${selector}\\s*\\{[^}]+\\}`, 's'))?.[0] ?? '';
+      expect(block).toContain('height: 100%;');
+      expect(block).toContain('min-height: 0;');
+      expect(block).not.toContain('calc(100vh - 53px)');
+    }
+  });
 });
