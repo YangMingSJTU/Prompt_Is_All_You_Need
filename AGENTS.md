@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains the Spellbook desktop app. Root files include `README.md`, `LICENSE`, package/tooling configuration, and `AGENTS.md`.
+This repository contains the Spellbook desktop app. Root files include `README.md`, `LICENSE`, package/tooling config, and `AGENTS.md`.
 
 - `desktop/main/` contains Electron main-process services and IPC.
 - `desktop/renderer/` contains the React UI.
@@ -16,7 +16,7 @@ The project is in active development and has no online users. Favor simple curre
 
 ## Build, Test, and Development Commands
 
-Use the npm scripts defined in `package.json`:
+Use npm scripts from `package.json`:
 
 - `npm test` runs the Vitest suite.
 - `npm run typecheck` runs TypeScript checks for renderer and main code.
@@ -27,13 +27,13 @@ Use `git status --short` and `git diff` before staging changes.
 
 ## Coding Style & Naming Conventions
 
-Use Markdown for documentation. Keep headings descriptive, paragraphs short, and examples runnable where possible. Prefer ASCII unless a file already uses another character set or content requires it.
+Use Markdown for docs. Keep headings descriptive, paragraphs short, and examples runnable. Prefer ASCII unless a file already uses another character set or content requires it.
 
-Follow the existing TypeScript and React style. Keep UI state local unless it is shared app state, and prefer small reusable components over repeated JSX for common interaction patterns.
+Follow the existing TypeScript and React style. Keep UI state local unless it is shared state, and prefer small reusable components over repeated JSX. Support Windows and macOS: use cross-platform path handling, avoid hardcoded separators or shell-specific commands, and document OS-specific setup.
 
 ## UI Interaction Guidance
 
-For click-triggered result feedback such as copy, save, scan, package, or install, use a window-top centered Toast. Do not use Tooltip for click results, and do not show routine confirmations as a global status pill or other persistent topbar/global status text. Reserve Tooltip for hover explanations or supplemental detail, and reserve inline messages for actionable errors, validation problems, or warnings the user must fix.
+For click-triggered result feedback such as copy, save, scan, package, or install, use a window-top centered Toast. Do not use Tooltip or persistent topbar/global status text for routine confirmations. Reserve Tooltip for hover detail and inline messages for actionable errors, validation problems, or required warnings.
 
 ## Testing Guidelines
 
@@ -41,7 +41,7 @@ Add or update tests for non-trivial behavior changes. Place tests under `tests/`
 
 ## Commit & Pull Request Guidelines
 
-The current history contains only an initial commit, so no project-specific convention has been established. Use concise, imperative commit messages, for example `Add prompt examples` or `Document test setup`.
+Use concise, imperative commit messages, for example `Add prompt examples` or `Document test setup`.
 
 Pull requests should include a clear summary, validation steps, and screenshots or previews when changing diagrams or visual documentation.
 
