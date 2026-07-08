@@ -2,6 +2,10 @@ export type SkillPlatform = 'claude' | 'codex';
 
 export type SourceTool = SkillPlatform | 'manual';
 
+export type ScanProvider = SkillPlatform;
+
+export type ScanTarget = 'spells' | 'skills';
+
 export type AssetType = 'spell' | 'skill';
 
 export type CandidateType = 'spell';
@@ -45,6 +49,19 @@ export interface SpellCreateInput {
   tags?: string[];
 }
 
+export interface ScanSourceConfig {
+  provider: ScanProvider;
+  target: ScanTarget;
+  path: string;
+  enabled: boolean;
+}
+
+export interface ScanRunRequest {
+  target: ScanTarget;
+  providers: ScanProvider[];
+  scanSources: ScanSourceConfig[];
+}
+
 export interface Candidate {
   id: string;
   slug: string;
@@ -75,6 +92,14 @@ export interface ScanSummary {
   prompts: ExtractedPrompt[];
   sourceFiles: SourceFileSummary[];
   warningCount: number;
+}
+
+export interface CandidatePromotionResult {
+  created: Spell[];
+  skipped: Array<{
+    candidateId: string;
+    reason: 'duplicate' | 'missing';
+  }>;
 }
 
 export interface SkillRecord {

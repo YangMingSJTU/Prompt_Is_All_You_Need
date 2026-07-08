@@ -1,4 +1,4 @@
-import type { SkillPlatform } from './types';
+import type { ScanSourceConfig, SkillPlatform } from './types';
 
 export type AppLanguage = 'system' | 'zh' | 'en';
 
@@ -10,6 +10,7 @@ export interface AppSettings {
   language: AppLanguage;
   quickPanelShortcut: ShortcutAccelerator;
   quickPanelPlacement: QuickPanelPlacement;
+  scanSources: ScanSourceConfig[];
 }
 
 export interface SettingsUpdateResult {
@@ -33,6 +34,7 @@ export interface ShortcutKeyInput {
 
 export interface SettingsInfo {
   databasePath: string;
+  defaultScanSources: ScanSourceConfig[];
   historyRoots: Array<{ sourceTool: 'claude' | 'codex'; path: string }>;
   skillRoots: Array<{ platform: SkillPlatform; path: string }>;
 }
@@ -42,7 +44,8 @@ export const DEFAULT_QUICK_PANEL_SHORTCUT = 'CommandOrControl+Shift+Space';
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   language: 'system',
   quickPanelShortcut: DEFAULT_QUICK_PANEL_SHORTCUT,
-  quickPanelPlacement: 'center'
+  quickPanelPlacement: 'center',
+  scanSources: []
 };
 
 const LEGACY_SHORTCUTS: Record<string, ShortcutAccelerator> = {

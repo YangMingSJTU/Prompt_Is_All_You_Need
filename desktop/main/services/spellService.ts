@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { Candidate, Spell, SpellCreateInput, SpellUpdatePatch, UsageAnalytics } from '../../shared/types';
+import type {
+  Candidate,
+  CandidatePromotionResult,
+  Spell,
+  SpellCreateInput,
+  SpellUpdatePatch,
+  UsageAnalytics
+} from '../../shared/types';
 import type { AppDatabase } from './database';
 
 interface SpellRow extends Record<string, unknown> {
@@ -194,12 +201,17 @@ export function createSpellService(db: AppDatabase) {
 
     async saveCandidates(candidates: Candidate[]): Promise<void> {
       for (const candidate of candidates) {
+        const existing = db.get<CandidateRow>('SELECT * FROM candidates WHERE slug = ?', [candidate.slug]);
+        const status =
+          existing?.status === 'saved' || findSpellByBody(db, candidate.template)
+            ? 'saved'
+            : candidate.status;
         db.run(
           `INSERT OR REPLACE INTO candidates
             (id, slug, title, description, template, candidate_type, source_count, score, status, examples, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            candidate.id,
+            existing?.id ?? candidate.id,
             candidate.slug,
             candidate.title,
             candidate.description,
@@ -207,9 +219,9 @@ export function createSpellService(db: AppDatabase) {
             candidate.candidateType,
             candidate.sourceCount,
             candidate.score,
-            candidate.status,
+            status,
             JSON.stringify(candidate.examples),
-            candidate.createdAt,
+            existing?.created_at ?? candidate.createdAt,
             candidate.updatedAt
           ]
         );
@@ -226,33 +238,59 @@ export function createSpellService(db: AppDatabase) {
     },
 
     async promoteCandidate(candidateId: string): Promise<Spell> {
+      const result = await this.promoteCandidates([candidateId]);
+      if (result.created[0]) {
+        return result.created[0];
+      }
       const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
-      if (!candidate) {
+      if (!candidate || result.skipped.some((item) => item.reason === 'missing')) {
         throw new Error(`Candidate not found: ${candidateId}`);
       }
-      const now = new Date().toISOString();
-      const spellId = randomUUID();
-      db.run(
-        `INSERT OR REPLACE INTO spells
-          (id, name, body, tags, source, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          spellId,
-          candidate.title,
-          candidate.template,
-          JSON.stringify([]),
-          'candidate',
-          now,
-          now
-        ]
-      );
-      db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
-      await db.save();
-      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!row) {
-        throw new Error(`Promoted spell not found: ${spellId}`);
+      const existing = findSpellByBody(db, candidate.template);
+      if (!existing) {
+        throw new Error(`Promoted spell not found: ${candidateId}`);
       }
-      return rowToSpell(row);
+      return existing;
+    },
+
+    async promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult> {
+      const now = new Date().toISOString();
+      const result: CandidatePromotionResult = { created: [], skipped: [] };
+      for (const candidateId of normalizeIds(candidateIds)) {
+        const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
+        if (!candidate) {
+          result.skipped.push({ candidateId, reason: 'missing' });
+          continue;
+        }
+        const existing = findSpellByBody(db, candidate.template);
+        if (existing) {
+          db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
+          result.skipped.push({ candidateId, reason: 'duplicate' });
+          continue;
+        }
+        const spellId = randomUUID();
+        db.run(
+          `INSERT OR REPLACE INTO spells
+            (id, name, body, tags, source, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            spellId,
+            candidate.title,
+            candidate.template,
+            JSON.stringify([]),
+            'candidate',
+            now,
+            now
+          ]
+        );
+        db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
+        const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (row) {
+          result.created.push(rowToSpell(row));
+        }
+      }
+      await db.save();
+      return result;
     },
 
     async getAnalytics(): Promise<UsageAnalytics> {
@@ -314,6 +352,28 @@ function parseTags(value: string): string[] {
   } catch {
     return [];
   }
+}
+
+function findSpellByBody(db: AppDatabase, body: string): Spell | null {
+  const normalizedBody = normalizeBodyForDedupe(body);
+  const row = db
+    .all<SpellRow>('SELECT * FROM spells')
+    .find((spell) => normalizeBodyForDedupe(spell.body) === normalizedBody);
+  return row ? rowToSpell(row) : null;
+}
+
+function normalizeBodyForDedupe(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function normalizeIds(ids: string[]): string[] {
+  const normalized: string[] = [];
+  for (const id of ids) {
+    if (id && !normalized.includes(id)) {
+      normalized.push(id);
+    }
+  }
+  return normalized;
 }
 
 function rowToCandidate(row: CandidateRow): Candidate {

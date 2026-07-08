@@ -3,7 +3,7 @@ import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
-import { getSpellDisplayText } from '../spellDisplay';
+import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface FloatingPanelProps {
@@ -21,7 +21,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     const trimmed = value.trim();
     const results = trimmed
       ? await window.spellbook.searchSpells(trimmed)
-      : await window.spellbook.listPopularSpells(6);
+      : await window.spellbook.listPopularSpells(5);
     setSpells(results);
     setSelectedIndex(0);
   }, []);
@@ -70,11 +70,6 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
   return (
     <main className="floating-shell">
-      <header className="floating-header">
-        <div>
-          <h1>{t('floating.title')}</h1>
-        </div>
-      </header>
       <label className="floating-search">
         <Search size={18} />
         <input
@@ -94,14 +89,26 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
               setSelectedIndex(index);
               void copySpell(spell);
             }}
+            onMouseEnter={() => setSelectedIndex(index)}
             type="button"
           >
-            <span className="spell-result-text">{getSpellDisplayText(spell)}</span>
+            <span className="floating-row-name" title={getFloatingSpellName(spell, t)}>
+              {getFloatingSpellName(spell, t)}
+            </span>
             <Clipboard size={15} />
           </button>
         ))}
         {spells.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
       </section>
+      {selected ? (
+        <section className="floating-preview" aria-label={t('spell.body')}>
+          <pre>{getSpellDisplayText(selected)}</pre>
+        </section>
+      ) : null}
     </main>
   );
+}
+
+function getFloatingSpellName(spell: Spell, t: TFunction): string {
+  return spell.name || deriveSpellName(spell.body, t('spell.untitled'));
 }

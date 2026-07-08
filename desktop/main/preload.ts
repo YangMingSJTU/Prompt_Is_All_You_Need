@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AppSettings } from '../shared/settings';
-import type { SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
+import type { ScanRunRequest, SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
 
 contextBridge.exposeInMainWorld('spellbook', {
   searchSpells: (query: string) => ipcRenderer.invoke('spells:search', query),
@@ -12,7 +12,8 @@ contextBridge.exposeInMainWorld('spellbook', {
   deleteSpell: (spellId: string) => ipcRenderer.invoke('spells:delete', spellId),
   listCandidates: () => ipcRenderer.invoke('candidates:list'),
   promoteCandidate: (candidateId: string) => ipcRenderer.invoke('candidates:promote', candidateId),
-  runScan: () => ipcRenderer.invoke('scanner:run'),
+  promoteCandidates: (candidateIds: string[]) => ipcRenderer.invoke('candidates:promoteBatch', candidateIds),
+  runScan: (request: ScanRunRequest) => ipcRenderer.invoke('scanner:run', request),
   getAnalytics: () => ipcRenderer.invoke('analytics:get'),
   listSkills: () => ipcRenderer.invoke('skills:list'),
   scanSkills: () => ipcRenderer.invoke('skills:scan'),

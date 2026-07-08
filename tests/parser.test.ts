@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractPromptsFromJsonl,
-  normalizePrompt,
-  redactSecrets
+  normalizePrompt
 } from '../desktop/main/services/parser';
 
 describe('parser', () => {
@@ -72,12 +71,16 @@ describe('parser', () => {
     });
   });
 
-  it('redacts secrets before persistence', () => {
-    const redacted = redactSecrets('API_KEY=sk-test123456 TOKEN=ghp_abcdef123456');
+  it('preserves exact user prompt text without redacting secrets', () => {
+    const rawPrompt = 'API_KEY=sk-test123456 TOKEN=ghp_abcdef123456';
+    const jsonl = JSON.stringify({ role: 'user', content: rawPrompt });
 
-    expect(redacted).toContain('[REDACTED_SECRET]');
-    expect(redacted).not.toContain('sk-test123456');
-    expect(redacted).not.toContain('ghp_abcdef123456');
+    const result = extractPromptsFromJsonl(jsonl, {
+      sourceTool: 'codex',
+      sourceFile: 'fixture.jsonl'
+    });
+
+    expect(result.prompts[0].rawText).toBe(rawPrompt);
   });
 
   it('normalizes paths urls issues commits and code blocks', () => {

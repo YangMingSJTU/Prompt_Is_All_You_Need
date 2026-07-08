@@ -19,7 +19,6 @@ describe('click feedback toast UI', () => {
     const library = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const panel = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const skills = readFileSync('desktop/renderer/components/SkillLibraryView.tsx', 'utf8');
-    const scanner = readFileSync('desktop/renderer/components/ScannerView.tsx', 'utf8');
     const settings = readFileSync('desktop/renderer/components/SettingsView.tsx', 'utf8');
     const floating = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
 
@@ -32,7 +31,7 @@ describe('click feedback toast UI', () => {
     expect(styles).not.toContain('.feedback-target');
     expect(styles).not.toContain('.feedback-tooltip');
 
-    for (const component of [library, panel, skills, scanner, settings, floating]) {
+    for (const component of [library, panel, skills, settings, floating]) {
       expect(component).toContain('useFeedbackToast');
       expect(component).toContain('showToast');
       expect(component).not.toContain('FeedbackTarget');

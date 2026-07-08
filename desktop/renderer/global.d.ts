@@ -5,6 +5,8 @@ import type {
 } from '../shared/settings';
 import type {
   Candidate,
+  CandidatePromotionResult,
+  ScanRunRequest,
   SkillPlatform,
   SkillRecord,
   Spell,
@@ -26,11 +28,14 @@ declare global {
       deleteSpell(spellId: string): Promise<void>;
       listCandidates(): Promise<Candidate[]>;
       promoteCandidate(candidateId: string): Promise<Spell>;
-      runScan(): Promise<{
+      promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult>;
+      runScan(request: ScanRunRequest): Promise<{
         id: string;
+        target: ScanRunRequest['target'];
         scannedPrompts: number;
         sourceFiles: SourceFileSummary[];
         candidates: Candidate[];
+        skills: SkillRecord[];
         warningCount: number;
       }>;
       getAnalytics(): Promise<UsageAnalytics>;

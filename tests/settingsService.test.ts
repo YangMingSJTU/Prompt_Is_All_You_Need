@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../desktop/main/services/database';
-import { createSettingsService } from '../desktop/main/services/settingsService';
+import { createSettingsService, defaultScanSources } from '../desktop/main/services/settingsService';
 import { DEFAULT_APP_SETTINGS } from '../desktop/shared/settings';
 
 describe('settings service', () => {
@@ -8,7 +8,10 @@ describe('settings service', () => {
     const db = await createTestDatabase();
     const service = createSettingsService(db);
 
-    expect(service.getSettings()).toEqual(DEFAULT_APP_SETTINGS);
+    expect(service.getSettings()).toEqual({
+      ...DEFAULT_APP_SETTINGS,
+      scanSources: defaultScanSources()
+    });
   });
 
   it('persists valid setting updates', async () => {
@@ -24,7 +27,8 @@ describe('settings service', () => {
     expect(createSettingsService(db).getSettings()).toEqual({
       language: 'en',
       quickPanelShortcut: 'CommandOrControl+Alt+K',
-      quickPanelPlacement: 'mouse'
+      quickPanelPlacement: 'mouse',
+      scanSources: defaultScanSources()
     });
   });
 
@@ -55,6 +59,9 @@ describe('settings service', () => {
       ]
     );
 
-    expect(createSettingsService(db).getSettings()).toEqual(DEFAULT_APP_SETTINGS);
+    expect(createSettingsService(db).getSettings()).toEqual({
+      ...DEFAULT_APP_SETTINGS,
+      scanSources: defaultScanSources()
+    });
   });
 });

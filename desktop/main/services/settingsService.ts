@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { AppDatabase } from './database';
 import {
   DEFAULT_APP_SETTINGS,
@@ -9,6 +11,7 @@ import {
   type QuickPanelPlacement,
   type ShortcutAccelerator
 } from '../../shared/settings';
+import type { ScanProvider, ScanSourceConfig, ScanTarget } from '../../shared/types';
 
 interface SettingRow {
   [key: string]: unknown;
@@ -29,7 +32,8 @@ export function createSettingsService(db: AppDatabase): SettingsService {
       return {
         language: normalizeLanguage(values.get('language')),
         quickPanelShortcut: normalizeShortcut(values.get('quickPanelShortcut')),
-        quickPanelPlacement: normalizePlacement(values.get('quickPanelPlacement'))
+        quickPanelPlacement: normalizePlacement(values.get('quickPanelPlacement')),
+        scanSources: normalizeScanSources(values.get('scanSources'))
       };
     },
     async updateSettings(patch) {
@@ -46,12 +50,17 @@ export function createSettingsService(db: AppDatabase): SettingsService {
         quickPanelPlacement:
           patch.quickPanelPlacement === undefined
             ? current.quickPanelPlacement
-            : normalizePlacement(patch.quickPanelPlacement)
+            : normalizePlacement(patch.quickPanelPlacement),
+        scanSources:
+          patch.scanSources === undefined
+            ? current.scanSources
+            : normalizeScanSources(patch.scanSources)
       };
       const now = new Date().toISOString();
       writeSetting(db, 'language', next.language, now);
       writeSetting(db, 'quickPanelShortcut', next.quickPanelShortcut, now);
       writeSetting(db, 'quickPanelPlacement', next.quickPanelPlacement, now);
+      writeSetting(db, 'scanSources', JSON.stringify(next.scanSources), now);
       await db.save();
       return next;
     }
@@ -68,6 +77,75 @@ function normalizeShortcut(value: unknown): ShortcutAccelerator {
 
 function normalizePlacement(value: unknown): QuickPanelPlacement {
   return isQuickPanelPlacement(value) ? value : DEFAULT_APP_SETTINGS.quickPanelPlacement;
+}
+
+export function defaultScanSources(): ScanSourceConfig[] {
+  const home = homedir();
+  return [
+    { provider: 'claude', target: 'spells', path: join(home, '.claude'), enabled: true },
+    { provider: 'codex', target: 'spells', path: join(home, '.codex'), enabled: true },
+    { provider: 'claude', target: 'skills', path: join(home, '.claude', 'skills'), enabled: true },
+    { provider: 'codex', target: 'skills', path: join(home, '.agents', 'skills'), enabled: true }
+  ];
+}
+
+function normalizeScanSources(value: unknown): ScanSourceConfig[] {
+  const parsed = typeof value === 'string' ? parseJson(value) : value;
+  const defaults = defaultScanSources();
+  if (!Array.isArray(parsed)) {
+    return defaults;
+  }
+
+  const byKey = new Map(defaults.map((source) => [scanSourceKey(source.provider, source.target), source]));
+  for (const item of parsed) {
+    if (!isScanSourceConfig(item)) {
+      continue;
+    }
+    const key = scanSourceKey(item.provider, item.target);
+    if (!byKey.has(key)) {
+      continue;
+    }
+    byKey.set(key, {
+      provider: item.provider,
+      target: item.target,
+      path: item.path.trim() || byKey.get(key)?.path || '',
+      enabled: item.enabled
+    });
+  }
+  return defaults.map((source) => byKey.get(scanSourceKey(source.provider, source.target)) ?? source);
+}
+
+function parseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isScanSourceConfig(value: unknown): value is ScanSourceConfig {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const source = value as Record<string, unknown>;
+  return (
+    isScanProvider(source.provider) &&
+    isScanTarget(source.target) &&
+    typeof source.path === 'string' &&
+    typeof source.enabled === 'boolean'
+  );
+}
+
+function isScanProvider(value: unknown): value is ScanProvider {
+  return value === 'claude' || value === 'codex';
+}
+
+function isScanTarget(value: unknown): value is ScanTarget {
+  return value === 'spells' || value === 'skills';
+}
+
+function scanSourceKey(provider: ScanProvider, target: ScanTarget): string {
+  return `${provider}:${target}`;
 }
 
 function writeSetting(db: AppDatabase, key: keyof AppSettings, value: string, updatedAt: string): void {

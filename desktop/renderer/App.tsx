@@ -1,4 +1,4 @@
-import { BarChart3, Database, Library, Package, Search, Settings } from 'lucide-react';
+import { BarChart3, Library, Package, Search, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { resolveAppName } from '../shared/appIdentity';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
@@ -8,23 +8,21 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { FeedbackToastProvider } from './components/FeedbackToast';
 import { FloatingPanel } from './components/FloatingPanel';
 import { LibraryView } from './components/LibraryView';
-import { ScannerView } from './components/ScannerView';
 import { SettingsView } from './components/SettingsView';
 import { SkillLibraryView } from './components/SkillLibraryView';
 import { SpellPanel } from './components/SpellPanel';
 import { createTranslator, resolveLocalePreference } from './i18n';
 
-type View = 'panel' | 'library' | 'skills' | 'scanner' | 'analytics' | 'settings';
+type View = 'panel' | 'library' | 'skills' | 'analytics' | 'settings';
 
 const NAV_ITEMS: Array<{
   id: View;
-  labelKey: 'nav.panel' | 'nav.library' | 'nav.skills' | 'nav.scanner' | 'nav.analytics';
+  labelKey: 'nav.panel' | 'nav.library' | 'nav.skills' | 'nav.analytics';
   icon: typeof Search;
 }> = [
   { id: 'panel', labelKey: 'nav.panel', icon: Search },
   { id: 'library', labelKey: 'nav.library', icon: Library },
   { id: 'skills', labelKey: 'nav.skills', icon: Package },
-  { id: 'scanner', labelKey: 'nav.scanner', icon: Database },
   { id: 'analytics', labelKey: 'nav.analytics', icon: BarChart3 }
 ];
 
@@ -95,15 +93,13 @@ export function App() {
     if (view === 'skills') {
       return <SkillLibraryView skills={skills} onChanged={refresh} t={t} />;
     }
-    if (view === 'scanner') {
-      return <ScannerView onChanged={refresh} t={t} />;
-    }
     if (view === 'analytics') {
       return <AnalyticsView analytics={analytics} t={t} />;
     }
     if (view === 'settings') {
       return (
         <SettingsView
+          onChanged={refresh}
           settings={settings}
           onSettingsChanged={setSettings}
           t={t}

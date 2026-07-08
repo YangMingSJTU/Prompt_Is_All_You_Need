@@ -22,24 +22,6 @@ const IGNORED_ROLES = new Set([
   'command_output'
 ]);
 
-const LOW_VALUE_PROMPTS = new Set([
-  '好',
-  '可以',
-  '继续',
-  '嗯',
-  'ok',
-  'yes',
-  'no',
-  '不是',
-  '不对',
-  '错了',
-  'wrong',
-  'retry',
-  'again',
-  'continue',
-  '重试'
-]);
-
 export function extractPromptsFromJsonl(jsonl: string, options: ExtractOptions): ExtractResult {
   const prompts: ExtractedPrompt[] = [];
   let warningCount = 0;
@@ -66,12 +48,11 @@ export function extractPromptsFromJsonl(jsonl: string, options: ExtractOptions):
         continue;
       }
 
-      const redacted = redactSecrets(extracted).trim();
-      if (isLowValuePrompt(redacted)) {
+      if (!extracted.trim()) {
         continue;
       }
 
-      const normalizedText = normalizePrompt(redacted);
+      const normalizedText = normalizePrompt(extracted);
       prompts.push({
         id: randomUUID(),
         sourceTool: options.sourceTool,
@@ -80,7 +61,7 @@ export function extractPromptsFromJsonl(jsonl: string, options: ExtractOptions):
         projectPath: asOptionalString(record.projectPath ?? record.cwd),
         timestamp: asOptionalString(record.timestamp),
         turnIndex: index,
-        rawText: redacted,
+        rawText: extracted,
         normalizedText,
         hash: sha256(normalizedText)
       });
@@ -90,15 +71,6 @@ export function extractPromptsFromJsonl(jsonl: string, options: ExtractOptions):
   }
 
   return { prompts, warningCount };
-}
-
-export function redactSecrets(text: string): string {
-  return text
-    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[REDACTED_SECRET]')
-    .replace(/\b(?:API_KEY|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*=\s*\S+/gi, '[REDACTED_SECRET]')
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED_SECRET]')
-    .replace(/\bghp_[A-Za-z0-9_]{8,}\b/g, '[REDACTED_SECRET]')
-    .replace(/\bxoxb-[A-Za-z0-9-]{8,}\b/g, '[REDACTED_SECRET]');
 }
 
 export function normalizePrompt(text: string): string {
@@ -112,23 +84,6 @@ export function normalizePrompt(text: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-}
-
-export function isLowValuePrompt(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.length < 8) {
-    return true;
-  }
-  if (LOW_VALUE_PROMPTS.has(trimmed.toLowerCase())) {
-    return true;
-  }
-  if (/^```[\s\S]*```$/.test(trimmed)) {
-    return true;
-  }
-  if (/^[./\\~:\w -]+\.[A-Za-z0-9]+$/.test(trimmed)) {
-    return true;
-  }
-  return false;
 }
 
 function getRole(record: Record<string, unknown>): string | null {

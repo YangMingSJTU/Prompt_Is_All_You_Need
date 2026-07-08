@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { resolveAppName } from '../shared/appIdentity';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
-import type { SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
+import type { ScanProvider, ScanRunRequest, ScanSourceConfig, SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
 import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
 import {
   DEFAULT_APP_SETTINGS,
@@ -12,9 +12,9 @@ import {
 } from '../shared/settings';
 import { openAppDatabase } from './services/database';
 import { createSpellService } from './services/spellService';
-import { generateCandidates } from './services/ranker';
+import { generateCandidates } from './services/candidateGenerator';
 import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './services/scanner';
-import { createSettingsService, type SettingsService } from './services/settingsService';
+import { createSettingsService, defaultScanSources, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
 import { getAppIconPath, getTrayIconPath } from './services/appAssets';
@@ -63,12 +63,12 @@ async function createFloatingWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
   floatingWindow = new BrowserWindow({
-    width: 560,
-    height: 420,
-    minWidth: 520,
-    minHeight: 360,
-    maxWidth: 680,
-    maxHeight: 520,
+    width: 420,
+    height: 320,
+    minWidth: 380,
+    minHeight: 280,
+    maxWidth: 460,
+    maxHeight: 360,
     title: appName,
     icon: getAppIconPath(),
     show: false,
@@ -133,6 +133,9 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('candidates:promote', (_event, candidateId: string) =>
     spellService.promoteCandidate(candidateId)
   );
+  ipcMain.handle('candidates:promoteBatch', (_event, candidateIds: string[]) =>
+    spellService.promoteCandidates(candidateIds)
+  );
   ipcMain.handle('analytics:get', () => spellService.getAnalytics());
   ipcMain.handle('skills:list', () => skillService.listSkills());
   ipcMain.handle('skills:scan', () => skillService.scanSkills());
@@ -148,6 +151,7 @@ async function bootstrap(): Promise<void> {
   });
   ipcMain.handle('settings:info', () => ({
     databasePath,
+    defaultScanSources: defaultScanSources(),
     historyRoots: defaultHistoryRoots(),
     skillRoots: skillService.getSkillRoots()
   }));
@@ -180,14 +184,38 @@ async function bootstrap(): Promise<void> {
     applyAppIdentity();
     return { settings };
   });
-  ipcMain.handle('scanner:run', async () => {
-    const roots = defaultHistoryRoots();
+  ipcMain.handle('scanner:run', async (_event, request: ScanRunRequest) => {
+    if (!settingsService) {
+      throw new Error('Settings service is not ready');
+    }
+    const scanRequest = normalizeScanRunRequest(request, settingsService.getSettings().scanSources);
+    const roots = scanRequest.scanSources.filter(
+      (source) =>
+        source.enabled &&
+        source.target === scanRequest.target &&
+        scanRequest.providers.includes(source.provider)
+    );
+    if (scanRequest.target === 'skills') {
+      const skills = await skillService.scanSkills(
+        roots.map((root) => ({ platform: root.provider, path: root.path }))
+      );
+      return {
+        id: randomUUID(),
+        target: scanRequest.target,
+        scannedPrompts: 0,
+        sourceFiles: [],
+        candidates: await spellService.listCandidates(),
+        skills,
+        warningCount: 0
+      };
+    }
+
     const summaries = [];
     const allPrompts = [];
 
     for (const root of roots) {
       const files = await discoverJsonlFiles(root.path);
-      const summary = await scanJsonlFiles(files, root.sourceTool);
+      const summary = await scanJsonlFiles(files, root.provider);
       summaries.push(...summary.sourceFiles);
       allPrompts.push(...summary.prompts);
     }
@@ -197,9 +225,11 @@ async function bootstrap(): Promise<void> {
 
     return {
       id: randomUUID(),
+      target: scanRequest.target,
       scannedPrompts: allPrompts.length,
       sourceFiles: summaries,
-      candidates,
+      candidates: await spellService.listCandidates(),
+      skills: await skillService.listSkills(),
       warningCount: summaries.reduce((total, source) => total + source.warningCount, 0)
     };
   });
@@ -240,6 +270,34 @@ function applyAppIdentity(): void {
   mainWindow?.setTitle(name);
   floatingWindow?.setTitle(name);
   tray?.setToolTip(name);
+}
+
+function normalizeScanRunRequest(request: ScanRunRequest, fallbackSources: ScanSourceConfig[]): ScanRunRequest {
+  const target = request?.target === 'skills' ? 'skills' : 'spells';
+  const providers = Array.isArray(request?.providers)
+    ? request.providers.filter((provider): provider is ScanProvider => provider === 'claude' || provider === 'codex')
+    : [];
+  const scanSources = Array.isArray(request?.scanSources)
+    ? request.scanSources.filter(isScanSourceConfig)
+    : [];
+  return {
+    target,
+    providers: providers.length ? [...new Set(providers)] : ['claude', 'codex'],
+    scanSources: scanSources.length ? scanSources : fallbackSources
+  };
+}
+
+function isScanSourceConfig(value: unknown): value is ScanSourceConfig {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const source = value as Record<string, unknown>;
+  return (
+    (source.provider === 'claude' || source.provider === 'codex') &&
+    (source.target === 'spells' || source.target === 'skills') &&
+    typeof source.path === 'string' &&
+    typeof source.enabled === 'boolean'
+  );
 }
 
 function registerQuickPanelShortcut(shortcut: ShortcutAccelerator): boolean {

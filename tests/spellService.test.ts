@@ -176,4 +176,82 @@ describe('spell service', () => {
     expect((await service.listSpells()).map((item) => item.id)).not.toContain(spell.id);
     expect((await service.getAnalytics()).totalCopies).toBe(0);
   });
+
+  it('promotes selected candidates in bulk and skips duplicate spell bodies', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    await service.createSpell({
+      name: 'Existing review',
+      body: 'Review the current git diff.',
+      tags: []
+    });
+    await service.saveCandidates([
+      {
+        id: 'candidate-duplicate',
+        slug: 'duplicate-review',
+        title: 'Review current diff',
+        description: '',
+        template: ' Review   the current git diff. ',
+        candidateType: 'spell',
+        sourceCount: 3,
+        score: 0.9,
+        status: 'pending',
+        examples: [],
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z'
+      },
+      {
+        id: 'candidate-new',
+        slug: 'new-debug',
+        title: 'Debug failing tests',
+        description: '',
+        template: 'Investigate failing tests and propose a fix.',
+        candidateType: 'spell',
+        sourceCount: 2,
+        score: 0.8,
+        status: 'pending',
+        examples: [],
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z'
+      }
+    ]);
+
+    const result = await service.promoteCandidates(['candidate-duplicate', 'candidate-new']);
+    const spells = await service.listSpells();
+    const candidates = await service.listCandidates();
+
+    expect(result.created.map((spell) => spell.body)).toEqual(['Investigate failing tests and propose a fix.']);
+    expect(result.skipped).toEqual([{ candidateId: 'candidate-duplicate', reason: 'duplicate' }]);
+    expect(spells.filter((spell) => spell.body.includes('Review the current git diff')).length).toBe(1);
+    expect(candidates.find((candidate) => candidate.id === 'candidate-duplicate')?.status).toBe('saved');
+    expect(candidates.find((candidate) => candidate.id === 'candidate-new')?.status).toBe('saved');
+  });
+
+  it('promotes candidate spells without trimming or wrapping the raw body', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    const rawBody = '  Keep this prompt spacing exactly.  \n\n# Heading';
+    await service.saveCandidates([
+      {
+        id: 'candidate-raw',
+        slug: 'raw-spacing',
+        title: 'Keep this prompt spacing exactly.',
+        description: '',
+        template: rawBody,
+        candidateType: 'spell',
+        sourceCount: 1,
+        score: 0.5,
+        status: 'pending',
+        examples: [rawBody],
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z'
+      }
+    ]);
+
+    const result = await service.promoteCandidates(['candidate-raw']);
+    const copied = await service.copySpell(result.created[0].id);
+
+    expect(result.created[0].body).toBe(rawBody);
+    expect(copied.body).toBe(rawBody);
+  });
 });

@@ -1,4 +1,4 @@
-import { Database, FolderSearch, Keyboard, Languages } from 'lucide-react';
+import { Database, Keyboard, Languages, RotateCw } from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -10,10 +10,12 @@ import {
   type QuickPanelPlacement,
   type SettingsInfo
 } from '../../shared/settings';
+import type { Candidate, ScanProvider, ScanSourceConfig, ScanTarget, SkillRecord } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
+  onChanged(): Promise<void>;
   settings: AppSettings;
   onSettingsChanged(settings: AppSettings): void;
   t: TFunction;
@@ -48,14 +50,33 @@ const PLACEMENT_OPTIONS: Array<{
   { value: 'mouse', labelKey: 'settings.placement.mouse' }
 ];
 
-export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewProps) {
+const SCAN_TARGET_OPTIONS: Array<{
+  value: ScanTarget;
+  labelKey: 'settings.scanTarget.spells' | 'settings.scanTarget.skills';
+}> = [
+  { value: 'spells', labelKey: 'settings.scanTarget.spells' },
+  { value: 'skills', labelKey: 'settings.scanTarget.skills' }
+];
+
+const SCAN_PROVIDERS: ScanProvider[] = ['claude', 'codex'];
+
+export function SettingsView({ onChanged, settings, onSettingsChanged, t }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('preferences');
   const [info, setInfo] = useState<SettingsInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [recordingShortcut, setRecordingShortcut] = useState(false);
   const [shortcutError, setShortcutError] = useState<string | null>(null);
+  const [scanTarget, setScanTarget] = useState<ScanTarget>('spells');
+  const [selectedProviders, setSelectedProviders] = useState<ScanProvider[]>(['claude', 'codex']);
+  const [scanCandidates, setScanCandidates] = useState<Candidate[]>([]);
+  const [scanSkills, setScanSkills] = useState<SkillRecord[]>([]);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+  const [runningScan, setRunningScan] = useState(false);
+  const [addingCandidates, setAddingCandidates] = useState(false);
   const shortcutButtonRef = useRef<HTMLButtonElement>(null);
   const { showToast } = useFeedbackToast();
+  const scanSources = Array.isArray(settings.scanSources) ? settings.scanSources : [];
+  const activeScanSources = scanSources.length ? scanSources : info?.defaultScanSources ?? [];
 
   useEffect(() => {
     void window.spellbook.getSettingsInfo().then(setInfo);
@@ -178,22 +199,123 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
         ) : null}
 
         {activeTab === 'localData' ? (
-          <SettingsSection title={t('settings.localData')} icon={FolderSearch}>
+          <SettingsSection title={t('settings.localData')} icon={Database}>
             <InfoRow label={t('settings.databasePath')} value={info?.databasePath ?? t('settings.loading')} />
-            {(info?.historyRoots ?? []).map((root) => (
-              <InfoRow
-                key={root.sourceTool}
-                label={`${root.sourceTool === 'claude' ? 'Claude' : 'Codex'} ${t('settings.historyRoot')}`}
-                value={root.path}
-              />
-            ))}
-            {(info?.skillRoots ?? []).map((root) => (
-              <InfoRow
-                key={root.platform}
-                label={`${root.platform === 'claude' ? 'Claude' : 'Codex'} ${t('settings.skillRoot')}`}
-                value={root.path}
-              />
-            ))}
+            <SettingRow label={t('settings.scanTarget')}>
+              <div className="settings-segmented">
+                {SCAN_TARGET_OPTIONS.map((option) => (
+                  <button
+                    className={scanTarget === option.value ? 'active' : ''}
+                    key={option.value}
+                    onClick={() => {
+                      setScanTarget(option.value);
+                      setSelectedCandidateIds([]);
+                    }}
+                    type="button"
+                  >
+                    {t(option.labelKey)}
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
+            <SettingRow label={t('settings.scanProvider')}>
+              <div className="settings-segmented">
+                {SCAN_PROVIDERS.map((provider) => (
+                  <button
+                    className={selectedProviders.includes(provider) ? 'active' : ''}
+                    key={provider}
+                    onClick={() => toggleProvider(provider)}
+                    type="button"
+                  >
+                    {provider === 'claude' ? 'Claude' : 'Codex'}
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
+            <div className="scan-source-list">
+              {activeScanSources
+                .filter((source) => source.target === scanTarget)
+                .map((source) => (
+                  <div className="scan-source-row" key={`${source.provider}:${source.target}`}>
+                    <span>{source.provider === 'claude' ? 'Claude' : 'Codex'}</span>
+                    <input
+                      onChange={(event) => updateScanSource(source, { path: event.target.value })}
+                      title={source.path}
+                      value={source.path}
+                    />
+                    <button
+                      className="secondary-button"
+                      onClick={() => resetScanSource(source)}
+                      type="button"
+                    >
+                      {t('settings.scanPath.reset')}
+                    </button>
+                  </div>
+                ))}
+            </div>
+            <div className="scan-actions">
+              <button
+                className="primary-button"
+                disabled={runningScan || selectedProviders.length === 0}
+                onClick={() => void runLocalScan()}
+                type="button"
+              >
+                <RotateCw size={16} />
+                {runningScan ? t('scanner.running') : t('scanner.run')}
+              </button>
+            </div>
+            {scanTarget === 'spells' ? (
+              <div className="candidate-results">
+                <div className="section-heading compact">
+                  <h3>{t('library.candidates')}</h3>
+                  <div className="button-row">
+                    <button className="secondary-button" onClick={selectAllCandidates} type="button">
+                      {t('scanner.selectAll')}
+                    </button>
+                    <button
+                      className="primary-button"
+                      disabled={addingCandidates || selectedCandidateIds.length === 0}
+                      onClick={() => void promoteSelectedCandidates()}
+                      type="button"
+                    >
+                      {t('scanner.addSelected')}
+                    </button>
+                  </div>
+                </div>
+                <div className="candidate-selection-list">
+                  {scanCandidates.map((candidate) => {
+                    const saved = candidate.status === 'saved';
+                    const selected = selectedCandidateIds.includes(candidate.id);
+                    return (
+                      <label className={saved ? 'candidate-select-row saved' : 'candidate-select-row'} key={candidate.id}>
+                        <input
+                          checked={selected}
+                          disabled={saved}
+                          onChange={() => toggleCandidate(candidate.id)}
+                          type="checkbox"
+                        />
+                        <span>
+                          <strong>{candidate.title}</strong>
+                          <small>{candidate.template}</small>
+                        </span>
+                        <em>{saved ? t('scanner.candidateSaved') : `${t('metric.score')} ${candidate.score}`}</em>
+                      </label>
+                    );
+                  })}
+                  {scanCandidates.length === 0 ? <div className="empty-state">{t('scanner.noCandidates')}</div> : null}
+                </div>
+              </div>
+            ) : (
+              <div className="skill-scan-results">
+                {scanSkills.map((skill) => (
+                  <div className="settings-info-row" key={skill.id}>
+                    <span>{skill.name}</span>
+                    <code title={skill.rootPath}>{skill.rootPath}</code>
+                  </div>
+                ))}
+                {scanSkills.length === 0 ? <div className="empty-state">{t('skill.empty')}</div> : null}
+              </div>
+            )}
           </SettingsSection>
         ) : null}
       </div>
@@ -241,6 +363,86 @@ export function SettingsView({ settings, onSettingsChanged, t }: SettingsViewPro
 
   async function updateShortcut(accelerator: string): Promise<void> {
     await updateSettings({ quickPanelShortcut: accelerator });
+  }
+
+  function toggleProvider(provider: ScanProvider): void {
+    setSelectedProviders((current) =>
+      current.includes(provider)
+        ? current.filter((item) => item !== provider)
+        : [...current, provider]
+    );
+  }
+
+  function updateScanSource(source: ScanSourceConfig, patch: Partial<ScanSourceConfig>): void {
+    void updateSettings({
+      scanSources: activeScanSources.map((item) =>
+        item.provider === source.provider && item.target === source.target
+          ? { ...item, ...patch }
+          : item
+      )
+    });
+  }
+
+  function resetScanSource(source: ScanSourceConfig): void {
+    const fallback = info?.defaultScanSources.find(
+      (item) => item.provider === source.provider && item.target === source.target
+    );
+    if (fallback) {
+      updateScanSource(source, { path: fallback.path, enabled: fallback.enabled });
+    }
+  }
+
+  async function runLocalScan(): Promise<void> {
+    setRunningScan(true);
+    try {
+      const result = await window.spellbook.runScan({
+        target: scanTarget,
+        providers: selectedProviders,
+        scanSources: activeScanSources
+      });
+      setScanCandidates(result.candidates);
+      setScanSkills(result.skills);
+      setSelectedCandidateIds([]);
+      showToast(
+        scanTarget === 'spells'
+          ? `${t('status.scanFinished')}: ${result.candidates.length}`
+          : `${t('status.skillScanFinished')}: ${result.skills.length}`
+      );
+      await onChanged();
+    } finally {
+      setRunningScan(false);
+    }
+  }
+
+  function toggleCandidate(candidateId: string): void {
+    setSelectedCandidateIds((current) =>
+      current.includes(candidateId)
+        ? current.filter((item) => item !== candidateId)
+        : [...current, candidateId]
+    );
+  }
+
+  function selectAllCandidates(): void {
+    setSelectedCandidateIds(
+      scanCandidates
+        .filter((candidate) => candidate.status !== 'saved')
+        .map((candidate) => candidate.id)
+    );
+  }
+
+  async function promoteSelectedCandidates(): Promise<void> {
+    setAddingCandidates(true);
+    try {
+      const result = await window.spellbook.promoteCandidates(selectedCandidateIds);
+      setScanCandidates(await window.spellbook.listCandidates());
+      setSelectedCandidateIds([]);
+      showToast(
+        `${t('scanner.addedCandidates')}: ${result.created.length}, ${t('scanner.skippedCandidates')}: ${result.skipped.length}`
+      );
+      await onChanged();
+    } finally {
+      setAddingCandidates(false);
+    }
   }
 }
 
