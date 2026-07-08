@@ -40,4 +40,22 @@ describe('spell library UI structure', () => {
     expect(styles).toContain('.tag-editor');
     expect(styles).toContain('.delete-confirm-popover');
   });
+
+  it('offers a compact plus new spell action and creates through a draft editor', () => {
+    const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+
+    expect(component).toContain('startNewSpell');
+    expect(component).toContain('createSpell');
+    expect(component).toContain("t('spell.new')");
+    expect(component).toContain("t('spell.create')");
+    expect(component).toContain('isCreating');
+    expect(component).toContain('aria-label={t(\'spell.new\')}');
+    expect(component).toContain('setSelectedTags([])');
+    expect(component).toContain('setQuery(\'\')');
+
+    expect(styles).toContain('.spell-toolbar-row');
+    expect(styles).toContain('.new-spell-button');
+    expect(styles.match(/\.new-spell-button\s*\{[^}]+height: 34px;[^}]+\}/s)?.[0]).toBeTruthy();
+  });
 });

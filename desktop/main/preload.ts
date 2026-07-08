@@ -1,12 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AppSettings } from '../shared/settings';
-import type { SkillPlatform, SpellUpdatePatch } from '../shared/types';
+import type { SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
 
 contextBridge.exposeInMainWorld('spellbook', {
   searchSpells: (query: string) => ipcRenderer.invoke('spells:search', query),
   listSpells: () => ipcRenderer.invoke('spells:list'),
   listPopularSpells: (limit?: number) => ipcRenderer.invoke('spells:popular', limit),
   copySpell: (spellId: string) => ipcRenderer.invoke('spells:copy', spellId),
+  createSpell: (input: SpellCreateInput) => ipcRenderer.invoke('spells:create', input),
   updateSpell: (spellId: string, patch: SpellUpdatePatch) => ipcRenderer.invoke('spells:update', spellId, patch),
   deleteSpell: (spellId: string) => ipcRenderer.invoke('spells:delete', spellId),
   listCandidates: () => ipcRenderer.invoke('candidates:list'),

@@ -39,6 +39,12 @@ export interface SpellUpdatePatch {
   tags?: string[];
 }
 
+export interface SpellCreateInput {
+  name?: string;
+  body: string;
+  tags?: string[];
+}
+
 export interface Candidate {
   id: string;
   slug: string;

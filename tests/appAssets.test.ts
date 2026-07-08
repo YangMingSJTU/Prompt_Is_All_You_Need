@@ -44,12 +44,32 @@ describe('app assets', () => {
 
     for (const sample of tileSamples) {
       expect(sample.a).toBeGreaterThanOrEqual(230);
-      expect(sample.r).toBeGreaterThanOrEqual(18);
+      expect(sample.r).toBeGreaterThanOrEqual(12);
       expect(sample.r).toBeLessThanOrEqual(58);
-      expect(sample.g).toBeGreaterThanOrEqual(18);
+      expect(sample.g).toBeGreaterThanOrEqual(14);
       expect(sample.g).toBeLessThanOrEqual(52);
-      expect(sample.b).toBeGreaterThanOrEqual(20);
+      expect(sample.b).toBeGreaterThanOrEqual(18);
       expect(sample.b).toBeLessThanOrEqual(48);
+    }
+  });
+
+  it('matches the icon tile background to the title bar color', () => {
+    const pngPath = join(process.cwd(), 'assets', 'icons', 'app-icon.png');
+    const tileSamples = [
+      readPngPixel(pngPath, 64, 512),
+      readPngPixel(pngPath, 960, 512),
+      readPngPixel(pngPath, 512, 64),
+      readPngPixel(pngPath, 512, 960)
+    ];
+
+    for (const sample of tileSamples) {
+      expect(sample.a).toBeGreaterThanOrEqual(230);
+      expect(sample.r).toBeGreaterThanOrEqual(12);
+      expect(sample.r).toBeLessThanOrEqual(20);
+      expect(sample.g).toBeGreaterThanOrEqual(14);
+      expect(sample.g).toBeLessThanOrEqual(22);
+      expect(sample.b).toBeGreaterThanOrEqual(18);
+      expect(sample.b).toBeLessThanOrEqual(26);
     }
   });
 

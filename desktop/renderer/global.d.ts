@@ -8,6 +8,7 @@ import type {
   SkillPlatform,
   SkillRecord,
   Spell,
+  SpellCreateInput,
   SpellUpdatePatch,
   SourceFileSummary,
   UsageAnalytics
@@ -20,6 +21,7 @@ declare global {
       listSpells(): Promise<Spell[]>;
       listPopularSpells(limit?: number): Promise<Spell[]>;
       copySpell(spellId: string): Promise<Spell>;
+      createSpell(input: SpellCreateInput): Promise<Spell>;
       updateSpell(spellId: string, patch: SpellUpdatePatch): Promise<Spell>;
       deleteSpell(spellId: string): Promise<void>;
       listCandidates(): Promise<Candidate[]>;

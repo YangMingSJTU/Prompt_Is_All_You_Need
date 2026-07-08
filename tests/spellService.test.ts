@@ -72,6 +72,39 @@ describe('spell service', () => {
     expect(copied.tags).toEqual(['review', 'code']);
   });
 
+  it('creates a manual spell and preserves raw body copy semantics', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    const body = '# Role\n\nUse short, direct answers.';
+
+    const created = await service.createSpell({
+      name: 'Short answer',
+      body,
+      tags: [' writing ', 'writing', 'daily']
+    });
+    const copied = await service.copySpell(created.id);
+
+    expect(created.source).toBe('manual');
+    expect(created.name).toBe('Short answer');
+    expect(created.body).toBe(body);
+    expect(created.tags).toEqual(['writing', 'daily']);
+    expect(copied.body).toBe(body);
+  });
+
+  it('rejects creating a spell with an empty body', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+
+    await expect(
+      service.createSpell({
+        name: 'Empty',
+        body: '   ',
+        tags: []
+      })
+    ).rejects.toThrow('Spell body cannot be empty');
+    expect(await service.listSpells()).toEqual([]);
+  });
+
   it('updates spell name body and tags without changing copy semantics', async () => {
     const db = await createTestDatabase();
     const service = createSpellService(db);

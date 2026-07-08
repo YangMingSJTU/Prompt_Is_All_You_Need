@@ -673,6 +673,14 @@ p {
   gap: 8px;
 }
 
+.spell-toolbar-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .spell-filter-search {
   display: flex;
   height: 34px;
@@ -700,6 +708,11 @@ p {
   background: transparent;
   color: var(--text);
   font-size: 13px;
+}
+
+.new-spell-button {
+  height: 34px;
+  padding: 0 11px;
 }
 
 .tag-filter-row,
@@ -984,6 +997,17 @@ p {
 
 .section-heading {
   min-height: 36px;
+}
+
+@media (max-width: 1080px) {
+  .new-spell-button {
+    width: 34px;
+    padding: 0;
+  }
+
+  .new-spell-button span {
+    display: none;
+  }
 }
 
 .summary-strip,

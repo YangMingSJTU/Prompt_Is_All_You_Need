@@ -25,6 +25,7 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
   const [addingTag, setAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
@@ -51,13 +52,17 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
     });
   }, [query, selectedTags, spells, t]);
 
-  const selectedSpell = useMemo(
+  const selectedExistingSpell = useMemo(
     () => filteredSpells.find((spell) => spell.id === selectedId) ?? filteredSpells[0] ?? null,
     [filteredSpells, selectedId]
   );
+  const selectedSpell = isCreating ? null : selectedExistingSpell;
   const [draft, setDraft] = useState<SpellDraft>(() => createDraft(selectedSpell));
 
   useEffect(() => {
+    if (isCreating) {
+      return;
+    }
     if (selectedSpell) {
       setSelectedId(selectedSpell.id);
     }
@@ -65,7 +70,7 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
     setAddingTag(false);
     setNewTag('');
     setDraft(createDraft(selectedSpell));
-  }, [selectedSpell?.id]);
+  }, [isCreating, selectedSpell?.id]);
 
   async function promote(candidate: Candidate): Promise<void> {
     const spell = await window.spellbook.promoteCandidate(candidate.id);
@@ -81,6 +86,21 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
   }
 
   async function saveSelected(): Promise<void> {
+    if (isCreating) {
+      if (!draft.body.trim()) {
+        return;
+      }
+      const spell = await window.spellbook.createSpell({
+        name: draft.name.trim() || deriveSpellName(draft.body, t('spell.untitled')),
+        body: draft.body,
+        tags: draft.tags
+      });
+      showToast(t('spell.created'));
+      await onChanged();
+      setSelectedId(spell.id);
+      setIsCreating(false);
+      return;
+    }
     if (!selectedSpell) {
       return;
     }
@@ -107,6 +127,25 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
 
   function resetDraft(): void {
     setDraft(createDraft(selectedSpell));
+    setAddingTag(false);
+    setNewTag('');
+  }
+
+  function startNewSpell(): void {
+    setQuery('');
+    setSelectedTags([]);
+    setSelectedId(null);
+    setConfirmingDelete(false);
+    setAddingTag(false);
+    setNewTag('');
+    setDraft(createDraft(null));
+    setIsCreating(true);
+  }
+
+  function cancelCreate(): void {
+    setIsCreating(false);
+    setSelectedId(spells[0]?.id ?? null);
+    setDraft(createDraft(spells[0] ?? null));
     setAddingTag(false);
     setNewTag('');
   }
@@ -151,14 +190,26 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
     <section className="spell-library-grid">
       <div className="spell-list-pane">
         <div className="spell-library-toolbar">
-          <label className="spell-filter-search">
-            <Search size={15} />
-            <input
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('spell.search')}
-              value={query}
-            />
-          </label>
+          <div className="spell-toolbar-row">
+            <label className="spell-filter-search">
+              <Search size={15} />
+              <input
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('spell.search')}
+                value={query}
+              />
+            </label>
+            <button
+              aria-label={t('spell.new')}
+              className="secondary-button new-spell-button"
+              onClick={startNewSpell}
+              title={t('spell.new')}
+              type="button"
+            >
+              <Plus size={16} />
+              <span>{t('spell.new')}</span>
+            </button>
+          </div>
           {allTags.length ? (
             <div className="tag-filter-row" aria-label={t('spell.tags')}>
               <button
@@ -188,7 +239,14 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
               className={selectedSpell?.id === spell.id ? 'spell-list-row selected' : 'spell-list-row'}
               key={spell.id}
             >
-              <button className="spell-row-main" onClick={() => setSelectedId(spell.id)} type="button">
+              <button
+                className="spell-row-main"
+                onClick={() => {
+                  setIsCreating(false);
+                  setSelectedId(spell.id);
+                }}
+                type="button"
+              >
                 <div className="spell-row-title" title={getSpellName(spell, t)}>
                   {getSpellName(spell, t)}
                 </div>
@@ -246,7 +304,7 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
         ) : null}
       </div>
       <div className="spell-editor-pane">
-        {selectedSpell ? (
+        {selectedSpell || isCreating ? (
           <form
             className="spell-editor-form"
             onSubmit={(event) => {
@@ -256,41 +314,45 @@ export function LibraryView({ spells, candidates, onChanged, t }: LibraryViewPro
           >
             <div className="detail-heading">
               <div className="button-row end">
-                <button
-                  className="secondary-button"
-                  onClick={() => void copy(selectedSpell)}
-                  type="button"
-                >
-                  <Clipboard size={16} />
-                  {t('spell.copy')}
-                </button>
-                <button className="secondary-button" onClick={resetDraft} type="button">
+                {selectedSpell ? (
+                  <button
+                    className="secondary-button"
+                    onClick={() => void copy(selectedSpell)}
+                    type="button"
+                  >
+                    <Clipboard size={16} />
+                    {t('spell.copy')}
+                  </button>
+                ) : null}
+                <button className="secondary-button" onClick={isCreating ? cancelCreate : resetDraft} type="button">
                   <X size={16} />
                   {t('spell.cancel')}
                 </button>
-                <div className="delete-action">
-                  <button
-                    className="secondary-button danger-button"
-                    onClick={() => setConfirmingDelete(true)}
-                    type="button"
-                  >
-                    <Trash2 size={16} />
-                    {t('spell.delete')}
-                  </button>
-                  {confirmingDelete ? (
-                    <div className="delete-confirm-popover">
-                      <button className="danger-confirm" onClick={() => void deleteSpell()} type="button">
-                        {t('spell.deleteConfirm')}
-                      </button>
-                      <button onClick={() => setConfirmingDelete(false)} type="button">
-                        {t('spell.deleteCancel')}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
+                {selectedSpell ? (
+                  <div className="delete-action">
+                    <button
+                      className="secondary-button danger-button"
+                      onClick={() => setConfirmingDelete(true)}
+                      type="button"
+                    >
+                      <Trash2 size={16} />
+                      {t('spell.delete')}
+                    </button>
+                    {confirmingDelete ? (
+                      <div className="delete-confirm-popover">
+                        <button className="danger-confirm" onClick={() => void deleteSpell()} type="button">
+                          {t('spell.deleteConfirm')}
+                        </button>
+                        <button onClick={() => setConfirmingDelete(false)} type="button">
+                          {t('spell.deleteCancel')}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <button className="primary-button" disabled={!draft.body.trim()} type="submit">
                   <Save size={16} />
-                  {t('spell.save')}
+                  {isCreating ? t('spell.create') : t('spell.save')}
                 </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Candidate, Spell, SpellUpdatePatch, UsageAnalytics } from '../../shared/types';
+import type { Candidate, Spell, SpellCreateInput, SpellUpdatePatch, UsageAnalytics } from '../../shared/types';
 import type { AppDatabase } from './database';
 
 interface SpellRow extends Record<string, unknown> {
@@ -125,6 +125,34 @@ export function createSpellService(db: AppDatabase) {
         [randomUUID(), spellId, 'copy', new Date().toISOString()]
       );
       await db.save();
+      return rowToSpell(row);
+    },
+
+    async createSpell(input: SpellCreateInput): Promise<Spell> {
+      if (!input.body.trim()) {
+        throw new Error('Spell body cannot be empty');
+      }
+      const now = new Date().toISOString();
+      const spellId = randomUUID();
+      db.run(
+        `INSERT INTO spells
+          (id, name, body, tags, source, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          spellId,
+          input.name?.trim() ?? '',
+          input.body,
+          JSON.stringify(normalizeTags(input.tags ?? [])),
+          'manual',
+          now,
+          now
+        ]
+      );
+      await db.save();
+      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+      if (!row) {
+        throw new Error(`Created spell not found: ${spellId}`);
+      }
       return rowToSpell(row);
     },
 
