@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
+import { sortSpells, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
+import { SpellSortMenu } from './SpellSortMenu';
 
 interface LibraryViewProps {
   spells: Spell[];
@@ -27,6 +29,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [newTag, setNewTag] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [sortMode, setSortMode] = useState<SpellSortMode>('updated');
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
@@ -41,7 +44,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
 
   const filteredSpells = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return spells.filter((spell) => {
+    const filtered = spells.filter((spell) => {
       const matchesQuery =
         !normalizedQuery ||
         getSpellName(spell, t).toLowerCase().includes(normalizedQuery) ||
@@ -51,7 +54,8 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
       return matchesQuery && matchesTags;
     });
-  }, [query, selectedTags, spells, t]);
+    return sortSpells(filtered, sortMode, (spell) => getSpellName(spell, t));
+  }, [query, selectedTags, sortMode, spells, t]);
 
   const selectedExistingSpell = useMemo(
     () => filteredSpells.find((spell) => spell.id === selectedId) ?? filteredSpells[0] ?? null,
@@ -207,6 +211,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                 value={query}
               />
             </label>
+            <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
             <button
               aria-label={t('spell.new')}
               className="secondary-button new-spell-button"

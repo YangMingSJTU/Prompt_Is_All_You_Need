@@ -12,6 +12,9 @@ describe('spell library UI structure', () => {
     expect(component).toContain('selectedTags');
     expect(component).toContain('allTags');
     expect(component).toContain("t('spell.allTags')");
+    expect(component).toContain('SpellSortMenu');
+    expect(component).toContain('sortSpells');
+    expect(component).toContain('variant="button"');
     expect(component).toContain('deriveSpellName');
     expect(component).toContain('spell.body.toLowerCase().includes(normalizedQuery)');
     expect(component).toContain('spell.tags.some');
@@ -51,6 +54,9 @@ describe('spell library UI structure', () => {
 
     expect(component).toContain('spell-library-toolbar');
     expect(component).toContain('spell-filter-search');
+    expect(component).toContain('SpellSortMenu');
+    expect(component).toContain('sortSpells');
+    expect(component).toContain('variant="button"');
     expect(component).toContain('tag-filter-row');
     expect(component).toContain('selectedTags');
     expect(component).toContain('tag-editor');

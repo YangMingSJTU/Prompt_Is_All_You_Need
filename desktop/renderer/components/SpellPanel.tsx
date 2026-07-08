@@ -3,7 +3,9 @@ import { useMemo, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
+import { sortSpells, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
+import { SpellSortMenu } from './SpellSortMenu';
 
 interface SpellPanelProps {
   spells: Spell[];
@@ -16,6 +18,7 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
+  const [sortMode, setSortMode] = useState<SpellSortMode>('usage');
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
@@ -30,7 +33,7 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return spells.filter((spell) => {
+    const filteredSpells = spells.filter((spell) => {
       const matchesQuery =
         !normalizedQuery ||
         getSpellName(spell, t).toLowerCase().includes(normalizedQuery) ||
@@ -40,7 +43,8 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
       return matchesQuery && matchesTags;
     });
-  }, [spells, query, selectedTags, t]);
+    return sortSpells(filteredSpells, sortMode, (spell) => getSpellName(spell, t));
+  }, [spells, query, selectedTags, sortMode, t]);
 
   const selected = filtered.find((spell) => spell.id === selectedId) ?? filtered[0] ?? null;
 
@@ -61,16 +65,19 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
       <div className="search-pane">
         <div className="pane-toolbar">
           <h3>{t('nav.panel')}</h3>
-          <button
-            aria-label={t('spell.new')}
-            className="secondary-button new-spell-button"
-            onClick={onCreateSpell}
-            title={t('spell.new')}
-            type="button"
-          >
-            <Plus size={16} />
-            <span>{t('spell.new')}</span>
-          </button>
+          <div className="toolbar-actions">
+            <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
+            <button
+              aria-label={t('spell.new')}
+              className="secondary-button new-spell-button"
+              onClick={onCreateSpell}
+              title={t('spell.new')}
+              type="button"
+            >
+              <Plus size={16} />
+              <span>{t('spell.new')}</span>
+            </button>
+          </div>
         </div>
         <label className="search-box">
           <Search size={18} />

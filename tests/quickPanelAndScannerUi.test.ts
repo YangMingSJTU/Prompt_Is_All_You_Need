@@ -90,21 +90,28 @@ describe('scanner placement and floating quick panel UI', () => {
 
   it('provides a compact sort control for quick panel spell ordering', () => {
     const component = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
+    const sortMenu = readFileSync('desktop/renderer/components/SpellSortMenu.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const i18n = readFileSync('desktop/renderer/i18n.ts', 'utf8');
 
-    expect(component).toContain('type QuickPanelSortMode');
-    expect(component).toContain("'usage'");
-    expect(component).toContain("'created'");
-    expect(component).toContain("'updated'");
-    expect(component).toContain("'name'");
-    expect(component).toContain("'nameLength'");
+    expect(component).toContain('SpellSortMenu');
     expect(component).toContain('sortSpells');
-    expect(component).toContain('floating-sort');
-    expect(component).toContain('t(option.labelKey)');
+    expect(component).toContain('variant="icon"');
+    expect(component).not.toContain('<select');
+    expect(component).not.toContain('className="floating-sort"');
+
+    expect(sortMenu).toContain('ArrowUpDown');
+    expect(sortMenu).toContain('role="menu"');
+    expect(sortMenu).toContain('role="menuitemradio"');
+    expect(sortMenu).toContain('aria-checked');
+    expect(sortMenu).toContain('Check');
 
     expect(styles).toContain('.floating-search-row');
-    expect(styles).toContain('.floating-sort');
+    expect(styles).toContain('.sort-menu-root');
+    expect(styles).toContain('.sort-menu-button');
+    expect(styles).toContain('.sort-menu-popover');
+    expect(styles).toContain('.sort-menu-option');
+    expect(styles).not.toContain('.floating-sort {');
 
     expect(i18n).toContain("'floating.sort.usage': '常用优先'");
     expect(i18n).toContain("'floating.sort.created': '最近添加'");

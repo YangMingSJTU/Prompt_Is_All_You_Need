@@ -4,35 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
+import { sortSpells, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
+import { SpellSortMenu } from './SpellSortMenu';
 
 interface FloatingPanelProps {
   t: TFunction;
 }
 
-type QuickPanelSortMode = 'usage' | 'created' | 'updated' | 'name' | 'nameLength';
-
-const QUICK_PANEL_SORT_OPTIONS: Array<{
-  value: QuickPanelSortMode;
-  labelKey:
-    | 'floating.sort.usage'
-    | 'floating.sort.created'
-    | 'floating.sort.updated'
-    | 'floating.sort.name'
-    | 'floating.sort.nameLength';
-}> = [
-  { value: 'usage', labelKey: 'floating.sort.usage' },
-  { value: 'created', labelKey: 'floating.sort.created' },
-  { value: 'updated', labelKey: 'floating.sort.updated' },
-  { value: 'name', labelKey: 'floating.sort.name' },
-  { value: 'nameLength', labelKey: 'floating.sort.nameLength' }
-];
-
 export function FloatingPanel({ t }: FloatingPanelProps) {
   const [query, setQuery] = useState('');
   const [spells, setSpells] = useState<Spell[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [sortMode, setSortMode] = useState<QuickPanelSortMode>('usage');
+  const [sortMode, setSortMode] = useState<SpellSortMode>('usage');
   const { showToast } = useFeedbackToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -59,7 +43,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   }, []);
 
   const visibleSpells = useMemo(() => {
-    const sorted = sortSpells(spells, sortMode, t);
+    const sorted = sortSpells(spells, sortMode, (spell) => getFloatingSpellName(spell, t));
     return query.trim() ? sorted : sorted.slice(0, 5);
   }, [query, sortMode, spells, t]);
   const selected = useMemo(() => visibleSpells[selectedIndex] ?? null, [visibleSpells, selectedIndex]);
@@ -104,22 +88,15 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
             value={query}
           />
         </label>
-        <select
-          aria-label={t('floating.sort.label')}
-          className="floating-sort"
-          onChange={(event) => {
-            setSortMode(event.target.value as QuickPanelSortMode);
+        <SpellSortMenu
+          t={t}
+          value={sortMode}
+          onChange={(value) => {
+            setSortMode(value);
             setSelectedIndex(0);
           }}
-          title={t('floating.sort.label')}
-          value={sortMode}
-        >
-          {QUICK_PANEL_SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {t(option.labelKey)}
-            </option>
-          ))}
-        </select>
+          variant="icon"
+        />
       </div>
       <section className="floating-results">
         {visibleSpells.map((spell, index) => (
@@ -152,36 +129,4 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
 function getFloatingSpellName(spell: Spell, t: TFunction): string {
   return spell.name || deriveSpellName(spell.body, t('spell.untitled'));
-}
-
-function sortSpells(spells: Spell[], sortMode: QuickPanelSortMode, t: TFunction): Spell[] {
-  return [...spells].sort((left, right) => {
-    if (sortMode === 'usage') {
-      return right.copyCount - left.copyCount || compareUpdatedAt(left, right) || compareName(left, right, t);
-    }
-    if (sortMode === 'created') {
-      return compareDateDesc(left.createdAt, right.createdAt) || compareName(left, right, t);
-    }
-    if (sortMode === 'updated') {
-      return compareUpdatedAt(left, right) || compareName(left, right, t);
-    }
-    if (sortMode === 'nameLength') {
-      return getFloatingSpellName(left, t).length - getFloatingSpellName(right, t).length || compareName(left, right, t);
-    }
-    return compareName(left, right, t);
-  });
-}
-
-function compareUpdatedAt(left: Spell, right: Spell): number {
-  return compareDateDesc(left.updatedAt, right.updatedAt);
-}
-
-function compareDateDesc(left: string, right: string): number {
-  return Date.parse(right) - Date.parse(left);
-}
-
-function compareName(left: Spell, right: Spell, t: TFunction): number {
-  return getFloatingSpellName(left, t).localeCompare(getFloatingSpellName(right, t), undefined, {
-    sensitivity: 'base'
-  });
 }
