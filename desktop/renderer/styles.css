@@ -1266,13 +1266,20 @@ p {
 }
 
 .settings-content {
+  display: flex;
+  min-height: 0;
   min-width: 0;
   overflow: auto;
   padding: 18px 24px;
 }
 
 .settings-section {
+  display: flex;
+  width: 100%;
   max-width: 820px;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .settings-section-heading {
@@ -1304,6 +1311,13 @@ p {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+}
+
+.settings-section.fill .settings-card {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .setting-row,
@@ -1481,7 +1495,7 @@ p {
 .scan-source-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: 90px minmax(0, 1fr) auto;
+  grid-template-columns: 90px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--border);
@@ -1513,8 +1527,19 @@ p {
   padding: 0 9px;
 }
 
+.scan-source-row input:read-only {
+  cursor: default;
+  background: var(--muted-surface);
+}
+
 .scan-source-row input:focus {
   border-color: var(--accent);
+}
+
+.icon-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .scan-actions {
@@ -1526,15 +1551,20 @@ p {
 
 .candidate-results,
 .skill-scan-results {
-  display: grid;
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
 }
 
 .candidate-selection-list {
   display: grid;
-  max-height: 300px;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1686,6 +1716,13 @@ p {
   padding: 10px;
 }
 
+.floating-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+}
+
 .floating-search {
   display: flex;
   height: 32px;
@@ -1763,6 +1800,23 @@ p {
   place-items: center;
   color: var(--muted);
   font-size: 13px;
+}
+
+.floating-sort {
+  width: 104px;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  outline: 0;
+  padding: 0 8px;
+}
+
+.floating-sort:focus {
+  border-color: var(--accent);
 }
 
 .floating-preview {

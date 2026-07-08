@@ -1,4 +1,4 @@
-import { Database, Keyboard, Languages, RotateCw } from 'lucide-react';
+import { Database, FolderOpen, Keyboard, Languages, RotateCw } from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -199,7 +199,7 @@ export function SettingsView({ onChanged, settings, onSettingsChanged, t }: Sett
         ) : null}
 
         {activeTab === 'localData' ? (
-          <SettingsSection title={t('settings.localData')} icon={Database}>
+          <SettingsSection title={t('settings.localData')} icon={Database} fill>
             <InfoRow label={t('settings.databasePath')} value={info?.databasePath ?? t('settings.loading')} />
             <SettingRow label={t('settings.scanTarget')}>
               <div className="settings-segmented">
@@ -239,10 +239,19 @@ export function SettingsView({ onChanged, settings, onSettingsChanged, t }: Sett
                   <div className="scan-source-row" key={`${source.provider}:${source.target}`}>
                     <span>{source.provider === 'claude' ? 'Claude' : 'Codex'}</span>
                     <input
-                      onChange={(event) => updateScanSource(source, { path: event.target.value })}
+                      aria-label={`${source.provider === 'claude' ? 'Claude' : 'Codex'} ${t('metric.path')}`}
+                      readOnly
                       title={source.path}
                       value={source.path}
                     />
+                    <button
+                      className="secondary-button icon-text-button"
+                      onClick={() => void chooseScanSourceDirectory(source)}
+                      type="button"
+                    >
+                      <FolderOpen size={15} />
+                      {t('settings.scanPath.choose')}
+                    </button>
                     <button
                       className="secondary-button"
                       onClick={() => resetScanSource(source)}
@@ -392,6 +401,13 @@ export function SettingsView({ onChanged, settings, onSettingsChanged, t }: Sett
     }
   }
 
+  async function chooseScanSourceDirectory(source: ScanSourceConfig): Promise<void> {
+    const selectedPath = await window.spellbook.selectDirectory(source.path);
+    if (selectedPath) {
+      updateScanSource(source, { path: selectedPath });
+    }
+  }
+
   async function runLocalScan(): Promise<void> {
     setRunningScan(true);
     try {
@@ -449,14 +465,16 @@ export function SettingsView({ onChanged, settings, onSettingsChanged, t }: Sett
 function SettingsSection({
   title,
   icon: Icon,
-  children
+  children,
+  fill = false
 }: {
   title: string;
   icon: typeof Languages;
   children: ReactNode;
+  fill?: boolean;
 }) {
   return (
-    <div className="settings-section">
+    <div className={fill ? 'settings-section fill' : 'settings-section'}>
       <div className="settings-section-heading">
         <Icon size={15} />
         <h3>{title}</h3>

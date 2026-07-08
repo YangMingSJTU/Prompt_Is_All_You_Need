@@ -17,6 +17,7 @@ interface SpellRow extends Record<string, unknown> {
   source: string;
   created_at: string;
   updated_at: string;
+  copy_count?: number;
 }
 
 interface CountRow extends Record<string, unknown> {
@@ -38,7 +39,7 @@ interface CandidateRow extends Record<string, unknown> {
   updated_at: string;
 }
 
-const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt'>> = [
+const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt' | 'copyCount'>> = [
   {
     name: 'Review current diff',
     body: [
@@ -92,10 +93,13 @@ export function createSpellService(db: AppDatabase) {
       const normalized = `%${query.toLowerCase()}%`;
       return db
         .all<SpellRow>(
-          `SELECT * FROM spells
+          `SELECT spells.*, COUNT(usage_events.id) AS copy_count
+           FROM spells
+           LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
            WHERE lower(name) LIKE ?
               OR lower(body) LIKE ?
               OR lower(tags) LIKE ?
+           GROUP BY spells.id
            ORDER BY updated_at DESC, body ASC`,
           [normalized, normalized, normalized]
         )
@@ -104,18 +108,24 @@ export function createSpellService(db: AppDatabase) {
 
     async listSpells(): Promise<Spell[]> {
       return db
-        .all<SpellRow>('SELECT * FROM spells ORDER BY updated_at DESC, body ASC')
+        .all<SpellRow>(
+          `SELECT spells.*, COUNT(usage_events.id) AS copy_count
+           FROM spells
+           LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
+           GROUP BY spells.id
+           ORDER BY updated_at DESC, body ASC`
+        )
         .map(rowToSpell);
     },
 
     async listPopularSpells(limit = 6): Promise<Spell[]> {
       return db
         .all<SpellRow>(
-          `SELECT spells.*
+          `SELECT spells.*, COUNT(usage_events.id) AS copy_count
            FROM spells
            LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
            GROUP BY spells.id
-           ORDER BY COUNT(usage_events.id) DESC, spells.updated_at DESC, spells.body ASC
+           ORDER BY copy_count DESC, spells.updated_at DESC, spells.body ASC
            LIMIT ?`,
           [limit]
         )
@@ -229,6 +239,11 @@ export function createSpellService(db: AppDatabase) {
       await db.save();
     },
 
+    async replaceCandidates(candidates: Candidate[]): Promise<void> {
+      db.run('DELETE FROM candidates');
+      await this.saveCandidates(candidates);
+    },
+
     async listCandidates(): Promise<Candidate[]> {
       return db
         .all<CandidateRow>(
@@ -328,7 +343,8 @@ function rowToSpell(row: SpellRow): Spell {
     tags: parseTags(row.tags),
     source: row.source,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    copyCount: Number(row.copy_count ?? 0)
   };
 }
 

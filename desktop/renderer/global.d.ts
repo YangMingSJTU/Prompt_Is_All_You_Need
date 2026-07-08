@@ -46,6 +46,7 @@ declare global {
       getSettings(): Promise<AppSettings>;
       getSettingsInfo(): Promise<SettingsInfo>;
       updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;
+      selectDirectory(defaultPath?: string): Promise<string | null>;
       onFloatingFocus(callback: () => void): () => void;
       closeFloatingWindow(): Promise<void>;
     };

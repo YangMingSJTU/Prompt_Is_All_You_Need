@@ -35,6 +35,7 @@ export interface Spell {
   source: string;
   createdAt: string;
   updatedAt: string;
+  copyCount: number;
 }
 
 export interface SpellUpdatePatch {

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('spellbook', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   getSettingsInfo: () => ipcRenderer.invoke('settings:info'),
   updateSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('settings:update', patch),
+  selectDirectory: (defaultPath?: string) => ipcRenderer.invoke('dialog:selectDirectory', defaultPath),
   onFloatingFocus: (callback: () => void) => {
     const listener = () => callback();
     ipcRenderer.on('floating:focus-search', listener);

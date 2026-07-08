@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { resolveAppName } from '../shared/appIdentity';
@@ -155,6 +155,17 @@ async function bootstrap(): Promise<void> {
     historyRoots: defaultHistoryRoots(),
     skillRoots: skillService.getSkillRoots()
   }));
+  ipcMain.handle('dialog:selectDirectory', async (event, defaultPath?: string) => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      defaultPath: typeof defaultPath === 'string' && defaultPath.trim() ? defaultPath : undefined,
+      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
+    };
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options);
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
   ipcMain.handle('settings:update', async (_event, patch: Partial<AppSettings>) => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
@@ -221,7 +232,7 @@ async function bootstrap(): Promise<void> {
     }
 
     const candidates = generateCandidates(allPrompts);
-    await spellService.saveCandidates(candidates);
+    await spellService.replaceCandidates(candidates);
 
     return {
       id: randomUUID(),

@@ -44,6 +44,21 @@ describe('spell service', () => {
       'Generate a concise commit message for the current changes.',
       'Review the current git diff.'
     ]);
+    expect(popular.map((spell) => spell.copyCount)).toEqual([2, 1]);
+  });
+
+  it('returns copy counts for searched spells so the quick panel can sort search results by usage', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    await service.seedStarterSpells();
+    const [commit] = await service.searchSpells('commit');
+
+    await service.copySpell(commit.id);
+    await service.copySpell(commit.id);
+
+    const [result] = await service.searchSpells('commit');
+
+    expect(result.copyCount).toBe(2);
   });
 
   it('copies the raw spell body without title slug or frontmatter', async () => {
@@ -253,5 +268,47 @@ describe('spell service', () => {
 
     expect(result.created[0].body).toBe(rawBody);
     expect(copied.body).toBe(rawBody);
+  });
+
+  it('replaces stale scan candidates with the latest raw candidates', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    await service.saveCandidates([
+      {
+        id: 'old-template',
+        slug: 'spell-old-template',
+        title: 'Review current diff',
+        description: '',
+        template: 'Review the current git diff. Focus on correctness bugs.',
+        candidateType: 'spell',
+        sourceCount: 1,
+        score: 0.5,
+        status: 'pending',
+        examples: [],
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z'
+      }
+    ]);
+
+    await service.replaceCandidates([
+      {
+        id: 'new-raw',
+        slug: 'spell-new-raw',
+        title: '这是我的中文提示词',
+        description: '',
+        template: '这是我的中文提示词，不要加工。',
+        candidateType: 'spell',
+        sourceCount: 1,
+        score: 0.5,
+        status: 'pending',
+        examples: ['这是我的中文提示词，不要加工。'],
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z'
+      }
+    ]);
+
+    const candidates = await service.listCandidates();
+
+    expect(candidates.map((candidate) => candidate.template)).toEqual(['这是我的中文提示词，不要加工。']);
   });
 });
