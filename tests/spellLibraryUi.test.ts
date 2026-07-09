@@ -16,6 +16,9 @@ describe('spell library UI structure', () => {
     expect(component).toContain('sortSpells');
     expect(component).toContain('variant="button"');
     expect(component).toContain('quick-panel-controls');
+    expect(component).toContain('TraitFilterMenu');
+    expect(component).not.toContain('pane-toolbar');
+    expect(component).not.toContain('quick-panel-traits');
     expect(component).not.toContain('toolbar-actions');
     expect(component).toContain('deriveSpellName');
     expect(component).toContain('spell.body.toLowerCase().includes(normalizedQuery)');
@@ -110,17 +113,31 @@ describe('spell library UI structure', () => {
     expect(spellList).toContain('overflow: auto;');
   });
 
-  it('keeps quick panel controls aligned without a visible trait scrollbar', () => {
+  it('removes repeated quick panel headings and uses a trait menu instead of a chip strip', () => {
+    const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
+    const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const controls = styles.match(/\.quick-panel-controls\s*\{[^}]+\}/s)?.[0] ?? '';
-    const traits = styles.match(/\.quick-panel-traits\s*\{[^}]+\}/s)?.[0] ?? '';
-    const webkitScrollbar = styles.match(/\.quick-panel-traits::-webkit-scrollbar\s*\{[^}]+\}/s)?.[0] ?? '';
+    const workspace = styles.match(/\.workspace\s*\{[^}]+\}/s)?.[0] ?? '';
+    const popover = styles.match(/\.trait-filter-popover\s*\{[^}]+\}/s)?.[0] ?? '';
+    const list = styles.match(/\.trait-filter-list\s*\{[^}]+\}/s)?.[0] ?? '';
 
+    expect(app).not.toContain('className="topbar"');
+    expect(app).not.toContain('topbar-title');
+    expect(component).not.toContain('<h3>{t(\'nav.panel\')}</h3>');
+    expect(component).toContain('TraitFilterMenu');
+    expect(component).toContain('traitFilterQuery');
+    expect(component).toContain('setSelectedTags([])');
+    expect(component).toContain('selectedTags.length ?');
+    expect(component).toContain('role="menuitemcheckbox"');
+    expect(component).toContain('aria-checked');
+    expect(component).not.toContain('quick-panel-traits');
+    expect(workspace).not.toContain('grid-template-rows: 53px minmax(0, 1fr)');
     expect(controls).toContain('display: grid;');
-    expect(controls).toContain('grid-template-columns: minmax(0, 1fr) auto auto;');
+    expect(controls).toContain('grid-template-columns: minmax(0, 1fr) auto auto auto;');
     expect(controls).toContain('align-items: center;');
-    expect(traits).toContain('scrollbar-width: none;');
-    expect(traits).toContain('padding-bottom: 0;');
-    expect(webkitScrollbar).toContain('display: none;');
+    expect(popover).toContain('position: absolute;');
+    expect(list).toContain('max-height: 240px;');
+    expect(list).toContain('overflow: auto;');
   });
 });

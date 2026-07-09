@@ -109,12 +109,6 @@ export function App() {
     return <SpellPanel spells={spells} onCreateSpell={openNewSpellDraft} onChanged={refresh} t={t} />;
   }, [analytics, candidates, libraryCreateRequestId, openNewSpellDraft, refresh, settings, skills, spells, t, view]);
 
-  const selectedNavItem =
-    view === 'settings'
-      ? { id: 'settings' as const, labelKey: 'settings.title' as const, icon: Settings }
-      : NAV_ITEMS.find((item) => item.id === view) ?? NAV_ITEMS[0];
-  const PageIcon = selectedNavItem.icon;
-
   return (
     <FeedbackToastProvider>
       <div className="app-frame">
@@ -154,15 +148,7 @@ export function App() {
               </button>
             </div>
           </aside>
-          <main className="workspace">
-            <header className="topbar">
-              <div className="topbar-title">
-                <PageIcon size={16} />
-                <h2>{t(selectedNavItem.labelKey)}</h2>
-              </div>
-            </header>
-            {selectedView}
-          </main>
+          <main className="workspace">{selectedView}</main>
         </div>
       </div>
     </FeedbackToastProvider>

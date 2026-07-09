@@ -1,5 +1,5 @@
-import { Clipboard, Plus, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Check, Clipboard, Plus, Search, Tags, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
@@ -11,6 +11,14 @@ interface SpellPanelProps {
   spells: Spell[];
   onCreateSpell(): void;
   onChanged(): Promise<void>;
+  t: TFunction;
+}
+
+interface TraitFilterMenuProps {
+  tags: string[];
+  selectedTags: string[];
+  onClear(): void;
+  onToggle(tag: string): void;
   t: TFunction;
 }
 
@@ -63,9 +71,6 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
   return (
     <section className="panel-grid">
       <div className="search-pane">
-        <div className="pane-toolbar">
-          <h3>{t('nav.panel')}</h3>
-        </div>
         <div className="quick-panel-controls">
           <label className="search-box">
             <Search size={18} />
@@ -76,6 +81,13 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
               value={query}
             />
           </label>
+          <TraitFilterMenu
+            tags={allTags}
+            selectedTags={selectedTags}
+            onClear={() => setSelectedTags([])}
+            onToggle={toggleFilterTag}
+            t={t}
+          />
           <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
           <button
             aria-label={t('spell.new')}
@@ -88,28 +100,6 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
             <span>{t('spell.new')}</span>
           </button>
         </div>
-        {allTags.length ? (
-          <div className="tag-filter-row quick-panel-traits" aria-label={t('spell.tags')}>
-            <button
-              className={selectedTags.length === 0 ? 'active' : ''}
-              onClick={() => setSelectedTags([])}
-              type="button"
-            >
-              {t('spell.allTags')}
-            </button>
-            {allTags.map((tag) => (
-              <button
-                className={selectedTags.includes(tag) ? 'active' : ''}
-                key={tag}
-                onClick={() => toggleFilterTag(tag)}
-                title={tag}
-                type="button"
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        ) : null}
         <div className="result-list">
           {filtered.map((spell) => (
             <button
@@ -144,6 +134,102 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
         )}
       </div>
     </section>
+  );
+}
+
+function TraitFilterMenu({ tags, selectedTags, onClear, onToggle, t }: TraitFilterMenuProps) {
+  const [open, setOpen] = useState(false);
+  const [traitFilterQuery, setTraitFilterQuery] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const visibleTags = useMemo(() => {
+    const normalizedQuery = traitFilterQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return tags;
+    }
+    return tags.filter((tag) => tag.toLowerCase().includes(normalizedQuery));
+  }, [tags, traitFilterQuery]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  if (!tags.length) {
+    return null;
+  }
+
+  return (
+    <div className="trait-filter-menu-root" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={selectedTags.length ? 'secondary-button trait-filter-button active' : 'secondary-button trait-filter-button'}
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <Tags size={15} />
+        <span>{selectedTags.length ? `${t('spell.tags')} ${selectedTags.length}` : t('spell.tags')}</span>
+      </button>
+      {open ? (
+        <div className="trait-filter-popover" role="menu" aria-label={t('spell.tags')}>
+          <label className="trait-filter-search">
+            <Search size={14} />
+            <input
+              autoFocus
+              onChange={(event) => setTraitFilterQuery(event.target.value)}
+              placeholder={t('spell.tagPlaceholder')}
+              value={traitFilterQuery}
+            />
+          </label>
+          <div className="trait-filter-actions">
+            <button disabled={!selectedTags.length} onClick={onClear} type="button">
+              <X size={12} />
+              <span>{t('spell.allTags')}</span>
+            </button>
+          </div>
+          <div className="trait-filter-list">
+            {visibleTags.map((tag) => {
+              const selected = selectedTags.includes(tag);
+              return (
+                <button
+                  aria-checked={selected}
+                  className={selected ? 'trait-filter-option selected' : 'trait-filter-option'}
+                  key={tag}
+                  onClick={() => onToggle(tag)}
+                  role="menuitemcheckbox"
+                  title={tag}
+                  type="button"
+                >
+                  <span>{tag}</span>
+                  {selected ? <Check size={14} /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
