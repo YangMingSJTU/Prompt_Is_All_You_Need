@@ -5,9 +5,13 @@ describe('i18n', () => {
   it('uses Chinese for zh local language', () => {
     const t = createTranslator(detectLocale('zh-CN'));
 
-    expect(t('nav.panel')).toBe('快捷面板');
+    expect(t('nav.panel')).toBe('快捷施法');
+    expect(t('settings.quickPanelShortcut')).toBe('快捷施法');
     expect(t('nav.library')).toBe('咒语库');
     expect(t('nav.skills')).toBe('技能库');
+    expect(t('nav.analytics')).toBe('施法统计');
+    expect(t('analytics.usage')).toBe('施法概览');
+    expect(t('analytics.topCopied')).toBe('常用咒语');
     expect(t('floating.placeholder')).toBe('输入关键词搜索咒语');
   });
 
@@ -17,13 +21,16 @@ describe('i18n', () => {
     expect(t('nav.panel')).toBe('Quick Panel');
     expect(t('nav.library')).toBe('Spell Library');
     expect(t('nav.skills')).toBe('Skill Library');
+    expect(t('nav.analytics')).toBe('Analytics');
+    expect(t('analytics.usage')).toBe('Usage');
+    expect(t('analytics.topCopied')).toBe('Top copied spells');
     expect(t('floating.placeholder')).toBe('Search spells');
   });
 
   it('falls back to Chinese for unsupported languages', () => {
     const t = createTranslator(detectLocale('ja-JP'));
 
-    expect(t('nav.panel')).toBe('快捷面板');
+    expect(t('nav.panel')).toBe('快捷施法');
   });
 
   it('resolves persisted language preferences over system language', () => {
@@ -105,5 +112,19 @@ describe('i18n', () => {
     expect(en('spell.allTags')).toBe('All traits');
     expect(enCopy).not.toContain('Tags');
     expect(enCopy).not.toContain('tags');
+  });
+
+  it('uses spell-themed analytics copy in Chinese without renaming English analytics', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+    const zhAnalyticsCopy = [zh('nav.analytics'), zh('analytics.usage'), zh('analytics.topCopied')].join(' ');
+
+    expect(zhAnalyticsCopy).toContain('施法统计');
+    expect(zhAnalyticsCopy).toContain('施法概览');
+    expect(zhAnalyticsCopy).toContain('常用咒语');
+    expect(zhAnalyticsCopy).not.toContain('使用分析');
+    expect(zhAnalyticsCopy).not.toContain('使用情况');
+    expect(zhAnalyticsCopy).not.toContain('最常复制');
+    expect(en('nav.analytics')).toBe('Analytics');
   });
 });
