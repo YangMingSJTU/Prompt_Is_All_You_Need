@@ -86,6 +86,9 @@ describe('i18n', () => {
     const en = createTranslator(detectLocale('en-US'));
     const zhCopy = [
       zh('spell.placeholder'),
+      zh('spell.placeholder.titleContent'),
+      zh('spell.placeholder.title'),
+      zh('spell.placeholder.content'),
       zh('spell.search'),
       zh('spell.tags'),
       zh('spell.tagPlaceholder'),
@@ -94,6 +97,9 @@ describe('i18n', () => {
     ].join(' ');
     const enCopy = [
       en('spell.placeholder'),
+      en('spell.placeholder.titleContent'),
+      en('spell.placeholder.title'),
+      en('spell.placeholder.content'),
       en('spell.search'),
       en('spell.tags'),
       en('spell.tagPlaceholder'),
@@ -112,6 +118,24 @@ describe('i18n', () => {
     expect(en('spell.allTags')).toBe('All traits');
     expect(enCopy).not.toContain('Tags');
     expect(enCopy).not.toContain('tags');
+  });
+
+  it('provides quick spell search scope copy in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('spell.searchScope.titleContent')).toBe('标题+内容');
+    expect(zh('spell.searchScope.title')).toBe('仅标题');
+    expect(zh('spell.searchScope.content')).toBe('仅内容');
+    expect(zh('spell.placeholder.titleContent')).toBe('搜索标题或内容');
+    expect(zh('spell.placeholder.title')).toBe('搜索标题');
+    expect(zh('spell.placeholder.content')).toBe('搜索内容');
+    expect(en('spell.searchScope.titleContent')).toBe('Title + Content');
+    expect(en('spell.searchScope.title')).toBe('Title only');
+    expect(en('spell.searchScope.content')).toBe('Content only');
+    expect(en('spell.placeholder.titleContent')).toBe('Search title or content');
+    expect(en('spell.placeholder.title')).toBe('Search title');
+    expect(en('spell.placeholder.content')).toBe('Search content');
   });
 
   it('provides batch spell deletion copy in both languages', () => {

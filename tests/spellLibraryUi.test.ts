@@ -2,35 +2,41 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('spell library UI structure', () => {
-  it('keeps the quick panel focused on spell names with traits and a new action', () => {
+  it('keeps the quick panel focused on search filters sorting and copying', () => {
     const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const library = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
 
-    expect(component).toContain('onCreateSpell');
-    expect(component).toContain("t('spell.new')");
+    expect(component).not.toContain('onCreateSpell');
+    expect(component).not.toContain("t('spell.new')");
     expect(component).toContain('selectedTags');
     expect(component).toContain('allTags');
     expect(component).toContain("t('spell.allTags')");
+    expect(component).toContain('SearchScopeMenu');
+    expect(component).toContain('searchScope');
+    expect(component).toContain('matchesSpellSearch');
     expect(component).toContain('SpellSortMenu');
     expect(component).toContain('sortSpells');
     expect(component).toContain('variant="button"');
     expect(component).toContain('quick-panel-controls');
+    expect(component).toContain('quick-panel-actions');
     expect(component).toContain('TraitFilterMenu');
     expect(component).not.toContain('pane-toolbar');
     expect(component).not.toContain('quick-panel-traits');
     expect(component).not.toContain('toolbar-actions');
     expect(component).toContain('deriveSpellName');
-    expect(component).toContain('spell.body.toLowerCase().includes(normalizedQuery)');
-    expect(component).toContain('spell.tags.some');
+    expect(component).not.toContain('spell.tags.some');
     expect(component).not.toContain('count-pill');
     expect(component).not.toContain("t('metric.spells')");
-    expect(component).not.toContain('spell-result-text');
+    expect(component).toContain('spell-result-text');
+    expect(component).toContain('spell-result-traits');
+    expect(component).toContain('spell-result-actions');
+    expect(component).toContain('copySelected(spell)');
+    expect(component).not.toContain('detail-pane');
 
-    expect(app).toContain('libraryCreateRequestId');
-    expect(app).toContain('openNewSpellDraft');
-    expect(app).toContain('onCreateSpell={openNewSpellDraft}');
-    expect(app).toContain('createRequestId={libraryCreateRequestId}');
+    expect(app).not.toContain('libraryCreateRequestId');
+    expect(app).not.toContain('openNewSpellDraft');
+    expect(app).not.toContain('onCreateSpell={openNewSpellDraft}');
 
     expect(library).toContain('createRequestId');
     expect(library).toContain('startNewSpell();');
@@ -144,11 +150,17 @@ describe('spell library UI structure', () => {
     expect(spellList).toContain('overflow: auto;');
   });
 
-  it('removes repeated quick panel headings and uses a trait menu instead of a chip strip', () => {
+  it('uses full width quick panel rows with search scope and visible traits', () => {
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const controls = styles.match(/\.quick-panel-controls\s*\{[^}]+\}/s)?.[0] ?? '';
+    const actions = styles.match(/\.quick-panel-actions\s*\{[^}]+\}/s)?.[0] ?? '';
+    const panelGrid = styles.match(/\.panel-grid\s*\{[^}]+\}/s)?.[0] ?? '';
+    const scopeControl = styles.match(/\.search-scope-control\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultRow = styles.match(/\.result-row\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultTraits = styles.match(/\.spell-result-traits\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultTrait = styles.match(/\.spell-result-trait\s*\{[^}]+\}/s)?.[0] ?? '';
     const workspace = styles.match(/\.workspace\s*\{[^}]+\}/s)?.[0] ?? '';
     const popover = styles.match(/\.trait-filter-popover\s*\{[^}]+\}/s)?.[0] ?? '';
     const list = styles.match(/\.trait-filter-list\s*\{[^}]+\}/s)?.[0] ?? '';
@@ -157,6 +169,7 @@ describe('spell library UI structure', () => {
     expect(app).not.toContain('topbar-title');
     expect(component).not.toContain('<h3>{t(\'nav.panel\')}</h3>');
     expect(component).toContain('TraitFilterMenu');
+    expect(component).toContain('SearchScopeMenu');
     expect(component).toContain('traitFilterQuery');
     expect(component).toContain('setSelectedTags([])');
     expect(component).toContain('selectedTags.length ?');
@@ -165,8 +178,13 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('quick-panel-traits');
     expect(workspace).not.toContain('grid-template-rows: 53px minmax(0, 1fr)');
     expect(controls).toContain('display: grid;');
-    expect(controls).toContain('grid-template-columns: minmax(0, 1fr) auto auto auto;');
-    expect(controls).toContain('align-items: center;');
+    expect(controls).toContain('grid-template-rows: auto auto;');
+    expect(actions).toContain('display: flex;');
+    expect(panelGrid).toContain('grid-template-columns: minmax(0, 1fr);');
+    expect(scopeControl).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) auto auto;');
+    expect(resultTraits).toContain('display: flex;');
+    expect(resultTrait).toContain('width: fit-content;');
     expect(popover).toContain('position: absolute;');
     expect(list).toContain('max-height: 240px;');
     expect(list).toContain('overflow: auto;');

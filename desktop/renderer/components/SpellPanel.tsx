@@ -1,15 +1,15 @@
-import { Check, Clipboard, Plus, Search, Tags, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronDown, Clipboard, Search, Tags, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Spell } from '../../shared/types';
-import type { TFunction } from '../i18n';
+import type { I18nKey, TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
+import { matchesSpellSearch, type SearchScope } from '../spellSearch';
 import { sortSpells, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellSortMenu } from './SpellSortMenu';
 
 interface SpellPanelProps {
   spells: Spell[];
-  onCreateSpell(): void;
   onChanged(): Promise<void>;
   t: TFunction;
 }
@@ -22,11 +22,32 @@ interface TraitFilterMenuProps {
   t: TFunction;
 }
 
-export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelProps) {
+interface SearchScopeMenuProps {
+  value: SearchScope;
+  onChange(value: SearchScope): void;
+  t: TFunction;
+}
+
+const SEARCH_SCOPE_OPTIONS: Array<{
+  value: SearchScope;
+  labelKey: I18nKey;
+  placeholderKey: I18nKey;
+}> = [
+  {
+    value: 'title-content',
+    labelKey: 'spell.searchScope.titleContent',
+    placeholderKey: 'spell.placeholder.titleContent'
+  },
+  { value: 'title', labelKey: 'spell.searchScope.title', placeholderKey: 'spell.placeholder.title' },
+  { value: 'content', labelKey: 'spell.searchScope.content', placeholderKey: 'spell.placeholder.content' }
+];
+
+export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
   const [sortMode, setSortMode] = useState<SpellSortMode>('usage');
+  const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
@@ -40,21 +61,18 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
   }, [spells]);
 
   const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     const filteredSpells = spells.filter((spell) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        getSpellName(spell, t).toLowerCase().includes(normalizedQuery) ||
-        spell.body.toLowerCase().includes(normalizedQuery) ||
-        spell.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
+      const name = getSpellName(spell, t);
+      const matchesQuery = matchesSpellSearch({ name, body: spell.body }, query, searchScope);
       const matchesTags =
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
       return matchesQuery && matchesTags;
     });
     return sortSpells(filteredSpells, sortMode, (spell) => getSpellName(spell, t));
-  }, [spells, query, selectedTags, sortMode, t]);
+  }, [spells, query, searchScope, selectedTags, sortMode, t]);
 
   const selected = filtered.find((spell) => spell.id === selectedId) ?? filtered[0] ?? null;
+  const searchPlaceholder = t(getSearchScopeOption(searchScope).placeholderKey);
 
   async function copySelected(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
@@ -68,72 +86,148 @@ export function SpellPanel({ spells, onCreateSpell, onChanged, t }: SpellPanelPr
     );
   }
 
+  function selectRowWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>, spellId: string): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    setSelectedId(spellId);
+  }
+
   return (
     <section className="panel-grid">
       <div className="search-pane">
         <div className="quick-panel-controls">
-          <label className="search-box">
-            <Search size={18} />
-            <input
-              autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('spell.placeholder')}
-              value={query}
+          <div className="search-scope-control">
+            <label className="search-box">
+              <Search size={18} />
+              <input
+                autoFocus
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                value={query}
+              />
+            </label>
+            <SearchScopeMenu value={searchScope} onChange={setSearchScope} t={t} />
+          </div>
+          <div className="quick-panel-actions">
+            <TraitFilterMenu
+              tags={allTags}
+              selectedTags={selectedTags}
+              onClear={() => setSelectedTags([])}
+              onToggle={toggleFilterTag}
+              t={t}
             />
-          </label>
-          <TraitFilterMenu
-            tags={allTags}
-            selectedTags={selectedTags}
-            onClear={() => setSelectedTags([])}
-            onToggle={toggleFilterTag}
-            t={t}
-          />
-          <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
-          <button
-            aria-label={t('spell.new')}
-            className="secondary-button new-spell-button"
-            onClick={onCreateSpell}
-            title={t('spell.new')}
-            type="button"
-          >
-            <Plus size={16} />
-            <span>{t('spell.new')}</span>
-          </button>
+            <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
+          </div>
         </div>
         <div className="result-list">
           {filtered.map((spell) => (
-            <button
+            <div
               className={selected?.id === spell.id ? 'result-row selected' : 'result-row'}
               key={spell.id}
               onClick={() => setSelectedId(spell.id)}
-              type="button"
+              onKeyDown={(event) => selectRowWithKeyboard(event, spell.id)}
+              role="button"
+              tabIndex={0}
             >
-              <span className="spell-result-name" title={getSpellName(spell, t)}>
-                {getSpellName(spell, t)}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="detail-pane">
-        {selected ? (
-          <>
-            <div className="detail-heading">
-              <div className="detail-title" />
-              <div className="button-row">
-                <button className="primary-button" onClick={() => copySelected(selected)} type="button">
-                  <Clipboard size={16} />
-                  {t('spell.copy')}
+              <div className="spell-result-main">
+                <span className="spell-result-name" title={getSpellName(spell, t)}>
+                  {getSpellName(spell, t)}
+                </span>
+                <span className="spell-result-text" title={getSpellDisplayText(spell)}>
+                  {getSpellDisplayText(spell)}
+                </span>
+              </div>
+              {renderSpellTraits(spell)}
+              <div className="spell-result-actions">
+                <button
+                  aria-label={t('spell.copy')}
+                  className="icon-button spell-result-copy"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void copySelected(spell);
+                  }}
+                  title={t('spell.copy')}
+                  type="button"
+                >
+                  <Clipboard size={15} />
                 </button>
               </div>
             </div>
-            <pre className="spell-preview">{getSpellDisplayText(selected)}</pre>
-          </>
-        ) : (
-          <div className="empty-state">{t('spell.empty')}</div>
-        )}
+          ))}
+          {filtered.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
+        </div>
       </div>
     </section>
+  );
+}
+
+function SearchScopeMenu({ value, onChange, t }: SearchScopeMenuProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const currentOption = getSearchScopeOption(value);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  function selectScope(scope: SearchScope): void {
+    onChange(scope);
+    setOpen(false);
+  }
+
+  return (
+    <div className="search-scope-menu-root" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="search-scope-button"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span>{t(currentOption.labelKey)}</span>
+        <ChevronDown size={14} />
+      </button>
+      {open ? (
+        <div className="search-scope-popover" role="menu">
+          {SEARCH_SCOPE_OPTIONS.map((option) => (
+            <button
+              aria-checked={value === option.value}
+              className={value === option.value ? 'search-scope-option selected' : 'search-scope-option'}
+              key={option.value}
+              onClick={() => selectScope(option.value)}
+              role="menuitemradio"
+              type="button"
+            >
+              <span>{t(option.labelKey)}</span>
+              {value === option.value ? <Check size={14} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -231,6 +325,30 @@ function TraitFilterMenu({ tags, selectedTags, onClear, onToggle, t }: TraitFilt
       ) : null}
     </div>
   );
+}
+
+function renderSpellTraits(spell: Spell) {
+  const visibleTags = spell.tags.slice(0, 3);
+  const hiddenCount = Math.max(spell.tags.length - visibleTags.length, 0);
+
+  if (!visibleTags.length) {
+    return <div className="spell-result-traits" />;
+  }
+
+  return (
+    <div className="spell-result-traits">
+      {visibleTags.map((tag) => (
+        <span className="spell-result-trait" key={tag} title={tag}>
+          {tag}
+        </span>
+      ))}
+      {hiddenCount ? <span className="spell-result-trait-more">+{hiddenCount}</span> : null}
+    </div>
+  );
+}
+
+function getSearchScopeOption(scope: SearchScope) {
+  return SEARCH_SCOPE_OPTIONS.find((option) => option.value === scope) ?? SEARCH_SCOPE_OPTIONS[0];
 }
 
 function getSpellName(spell: Spell, t: TFunction): string {
