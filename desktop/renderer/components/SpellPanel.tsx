@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Clipboard, Search, Tags, X } from 'lucide-react';
+import { Check, Clipboard, Funnel, FunnelX, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Spell } from '../../shared/types';
 import type { I18nKey, TFunction } from '../i18n';
@@ -14,17 +14,13 @@ interface SpellPanelProps {
   t: TFunction;
 }
 
-interface TraitFilterMenuProps {
+interface SpellFilterMenuProps {
   tags: string[];
   selectedTags: string[];
-  onClear(): void;
-  onToggle(tag: string): void;
-  t: TFunction;
-}
-
-interface SearchScopeMenuProps {
-  value: SearchScope;
-  onChange(value: SearchScope): void;
+  searchScope: SearchScope;
+  onClearTags(): void;
+  onScopeChange(value: SearchScope): void;
+  onToggleTag(tag: string): void;
   t: TFunction;
 }
 
@@ -98,7 +94,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
     <section className="panel-grid">
       <div className="search-pane">
         <div className="quick-panel-controls">
-          <div className="search-scope-control">
+          <div className="quick-panel-search-group">
             <label className="search-box">
               <Search size={18} />
               <input
@@ -108,18 +104,23 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
                 value={query}
               />
             </label>
-            <SearchScopeMenu value={searchScope} onChange={setSearchScope} t={t} />
-          </div>
-          <div className="quick-panel-actions">
-            <TraitFilterMenu
+            <SpellFilterMenu
               tags={allTags}
               selectedTags={selectedTags}
-              onClear={() => setSelectedTags([])}
-              onToggle={toggleFilterTag}
+              searchScope={searchScope}
+              onClearTags={() => setSelectedTags([])}
+              onScopeChange={setSearchScope}
+              onToggleTag={toggleFilterTag}
               t={t}
             />
-            <SpellSortMenu t={t} value={sortMode} onChange={setSortMode} variant="button" />
           </div>
+          <SpellSortMenu
+            className="quick-panel-sort"
+            t={t}
+            value={sortMode}
+            onChange={setSortMode}
+            variant="button"
+          />
         </div>
         <div className="result-list">
           {filtered.map((spell) => (
@@ -163,78 +164,19 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   );
 }
 
-function SearchScopeMenu({ value, onChange, t }: SearchScopeMenuProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const currentOption = getSearchScopeOption(value);
-
-  useEffect(() => {
-    if (!open) {
-      return undefined;
-    }
-
-    function handlePointerDown(event: PointerEvent): void {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
-
-  function selectScope(scope: SearchScope): void {
-    onChange(scope);
-    setOpen(false);
-  }
-
-  return (
-    <div className="search-scope-menu-root" ref={rootRef}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        className="search-scope-button"
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <span>{t(currentOption.labelKey)}</span>
-        <ChevronDown size={14} />
-      </button>
-      {open ? (
-        <div className="search-scope-popover" role="menu">
-          {SEARCH_SCOPE_OPTIONS.map((option) => (
-            <button
-              aria-checked={value === option.value}
-              className={value === option.value ? 'search-scope-option selected' : 'search-scope-option'}
-              key={option.value}
-              onClick={() => selectScope(option.value)}
-              role="menuitemradio"
-              type="button"
-            >
-              <span>{t(option.labelKey)}</span>
-              {value === option.value ? <Check size={14} /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function TraitFilterMenu({ tags, selectedTags, onClear, onToggle, t }: TraitFilterMenuProps) {
+function SpellFilterMenu({
+  tags,
+  selectedTags,
+  searchScope,
+  onClearTags,
+  onScopeChange,
+  onToggleTag,
+  t
+}: SpellFilterMenuProps) {
   const [open, setOpen] = useState(false);
   const [traitFilterQuery, setTraitFilterQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const hasActiveFilters = searchScope !== 'title-content' || selectedTags.length > 0;
 
   const visibleTags = useMemo(() => {
     const normalizedQuery = traitFilterQuery.trim().toLowerCase();
@@ -244,6 +186,11 @@ function TraitFilterMenu({ tags, selectedTags, onClear, onToggle, t }: TraitFilt
     return tags.filter((tag) => tag.toLowerCase().includes(normalizedQuery));
   }, [tags, traitFilterQuery]);
 
+  function closeFilterMenu(): void {
+    setOpen(false);
+    setTraitFilterQuery('');
+  }
+
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -251,13 +198,13 @@ function TraitFilterMenu({ tags, selectedTags, onClear, onToggle, t }: TraitFilt
 
     function handlePointerDown(event: PointerEvent): void {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closeFilterMenu();
       }
     }
 
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
-        setOpen(false);
+        closeFilterMenu();
       }
     }
 
@@ -269,57 +216,98 @@ function TraitFilterMenu({ tags, selectedTags, onClear, onToggle, t }: TraitFilt
     };
   }, [open]);
 
-  if (!tags.length) {
-    return null;
+  function resetFilters(): void {
+    onScopeChange('title-content');
+    onClearTags();
+    setTraitFilterQuery('');
   }
 
   return (
-    <div className="trait-filter-menu-root" ref={rootRef}>
+    <div className="spell-filter-menu-root" ref={rootRef}>
       <button
+        aria-controls="spell-filter-popover"
         aria-expanded={open}
-        aria-haspopup="menu"
-        className={selectedTags.length ? 'secondary-button trait-filter-button active' : 'secondary-button trait-filter-button'}
-        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="dialog"
+        aria-label={t('spell.filter')}
+        className={hasActiveFilters ? 'spell-filter-button active' : 'spell-filter-button'}
+        onClick={() => (open ? closeFilterMenu() : setOpen(true))}
+        title={t('spell.filter')}
         type="button"
       >
-        <Tags size={15} />
-        <span>{selectedTags.length ? `${t('spell.tags')} ${selectedTags.length}` : t('spell.tags')}</span>
+        <Funnel size={16} />
       </button>
       {open ? (
-        <div className="trait-filter-popover" role="menu" aria-label={t('spell.tags')}>
-          <label className="trait-filter-search">
-            <Search size={14} />
-            <input
-              autoFocus
-              onChange={(event) => setTraitFilterQuery(event.target.value)}
-              placeholder={t('spell.tagPlaceholder')}
-              value={traitFilterQuery}
-            />
-          </label>
-          <div className="trait-filter-actions">
-            <button disabled={!selectedTags.length} onClick={onClear} type="button">
-              <X size={12} />
-              <span>{t('spell.allTags')}</span>
-            </button>
-          </div>
-          <div className="trait-filter-list">
-            {visibleTags.map((tag) => {
-              const selected = selectedTags.includes(tag);
-              return (
+        <div
+          aria-label={t('spell.filter')}
+          className="spell-filter-popover"
+          id="spell-filter-popover"
+          role="dialog"
+        >
+          <section className="spell-filter-section">
+            <div className="spell-filter-heading">{t('spell.filter.searchScope')}</div>
+            <div
+              aria-label={t('spell.filter.searchScope')}
+              className="spell-filter-scope-options"
+              role="radiogroup"
+            >
+              {SEARCH_SCOPE_OPTIONS.map((option) => (
                 <button
-                  aria-checked={selected}
-                  className={selected ? 'trait-filter-option selected' : 'trait-filter-option'}
-                  key={tag}
-                  onClick={() => onToggle(tag)}
-                  role="menuitemcheckbox"
-                  title={tag}
+                  aria-checked={searchScope === option.value}
+                  className={searchScope === option.value ? 'spell-filter-scope-option selected' : 'spell-filter-scope-option'}
+                  key={option.value}
+                  onClick={() => onScopeChange(option.value)}
+                  role="radio"
                   type="button"
                 >
-                  <span>{tag}</span>
-                  {selected ? <Check size={14} /> : null}
+                  <span>{t(option.labelKey)}</span>
+                  {searchScope === option.value ? <Check size={14} /> : null}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+          </section>
+          <section aria-label={t('spell.tags')} className="spell-filter-section" role="group">
+            <div className="spell-filter-heading">{t('spell.tags')}</div>
+            <label className="spell-filter-search">
+              <Search size={14} />
+              <input
+                onChange={(event) => setTraitFilterQuery(event.target.value)}
+                placeholder={t('spell.tagPlaceholder')}
+                value={traitFilterQuery}
+              />
+            </label>
+            <div className="spell-filter-trait-list">
+              {visibleTags.length ? (
+                visibleTags.map((tag) => {
+                  const selected = selectedTags.includes(tag);
+                  return (
+                    <button
+                      aria-checked={selected}
+                      className={selected ? 'spell-filter-trait-option selected' : 'spell-filter-trait-option'}
+                      key={tag}
+                      onClick={() => onToggleTag(tag)}
+                      role="checkbox"
+                      title={tag}
+                      type="button"
+                    >
+                      <span>{tag}</span>
+                      {selected ? <Check size={14} /> : null}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="spell-filter-empty">{t('spell.filter.noTraits')}</div>
+              )}
+            </div>
+          </section>
+          <div className="spell-filter-footer">
+            <button
+              disabled={!hasActiveFilters && !traitFilterQuery}
+              onClick={resetFilters}
+              type="button"
+            >
+              <FunnelX size={14} />
+              <span>{t('spell.filter.clear')}</span>
+            </button>
           </div>
         </div>
       ) : null}

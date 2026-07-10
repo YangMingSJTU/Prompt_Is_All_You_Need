@@ -136,6 +136,14 @@ describe('i18n', () => {
     expect(en('spell.placeholder.titleContent')).toBe('Search title or content');
     expect(en('spell.placeholder.title')).toBe('Search title');
     expect(en('spell.placeholder.content')).toBe('Search content');
+    expect(zh('spell.filter')).toBe('筛选');
+    expect(zh('spell.filter.searchScope')).toBe('搜索范围');
+    expect(zh('spell.filter.clear')).toBe('清除筛选');
+    expect(zh('spell.filter.noTraits')).toBe('暂无匹配属性');
+    expect(en('spell.filter')).toBe('Filter');
+    expect(en('spell.filter.searchScope')).toBe('Search scope');
+    expect(en('spell.filter.clear')).toBe('Clear filters');
+    expect(en('spell.filter.noTraits')).toBe('No matching traits');
   });
 
   it('provides batch spell deletion copy in both languages', () => {
