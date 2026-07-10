@@ -95,6 +95,11 @@ describe('spell library UI structure', () => {
 
     expect(component).toContain('spell-library-grid');
     expect(component).toContain('spell-list-pane');
+    expect(component).toContain('spell-library-content');
+    expect(component).toContain('spell-library-content has-candidates');
+    expect(component).toContain('SPELL_LIBRARY_SPLIT_STYLE');
+    expect(component).toContain('style={candidates.length ? SPELL_LIBRARY_SPLIT_STYLE : undefined}');
+    expect(component).toContain('candidate-dock-header');
     expect(component).toContain('SpellEditorDialog');
     expect(component).not.toContain('spell-editor-pane');
     expect(component).toContain('spell-list-row');
@@ -105,9 +110,12 @@ describe('spell library UI structure', () => {
     expect(editor).toContain('className="spell-editor-dialog"');
 
     expect(styles.match(/\.spell-library-grid\s*\{[^}]+grid-template-columns: minmax\(0, 1fr\);[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.spell-library-content\s*\{[^}]+display: grid;[^}]+min-height: 0;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles).toContain('.spell-list');
     expect(styles.match(/\.spell-list\s*\{[^}]+overflow: auto;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles.match(/\.spell-preview-line\s*\{[^}]+text-overflow: ellipsis;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.candidate-dock\s*\{[^}]+grid-template-rows: 42px minmax\(0, 1fr\);[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.candidate-list\.compact\s*\{[^}]+border: 0;[^}]+\}/s)?.[0]).toBeTruthy();
   });
 
   it('uses search trait filters name editing and delete confirmation without redundant headings', () => {
@@ -247,6 +255,7 @@ describe('spell library UI structure', () => {
     const filterButton = styles.match(/\.spell-filter-button\s*\{[^}]+\}/s)?.[0] ?? '';
     const panelGrid = styles.match(/\.panel-grid\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultHeader = styles.match(/\.result-list-header\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultList = styles.match(/\.result-list\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultSortHeader = styles.match(/\.result-sort-header\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultRow = styles.match(/\.result-row\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTitleRow = styles.match(/\.spell-result-title-row\s*\{[^}]+\}/s)?.[0] ?? '';
@@ -287,9 +296,13 @@ describe('spell library UI structure', () => {
     expect(filterButton).toContain('width: 34px;');
     expect(panelGrid).toContain('grid-template-columns: minmax(480px, 3fr) 8px minmax(360px, 2fr);');
     expect(resultHeader).toContain('grid-template-columns: minmax(0, 1fr) 96px 76px 32px;');
+    expect(resultList).toContain('gap: 0;');
     expect(resultSortHeader).toContain('justify-content: center;');
     expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) 96px 76px 32px;');
     expect(resultRow).toContain('min-height: 64px;');
+    expect(resultRow).toContain('border-bottom: 1px solid var(--border);');
+    expect(resultRow).toContain('border-radius: 0;');
+    expect(styles).toContain('.result-row:last-child');
     expect(resultTitleRow).toContain('display: grid;');
     expect(resultName).toContain('white-space: normal;');
     expect(resultName).toContain('overflow-wrap: anywhere;');

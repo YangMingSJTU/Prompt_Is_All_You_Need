@@ -326,7 +326,7 @@ p {
 .result-list {
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: 0;
   min-height: 0;
   margin-top: 14px;
   overflow: auto;
@@ -409,7 +409,8 @@ p {
   gap: 12px;
   align-items: center;
   border: 0;
-  border-radius: 7px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
   background: transparent;
   cursor: pointer;
   min-height: 64px;
@@ -419,6 +420,10 @@ p {
   transition:
     background 120ms ease,
     box-shadow 120ms ease;
+}
+
+.result-row:last-child {
+  border-bottom: 0;
 }
 
 .result-row:hover,
@@ -1172,6 +1177,13 @@ p {
   padding: 16px 14px 18px;
 }
 
+.spell-library-content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .spell-library-toolbar {
   display: grid;
   flex: 0 0 auto;
@@ -1249,6 +1261,7 @@ p {
   display: grid;
   flex: 1 1 auto;
   align-content: start;
+  height: 100%;
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--border);
@@ -1377,14 +1390,37 @@ p {
 
 .candidate-dock {
   display: grid;
-  flex: 0 0 min(220px, 28vh);
+  min-width: 0;
   min-height: 0;
-  gap: 8px;
+  grid-template-rows: 42px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.candidate-dock-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+
+.candidate-dock-header h3 {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .candidate-list.compact {
   min-height: 0;
   overflow: auto;
+  border: 0;
+  border-radius: 0;
 }
 
 .section-heading.compact {

@@ -9,7 +9,13 @@ import {
   QUICK_PANEL_MIN_DETAIL_WIDTH,
   QUICK_PANEL_MIN_LIST_WIDTH,
   QUICK_PANEL_MIN_WIDTH,
-  QUICK_PANEL_SPLITTER_WIDTH
+  QUICK_PANEL_SPLITTER_WIDTH,
+  SPELL_LIBRARY_COLUMN_GAP,
+  SPELL_LIBRARY_HORIZONTAL_PADDING,
+  SPELL_LIBRARY_MAX_CANDIDATE_WIDTH,
+  SPELL_LIBRARY_MIN_CANDIDATE_WIDTH,
+  SPELL_LIBRARY_MIN_LIST_WIDTH,
+  SPELL_LIBRARY_MIN_WORKSPACE_WIDTH
 } from '../desktop/shared/layout';
 
 describe('window layout constraints', () => {
@@ -20,6 +26,19 @@ describe('window layout constraints', () => {
     expect(MAIN_WINDOW_MIN_WIDTH - APP_SIDEBAR_WIDTH).toBeGreaterThan(QUICK_PANEL_MIN_WIDTH);
     expect(MAIN_WINDOW_DEFAULT_WIDTH).toBeGreaterThanOrEqual(MAIN_WINDOW_MIN_WIDTH);
     expect(MAIN_WINDOW_DEFAULT_HEIGHT).toBeGreaterThanOrEqual(MAIN_WINDOW_MIN_HEIGHT);
+  });
+
+  it('guarantees the spell library can keep candidates beside the spell list', () => {
+    expect(SPELL_LIBRARY_MIN_WORKSPACE_WIDTH).toBe(
+      SPELL_LIBRARY_HORIZONTAL_PADDING +
+        SPELL_LIBRARY_MIN_LIST_WIDTH +
+        SPELL_LIBRARY_COLUMN_GAP +
+        SPELL_LIBRARY_MIN_CANDIDATE_WIDTH
+    );
+    expect(SPELL_LIBRARY_MAX_CANDIDATE_WIDTH).toBeGreaterThan(SPELL_LIBRARY_MIN_CANDIDATE_WIDTH);
+    expect(MAIN_WINDOW_MIN_WIDTH - APP_SIDEBAR_WIDTH).toBeGreaterThanOrEqual(
+      SPELL_LIBRARY_MIN_WORKSPACE_WIDTH
+    );
   });
 
   it('uses content-area window sizing and shared renderer constraints', () => {

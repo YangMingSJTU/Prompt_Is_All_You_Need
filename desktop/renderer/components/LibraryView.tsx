@@ -1,5 +1,11 @@
 import { Clipboard, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  SPELL_LIBRARY_COLUMN_GAP,
+  SPELL_LIBRARY_MAX_CANDIDATE_WIDTH,
+  SPELL_LIBRARY_MIN_CANDIDATE_WIDTH,
+  SPELL_LIBRARY_MIN_LIST_WIDTH
+} from '../../shared/layout';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
@@ -21,6 +27,11 @@ interface LibraryViewProps {
 type EditorState =
   | { mode: 'create' }
   | { mode: 'edit'; spellId: string };
+
+const SPELL_LIBRARY_SPLIT_STYLE = {
+  columnGap: SPELL_LIBRARY_COLUMN_GAP,
+  gridTemplateColumns: `minmax(${SPELL_LIBRARY_MIN_LIST_WIDTH}px, 1fr) clamp(${SPELL_LIBRARY_MIN_CANDIDATE_WIDTH}px, 28vw, ${SPELL_LIBRARY_MAX_CANDIDATE_WIDTH}px)`
+} as CSSProperties;
 
 export function LibraryView({ spells, candidates, createRequestId = 0, onChanged, t }: LibraryViewProps) {
   const [query, setQuery] = useState('');
@@ -251,123 +262,126 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
             </button>
           </div>
         </div>
-        <div className="spell-list">
-          {filteredSpells.length ? (
-            <div className="spell-selection-toolbar">
-              <label
-                className="spell-select-all"
-                title={allFilteredSpellsSelected ? t('spell.clearSelection') : t('spell.selectAll')}
+        <div
+          className={candidates.length ? 'spell-library-content has-candidates' : 'spell-library-content'}
+          style={candidates.length ? SPELL_LIBRARY_SPLIT_STYLE : undefined}
+        >
+          <div className="spell-list">
+            {filteredSpells.length ? (
+              <div className="spell-selection-toolbar">
+                <label
+                  className="spell-select-all"
+                  title={allFilteredSpellsSelected ? t('spell.clearSelection') : t('spell.selectAll')}
+                >
+                  <input
+                    aria-label={allFilteredSpellsSelected ? t('spell.clearSelection') : t('spell.selectAll')}
+                    checked={allFilteredSpellsSelected}
+                    onChange={toggleFilteredSpellSelection}
+                    ref={selectAllCheckboxRef}
+                    type="checkbox"
+                  />
+                  <span>{t('spell.selectAll')}</span>
+                </label>
+                <div className="delete-action batch-delete-action">
+                  <button
+                    className="secondary-button danger-button"
+                    disabled={selectedSpellIds.length === 0}
+                    onClick={() => setConfirmingBulkDelete(true)}
+                    type="button"
+                  >
+                    <Trash2 size={15} />
+                    {t('spell.delete')}
+                  </button>
+                  {confirmingBulkDelete ? (
+                    <div className="delete-confirm-popover">
+                      <button className="danger-confirm" onClick={() => void deleteSelectedSpells()} type="button">
+                        {t('spell.deleteConfirm')}
+                      </button>
+                      <button onClick={() => setConfirmingBulkDelete(false)} type="button">
+                        {t('spell.deleteCancel')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            {filteredSpells.map((spell) => (
+              <article
+                className={[
+                  'spell-list-row',
+                  selectedSpell?.id === spell.id ? 'selected' : '',
+                  selectedSpellIds.includes(spell.id) ? 'bulk-selected' : ''
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                key={spell.id}
               >
-                <input
-                  aria-label={allFilteredSpellsSelected ? t('spell.clearSelection') : t('spell.selectAll')}
-                  checked={allFilteredSpellsSelected}
-                  onChange={toggleFilteredSpellSelection}
-                  ref={selectAllCheckboxRef}
-                  type="checkbox"
-                />
-                <span>{t('spell.selectAll')}</span>
-              </label>
-              <div className="delete-action batch-delete-action">
+                <label className="spell-row-select" title={t('spell.select')}>
+                  <input
+                    aria-label={`${t('spell.select')} ${getSpellName(spell, t)}`}
+                    checked={selectedSpellIds.includes(spell.id)}
+                    onChange={() => toggleSpellSelection(spell.id)}
+                    type="checkbox"
+                  />
+                </label>
                 <button
-                  className="secondary-button danger-button"
-                  disabled={selectedSpellIds.length === 0}
-                  onClick={() => setConfirmingBulkDelete(true)}
+                  className="spell-row-main"
+                  onClick={() => openSpellEditor(spell)}
                   type="button"
                 >
-                  <Trash2 size={15} />
-                  {t('spell.delete')}
-                </button>
-                {confirmingBulkDelete ? (
-                  <div className="delete-confirm-popover">
-                    <button className="danger-confirm" onClick={() => void deleteSelectedSpells()} type="button">
-                      {t('spell.deleteConfirm')}
-                    </button>
-                    <button onClick={() => setConfirmingBulkDelete(false)} type="button">
-                      {t('spell.deleteCancel')}
-                    </button>
+                  <div className="spell-row-title" title={getSpellName(spell, t)}>
+                    {getSpellName(spell, t)}
                   </div>
-                ) : null}
+                  <p className="spell-preview-line" title={getSpellDisplayText(spell)}>
+                    {formatPreview(spell.body)}
+                  </p>
+                  {spell.tags.length ? (
+                    <div className="tag-strip compact">
+                      {spell.tags.map((tag) => (
+                        <span key={tag} title={tag}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </button>
+                <button
+                  aria-label={t('spell.copy')}
+                  className="icon-button"
+                  onClick={() => void copy(spell)}
+                  title={t('spell.copy')}
+                  type="button"
+                >
+                  <Clipboard size={15} />
+                </button>
+              </article>
+            ))}
+            {filteredSpells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
+          </div>
+          {candidates.length ? (
+            <div className="candidate-dock">
+              <div className="candidate-dock-header">
+                <h3>{t('library.candidates')}</h3>
+              </div>
+              <div className="candidate-list compact">
+                {candidates.map((candidate) => (
+                  <article className="candidate-row" key={candidate.id}>
+                    <div>
+                      <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
+                      <small>
+                        {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
+                      </small>
+                    </div>
+                    <button className="primary-button" onClick={() => void promote(candidate)} type="button">
+                      <Plus size={16} />
+                      {t('library.save')}
+                    </button>
+                  </article>
+                ))}
               </div>
             </div>
           ) : null}
-          {filteredSpells.map((spell) => (
-            <article
-              className={[
-                'spell-list-row',
-                selectedSpell?.id === spell.id ? 'selected' : '',
-                selectedSpellIds.includes(spell.id) ? 'bulk-selected' : ''
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              key={spell.id}
-            >
-              <label className="spell-row-select" title={t('spell.select')}>
-                <input
-                  aria-label={`${t('spell.select')} ${getSpellName(spell, t)}`}
-                  checked={selectedSpellIds.includes(spell.id)}
-                  onChange={() => toggleSpellSelection(spell.id)}
-                  type="checkbox"
-                />
-              </label>
-              <button
-                className="spell-row-main"
-                onClick={() => openSpellEditor(spell)}
-                type="button"
-              >
-                <div className="spell-row-title" title={getSpellName(spell, t)}>
-                  {getSpellName(spell, t)}
-                </div>
-                <p className="spell-preview-line" title={getSpellDisplayText(spell)}>
-                  {formatPreview(spell.body)}
-                </p>
-                {spell.tags.length ? (
-                  <div className="tag-strip compact">
-                    {spell.tags.map((tag) => (
-                      <span key={tag} title={tag}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </button>
-              <button
-                aria-label={t('spell.copy')}
-                className="icon-button"
-                onClick={() => void copy(spell)}
-                title={t('spell.copy')}
-                type="button"
-              >
-                <Clipboard size={15} />
-              </button>
-            </article>
-          ))}
-          {filteredSpells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
         </div>
-        {candidates.length ? (
-          <div className="candidate-dock">
-            <div className="section-heading compact">
-              <div>
-                <h3>{t('library.candidates')}</h3>
-              </div>
-            </div>
-            <div className="candidate-list compact">
-              {candidates.map((candidate) => (
-                <article className="candidate-row" key={candidate.id}>
-                  <div>
-                    <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
-                    <small>
-                      {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
-                    </small>
-                  </div>
-                  <button className="primary-button" onClick={() => void promote(candidate)} type="button">
-                    <Plus size={16} />
-                    {t('library.save')}
-                  </button>
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
       {editorState && (editorState.mode === 'create' || editingSpell) ? (
         <SpellEditorDialog
