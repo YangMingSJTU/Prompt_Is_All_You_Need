@@ -139,6 +139,18 @@ describe('spell library UI structure', () => {
     expect(editor).toContain('tag-add-button');
     expect(component).toContain('deleteSpell');
     expect(component).toContain('delete-confirm-popover');
+    expect(component).toContain('bulkDeleteActionRef');
+    expect(component).toContain("document.addEventListener('pointerdown'");
+    expect(component).toContain("window.addEventListener('blur'");
+    expect(component).toContain("event.key === 'Escape'");
+    expect(component).toContain('onBlur={handleBulkDeleteBlur}');
+    expect(component).toContain('aria-haspopup="dialog"');
+    expect(component).toContain('role="alertdialog"');
+    expect(component).toContain("aria-label={t('spell.deleteConfirm')}");
+    expect(component).not.toContain('delete-confirm-message');
+    expect(component).not.toContain('delete-confirm-icon');
+    expect(component).not.toContain('delete-confirm-actions');
+    expect(component).not.toContain("t('spell.deleteConfirmPrompt')");
     expect(editor).toContain('spell.name');
     expect(component).not.toContain('spell.alias');
     expect(component).not.toContain('<h3>{t(\'library.title\')}</h3>');
@@ -151,6 +163,9 @@ describe('spell library UI structure', () => {
     expect(styles).not.toContain('.tag-filter-row');
     expect(styles).toContain('.tag-editor');
     expect(styles).toContain('.delete-confirm-popover');
+    expect(styles).toContain('.delete-confirm-popover::before');
+    expect(styles).not.toContain('.delete-confirm-message');
+    expect(styles).not.toContain('.delete-confirm-actions');
   });
 
   it('opens the shared editor dialog for every new-spell request', () => {

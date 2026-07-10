@@ -1,5 +1,12 @@
 import { Clipboard, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent as ReactFocusEvent
+} from 'react';
 import {
   SPELL_LIBRARY_COLUMN_GAP,
   SPELL_LIBRARY_MAX_CANDIDATE_WIDTH,
@@ -43,6 +50,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [sortDirection, setSortDirection] = useState<SpellSortDirection>('desc');
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const [selectedSpellIds, setSelectedSpellIds] = useState<string[]>([]);
+  const bulkDeleteActionRef = useRef<HTMLDivElement>(null);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const { showToast } = useFeedbackToast();
 
@@ -110,6 +118,38 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
       setConfirmingBulkDelete(false);
     }
   }, [selectedVisibleSpellCount]);
+
+  useEffect(() => {
+    if (!confirmingBulkDelete) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      const container = bulkDeleteActionRef.current;
+      if (container && event.target instanceof Node && !container.contains(event.target)) {
+        setConfirmingBulkDelete(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setConfirmingBulkDelete(false);
+      }
+    }
+
+    function handleWindowBlur(): void {
+      setConfirmingBulkDelete(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleWindowBlur);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [confirmingBulkDelete]);
 
   useEffect(() => {
     if (spells.length === 0) {
@@ -226,6 +266,13 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     );
   }
 
+  function handleBulkDeleteBlur(event: ReactFocusEvent<HTMLDivElement>): void {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
+    setConfirmingBulkDelete(false);
+  }
+
   return (
     <section className="spell-library-grid">
       <div className="spell-list-pane">
@@ -282,23 +329,37 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                   />
                   <span>{t('spell.selectAll')}</span>
                 </label>
-                <div className="delete-action batch-delete-action">
+                <div
+                  className="delete-action batch-delete-action"
+                  onBlur={handleBulkDeleteBlur}
+                  ref={bulkDeleteActionRef}
+                >
                   <button
+                    aria-expanded={confirmingBulkDelete}
+                    aria-haspopup="dialog"
                     className="secondary-button danger-button"
                     disabled={selectedSpellIds.length === 0}
-                    onClick={() => setConfirmingBulkDelete(true)}
+                    onClick={() => setConfirmingBulkDelete((current) => !current)}
                     type="button"
                   >
                     <Trash2 size={15} />
                     {t('spell.delete')}
                   </button>
                   {confirmingBulkDelete ? (
-                    <div className="delete-confirm-popover">
+                    <div
+                      aria-label={t('spell.deleteConfirm')}
+                      className="delete-confirm-popover"
+                      role="alertdialog"
+                    >
+                      <button
+                        className="delete-confirm-cancel"
+                        onClick={() => setConfirmingBulkDelete(false)}
+                        type="button"
+                      >
+                        {t('spell.deleteCancel')}
+                      </button>
                       <button className="danger-confirm" onClick={() => void deleteSelectedSpells()} type="button">
                         {t('spell.deleteConfirm')}
-                      </button>
-                      <button onClick={() => setConfirmingBulkDelete(false)} type="button">
-                        {t('spell.deleteCancel')}
                       </button>
                     </div>
                   ) : null}
