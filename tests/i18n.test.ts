@@ -5,8 +5,8 @@ describe('i18n', () => {
   it('uses Chinese for zh local language', () => {
     const t = createTranslator(detectLocale('zh-CN'));
 
-    expect(t('nav.panel')).toBe('快捷施法');
-    expect(t('settings.quickPanelShortcut')).toBe('快捷施法');
+    expect(t('nav.panel')).toBe('闪念施法');
+    expect(t('settings.quickPanelShortcut')).toBe('闪念施法');
     expect(t('nav.library')).toBe('咒语库');
     expect(t('nav.skills')).toBe('技能库');
     expect(t('nav.analytics')).toBe('施法统计');
@@ -30,7 +30,7 @@ describe('i18n', () => {
   it('falls back to Chinese for unsupported languages', () => {
     const t = createTranslator(detectLocale('ja-JP'));
 
-    expect(t('nav.panel')).toBe('快捷施法');
+    expect(t('nav.panel')).toBe('闪念施法');
   });
 
   it('resolves persisted language preferences over system language', () => {
@@ -85,37 +85,29 @@ describe('i18n', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));
     const zhCopy = [
-      zh('spell.placeholder'),
       zh('spell.placeholder.titleContent'),
       zh('spell.placeholder.title'),
       zh('spell.placeholder.content'),
-      zh('spell.search'),
       zh('spell.tags'),
       zh('spell.tagPlaceholder'),
       zh('spell.addTag'),
-      zh('spell.allTags')
     ].join(' ');
     const enCopy = [
-      en('spell.placeholder'),
       en('spell.placeholder.titleContent'),
       en('spell.placeholder.title'),
       en('spell.placeholder.content'),
-      en('spell.search'),
       en('spell.tags'),
       en('spell.tagPlaceholder'),
       en('spell.addTag'),
-      en('spell.allTags')
     ].join(' ');
 
     expect(zh('spell.tags')).toBe('属性');
     expect(zh('spell.tagPlaceholder')).toBe('输入属性');
     expect(zh('spell.addTag')).toBe('添加属性');
-    expect(zh('spell.allTags')).toBe('全部属性');
     expect(zhCopy).not.toContain('标签');
     expect(en('spell.tags')).toBe('Traits');
     expect(en('spell.tagPlaceholder')).toBe('Enter trait');
     expect(en('spell.addTag')).toBe('Add trait');
-    expect(en('spell.allTags')).toBe('All traits');
     expect(enCopy).not.toContain('Tags');
     expect(enCopy).not.toContain('tags');
   });

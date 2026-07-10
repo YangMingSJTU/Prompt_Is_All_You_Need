@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 describe('spell library UI structure', () => {
   it('keeps the quick panel focused on search filters sorting and copying', () => {
     const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
+    const searchFilter = readFileSync('desktop/renderer/components/SpellSearchFilter.tsx', 'utf8');
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const library = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
 
@@ -11,8 +12,8 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain("t('spell.new')");
     expect(component).toContain('selectedTags');
     expect(component).toContain('allTags');
-    expect(component).toContain('SpellFilterMenu');
-    expect(component).toContain('<Funnel size={16} />');
+    expect(component).toContain('SpellSearchFilter');
+    expect(searchFilter).toContain('<Funnel size={16} />');
     expect(component).toContain('searchScope');
     expect(component).toContain('matchesSpellSearch');
     expect(component).toContain('sortSpells');
@@ -21,12 +22,12 @@ describe('spell library UI structure', () => {
     expect(component).toContain('toggleSort');
     expect(component).toContain('result-sort-header');
     expect(component).toContain('quick-panel-controls');
-    expect(component).toContain('quick-panel-search-group');
-    expect(component).toContain('aria-haspopup="dialog"');
-    expect(component).toContain('role="dialog"');
-    expect(component).toContain('role="radiogroup"');
-    expect(component).toContain('role="radio"');
-    expect(component).toContain('role="checkbox"');
+    expect(searchFilter).toContain('spell-search-filter');
+    expect(searchFilter).toContain('aria-haspopup="dialog"');
+    expect(searchFilter).toContain('role="dialog"');
+    expect(searchFilter).toContain('role="radiogroup"');
+    expect(searchFilter).toContain('role="radio"');
+    expect(searchFilter).toContain('role="checkbox"');
     expect(component).not.toContain('SearchScopeMenu');
     expect(component).not.toContain('TraitFilterMenu');
     expect(component).not.toContain('filter-badge');
@@ -49,7 +50,7 @@ describe('spell library UI structure', () => {
     expect(component).toContain('isDefaultDirection ? ArrowDown : ArrowUp');
     expect(component).toContain('setSortMode(null)');
     expect(component).toContain('setSortDirection(null)');
-    expect(component).toContain('spell-result-text');
+    expect(component).not.toContain('spell-result-text');
     expect(component).toContain('spell-result-traits');
     expect(component).toContain('spell-result-usage');
     expect(component).toContain('spell-result-updated');
@@ -62,6 +63,10 @@ describe('spell library UI structure', () => {
     );
     expect(component).toContain('spell-result-actions');
     expect(component).toContain('copySelected(spell)');
+    expect(component).toContain('quick-spell-detail');
+    expect(component).toContain('quick-spell-preview');
+    expect(component).toContain('getSpellDisplayText(selected)');
+    expect(component).toContain('copySelected(selected)');
     expect(component).not.toContain('detail-pane');
 
     expect(app).not.toContain('libraryCreateRequestId');
@@ -91,15 +96,20 @@ describe('spell library UI structure', () => {
 
   it('uses search trait filters name editing and delete confirmation without redundant headings', () => {
     const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
+    const searchFilter = readFileSync('desktop/renderer/components/SpellSearchFilter.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
 
     expect(component).toContain('spell-library-toolbar');
-    expect(component).toContain('spell-filter-search');
+    expect(component).toContain('SpellSearchFilter');
+    expect(component).toContain('matchesSpellSearch');
+    expect(component).toContain('searchScope');
     expect(component).toContain('SpellSortMenu');
     expect(component).toContain('sortSpells');
     expect(component).toContain('variant="button"');
-    expect(component).toContain('tag-filter-row');
+    expect(component).not.toContain('tag-filter-row');
     expect(component).toContain('selectedTags');
+    expect(searchFilter).toContain('spell-filter-popover');
+    expect(searchFilter).toContain('spell-filter-trait-list');
     expect(component).toContain('tag-editor');
     expect(component).toContain('tag-add-button');
     expect(component).toContain('deleteSpell');
@@ -111,6 +121,9 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('<h3>{getSpellTitle(selectedSpell, t)}</h3>');
 
     expect(styles).toContain('.spell-library-toolbar');
+    expect(styles).toContain('.spell-search-filter');
+    expect(styles).toContain('.spell-library-actions');
+    expect(styles).not.toContain('.tag-filter-row');
     expect(styles).toContain('.tag-editor');
     expect(styles).toContain('.delete-confirm-popover');
   });
@@ -127,8 +140,9 @@ describe('spell library UI structure', () => {
     expect(component).toContain('aria-label={t(\'spell.new\')}');
     expect(component).toContain('setSelectedTags([])');
     expect(component).toContain('setQuery(\'\')');
+    expect(component).toContain("setSearchScope('title-content')");
 
-    expect(styles).toContain('.spell-toolbar-row');
+    expect(styles).toContain('.spell-library-actions');
     expect(styles).toContain('.new-spell-button');
     expect(styles.match(/\.new-spell-button\s*\{[^}]+height: 34px;[^}]+\}/s)?.[0]).toBeTruthy();
   });
@@ -183,9 +197,10 @@ describe('spell library UI structure', () => {
   it('uses one filter dialog with search scope and sortable result headers', () => {
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
+    const searchFilter = readFileSync('desktop/renderer/components/SpellSearchFilter.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const controls = styles.match(/\.quick-panel-controls\s*\{[^}]+\}/s)?.[0] ?? '';
-    const searchGroup = styles.match(/\.quick-panel-search-group\s*\{[^}]+\}/s)?.[0] ?? '';
+    const searchGroup = styles.match(/\.spell-search-filter\s*\{[^}]+\}/s)?.[0] ?? '';
     const filterButton = styles.match(/\.spell-filter-button\s*\{[^}]+\}/s)?.[0] ?? '';
     const panelGrid = styles.match(/\.panel-grid\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultHeader = styles.match(/\.result-list-header\s*\{[^}]+\}/s)?.[0] ?? '';
@@ -194,6 +209,8 @@ describe('spell library UI structure', () => {
     const resultTitleRow = styles.match(/\.spell-result-title-row\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTraits = styles.match(/\.spell-result-traits\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTrait = styles.match(/\.spell-result-trait\s*\{[^}]+\}/s)?.[0] ?? '';
+    const quickDetail = styles.match(/\.quick-spell-detail\s*\{[^}]+\}/s)?.[0] ?? '';
+    const quickPreview = styles.match(/\.quick-spell-preview\s*\{[^}]+\}/s)?.[0] ?? '';
     const workspace = styles.match(/\.workspace\s*\{[^}]+\}/s)?.[0] ?? '';
     const popover = styles.match(/\.spell-filter-popover\s*\{[^}]+\}/s)?.[0] ?? '';
     const list = styles.match(/\.spell-filter-trait-list\s*\{[^}]+\}/s)?.[0] ?? '';
@@ -201,17 +218,17 @@ describe('spell library UI structure', () => {
     expect(app).not.toContain('className="topbar"');
     expect(app).not.toContain('topbar-title');
     expect(component).not.toContain('<h3>{t(\'nav.panel\')}</h3>');
-    expect(component).toContain('SpellFilterMenu');
-    expect(component).toContain('traitFilterQuery');
-    expect(component).toContain('resetFilters');
-    expect(component).toContain("onScopeChange('title-content')");
-    expect(component).toContain('onClearTags()');
-    expect(component).toContain('closeFilterMenu');
-    expect(component).toContain("setTraitFilterQuery('')");
-    expect(component).toContain("event.key === 'Escape'");
-    expect(component).toContain("document.addEventListener('pointerdown'");
-    expect(component).toContain('role="checkbox"');
-    expect(component).toContain('aria-checked');
+    expect(component).toContain('SpellSearchFilter');
+    expect(searchFilter).toContain('traitFilterQuery');
+    expect(searchFilter).toContain('resetFilters');
+    expect(searchFilter).toContain("onScopeChange('title-content')");
+    expect(searchFilter).toContain('onClearTags()');
+    expect(searchFilter).toContain('closeFilterMenu');
+    expect(searchFilter).toContain("setTraitFilterQuery('')");
+    expect(searchFilter).toContain("event.key === 'Escape'");
+    expect(searchFilter).toContain("document.addEventListener('pointerdown'");
+    expect(searchFilter).toContain('role="checkbox"');
+    expect(searchFilter).toContain('aria-checked');
     expect(component).not.toContain('filter-badge');
     expect(component).not.toContain('quick-panel-traits');
     expect(component).not.toContain('quick-panel-actions');
@@ -223,14 +240,18 @@ describe('spell library UI structure', () => {
     expect(controls).toContain('grid-template-columns: minmax(0, 1fr);');
     expect(searchGroup).toContain('grid-template-columns: minmax(0, 1fr) 34px;');
     expect(filterButton).toContain('width: 34px;');
-    expect(panelGrid).toContain('grid-template-columns: minmax(0, 1fr);');
+    expect(panelGrid).toContain('grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);');
     expect(resultHeader).toContain('grid-template-columns: minmax(0, 1fr) 96px 76px 32px;');
     expect(resultSortHeader).toContain('justify-content: center;');
     expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) 96px 76px 32px;');
+    expect(resultRow).toContain('min-height: 46px;');
     expect(resultTitleRow).toContain('display: flex;');
     expect(resultTraits).toContain('display: flex;');
     expect(resultTraits).not.toContain('justify-content: flex-end;');
     expect(resultTrait).toContain('width: fit-content;');
+    expect(quickDetail).toContain('border-left: 1px solid var(--border);');
+    expect(quickPreview).toContain('flex: 1 1 auto;');
+    expect(quickPreview).toContain('overflow: auto;');
     expect(popover).toContain('position: absolute;');
     expect(popover).toContain('width: 300px;');
     expect(list).toContain('max-height: 240px;');

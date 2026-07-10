@@ -1,10 +1,12 @@
-import { Clipboard, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Clipboard, Plus, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
+import { matchesSpellSearch, type SearchScope } from '../spellSearch';
 import { sortSpells, type SpellSortDirection, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
+import { SpellSearchFilter } from './SpellSearchFilter';
 import { SpellSortMenu } from './SpellSortMenu';
 
 interface LibraryViewProps {
@@ -31,6 +33,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [isCreating, setIsCreating] = useState(false);
   const [sortMode, setSortMode] = useState<SpellSortMode>('updated');
   const [sortDirection, setSortDirection] = useState<SpellSortDirection>('desc');
+  const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const [selectedSpellIds, setSelectedSpellIds] = useState<string[]>([]);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const { showToast } = useFeedbackToast();
@@ -46,19 +49,18 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   }, [spells]);
 
   const filteredSpells = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     const filtered = spells.filter((spell) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        getSpellName(spell, t).toLowerCase().includes(normalizedQuery) ||
-        spell.body.toLowerCase().includes(normalizedQuery) ||
-        spell.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
+      const matchesQuery = matchesSpellSearch(
+        { name: getSpellName(spell, t), body: spell.body },
+        query,
+        searchScope
+      );
       const matchesTags =
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
       return matchesQuery && matchesTags;
     });
     return sortSpells(filtered, sortMode, sortDirection, (spell) => getSpellName(spell, t));
-  }, [query, selectedTags, sortMode, sortDirection, spells, t]);
+  }, [query, searchScope, selectedTags, sortMode, sortDirection, spells, t]);
   const filteredSpellIds = useMemo(() => filteredSpells.map((spell) => spell.id), [filteredSpells]);
   const selectedVisibleSpellCount = useMemo(() => {
     const selectedIds = new Set(selectedSpellIds);
@@ -182,6 +184,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
 
   function startNewSpell(): void {
     setQuery('');
+    setSearchScope('title-content');
     setSelectedTags([]);
     setSelectedId(null);
     setConfirmingBulkDelete(false);
@@ -255,15 +258,18 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     <section className="spell-library-grid">
       <div className="spell-list-pane">
         <div className="spell-library-toolbar">
-          <div className="spell-toolbar-row">
-            <label className="spell-filter-search">
-              <Search size={15} />
-              <input
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('spell.search')}
-                value={query}
-              />
-            </label>
+          <SpellSearchFilter
+            query={query}
+            searchScope={searchScope}
+            selectedTags={selectedTags}
+            tags={allTags}
+            onClearTags={() => setSelectedTags([])}
+            onQueryChange={setQuery}
+            onScopeChange={setSearchScope}
+            onToggleTag={toggleFilterTag}
+            t={t}
+          />
+          <div className="spell-library-actions">
             <SpellSortMenu
               t={t}
               value={sortMode}
@@ -283,28 +289,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
               <span>{t('spell.new')}</span>
             </button>
           </div>
-          {allTags.length ? (
-            <div className="tag-filter-row" aria-label={t('spell.tags')}>
-              <button
-                className={selectedTags.length === 0 ? 'active' : ''}
-                onClick={() => setSelectedTags([])}
-                type="button"
-              >
-                {t('spell.allTags')}
-              </button>
-              {allTags.map((tag) => (
-                <button
-                  className={selectedTags.includes(tag) ? 'active' : ''}
-                  key={tag}
-                  onClick={() => toggleFilterTag(tag)}
-                  title={tag}
-                  type="button"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
         <div className="spell-list">
           {filteredSpells.length ? (

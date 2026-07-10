@@ -270,7 +270,7 @@ p {
 
 .panel-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
   height: 100%;
   min-height: 0;
 }
@@ -406,9 +406,9 @@ p {
   border-radius: 7px;
   background: transparent;
   cursor: pointer;
-  min-height: 58px;
+  min-height: 46px;
   outline: 0;
-  padding: 8px 10px;
+  padding: 6px 10px;
   text-align: left;
   transition:
     background 120ms ease,
@@ -445,9 +445,7 @@ p {
 }
 
 .spell-result-main {
-  display: grid;
   min-width: 0;
-  gap: 4px;
 }
 
 .spell-result-title-row {
@@ -464,17 +462,6 @@ p {
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.spell-result-text {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -539,6 +526,70 @@ p {
   opacity: 1;
 }
 
+.quick-spell-detail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  padding: 16px 18px 18px;
+}
+
+.quick-spell-detail-heading {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.quick-spell-detail-title {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.quick-spell-detail-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-spell-detail-title .spell-result-traits {
+  max-width: 100%;
+}
+
+.quick-spell-detail-heading .secondary-button {
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.quick-spell-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 14px 0 0;
+  border: 1px solid #27272a;
+  border-radius: var(--radius);
+  background: #101014;
+  color: #f4f4f5;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  padding: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .quick-panel-controls {
   display: grid;
   min-width: 0;
@@ -547,7 +598,7 @@ p {
   gap: 8px;
 }
 
-.quick-panel-search-group {
+.spell-search-filter {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) 34px;
@@ -1127,41 +1178,12 @@ p {
   gap: 8px;
 }
 
-.spell-toolbar-row {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.spell-filter-search {
+.spell-library-actions {
   display: flex;
-  height: 34px;
   min-width: 0;
-  align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
-  padding: 0 10px;
-}
-
-.spell-filter-search svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-  color: var(--muted);
-}
-
-.spell-filter-search input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .new-spell-button {
@@ -1169,19 +1191,12 @@ p {
   padding: 0 11px;
 }
 
-.tag-filter-row,
 .tag-editor {
   display: flex;
   min-width: 0;
   gap: 6px;
 }
 
-.tag-filter-row {
-  overflow-x: auto;
-  padding-bottom: 1px;
-}
-
-.tag-filter-row button,
 .tag-editor button {
   display: inline-flex;
   max-width: 150px;
@@ -1201,8 +1216,6 @@ p {
   white-space: nowrap;
 }
 
-.tag-filter-row button.active,
-.tag-filter-row button:hover,
 .tag-editor button:hover {
   border-color: #e5d3a2;
   background: var(--accent-soft);
