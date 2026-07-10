@@ -38,6 +38,8 @@ export interface Spell {
   copyCount: number;
 }
 
+export const MAX_SPELL_TRAITS = 3;
+
 export interface SpellUpdatePatch {
   name?: string;
   body?: string;

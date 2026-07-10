@@ -12,6 +12,7 @@ describe('i18n', () => {
     expect(t('nav.analytics')).toBe('施法统计');
     expect(t('analytics.usage')).toBe('施法概览');
     expect(t('analytics.topCopied')).toBe('常用咒语');
+    expect(t('spell.resizePanels')).toBe('拖动调整分栏宽度');
     expect(t('floating.placeholder')).toBe('输入关键词搜索咒语');
   });
 
@@ -152,6 +153,24 @@ describe('i18n', () => {
     expect(en('spell.delete')).toBe('Delete');
     expect(en('spell.deleteConfirm')).toBe('Confirm delete');
     expect(en('spell.bulkDeleted')).toBe('Selected spells deleted');
+  });
+
+  it('provides shared spell editor dialog copy in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('spell.editor.createTitle')).toBe('新建咒语');
+    expect(zh('spell.editor.editTitle')).toBe('编辑咒语');
+    expect(zh('spell.editor.close')).toBe('关闭');
+    expect(zh('spell.editor.unsaved')).toBe('有未保存的更改');
+    expect(zh('spell.editor.discard')).toBe('放弃更改');
+    expect(zh('spell.editor.continue')).toBe('继续编辑');
+    expect(en('spell.editor.createTitle')).toBe('New spell');
+    expect(en('spell.editor.editTitle')).toBe('Edit spell');
+    expect(en('spell.editor.close')).toBe('Close');
+    expect(en('spell.editor.unsaved')).toBe('You have unsaved changes');
+    expect(en('spell.editor.discard')).toBe('Discard changes');
+    expect(en('spell.editor.continue')).toBe('Keep editing');
   });
 
   it('uses spell-themed analytics copy in Chinese without renaming English analytics', () => {

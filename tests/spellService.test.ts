@@ -106,6 +106,54 @@ describe('spell service', () => {
     expect(copied.body).toBe(body);
   });
 
+  it('enforces a maximum of three normalized traits', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+
+    await expect(
+      service.createSpell({
+        name: 'Too many traits',
+        body: 'Keep the trait count bounded.',
+        tags: ['one', 'two', 'three', 'four']
+      })
+    ).rejects.toThrow('A spell can have at most 3 traits');
+
+    const spell = await service.createSpell({
+      name: 'Three traits',
+      body: 'Allow three unique traits.',
+      tags: [' one ', 'two', 'one', 'three']
+    });
+    expect(spell.tags).toEqual(['one', 'two', 'three']);
+
+    await expect(
+      service.updateSpell(spell.id, {
+        tags: ['one', 'two', 'three', 'four']
+      })
+    ).rejects.toThrow('A spell can have at most 3 traits');
+  });
+
+  it('caps traits read from local data at three', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    db.run(
+      `INSERT INTO spells
+        (id, name, body, tags, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'spell-many-traits',
+        'Imported spell',
+        'Imported body',
+        JSON.stringify(['one', 'two', 'three', 'four']),
+        'manual',
+        '2026-07-07T00:00:00.000Z',
+        '2026-07-07T00:00:00.000Z'
+      ]
+    );
+
+    const [spell] = await service.listSpells();
+    expect(spell.tags).toEqual(['one', 'two', 'three']);
+  });
+
   it('rejects creating a spell with an empty body', async () => {
     const db = await createTestDatabase();
     const service = createSpellService(db);

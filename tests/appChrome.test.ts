@@ -29,15 +29,20 @@ describe('app chrome defaults', () => {
     expect(mainProcess).toContain('titleBarOverlay');
     expect(mainProcess).toContain("color: '#0f1115'");
     expect(mainProcess).toContain("symbolColor: '#f5f0df'");
-    expect(mainProcess).toContain('height: 40');
+    expect(mainProcess).toContain('height: APP_TITLEBAR_HEIGHT');
+    expect(mainProcess).toContain('minWidth: MAIN_WINDOW_MIN_WIDTH');
+    expect(mainProcess).toContain('useContentSize: true');
 
     expect(app).toContain('app-titlebar');
     expect(app).toContain('titlebar-brand');
     expect(app).toContain('titlebar-window-controls');
+    expect(app).toContain("'--app-min-width'");
+    expect(app).toContain("'--app-sidebar-width'");
 
     expect(styles.match(/\.app-titlebar\s*\{[^}]+-webkit-app-region: drag;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles.match(/\.titlebar-window-controls\s*\{[^}]+-webkit-app-region: no-drag;[^}]+\}/s)?.[0]).toBeTruthy();
-    expect(styles.match(/\.app-shell\s*\{[^}]+height: calc\(100vh - 40px\);[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.app-shell\s*\{[^}]+height: calc\(100vh - var\(--app-titlebar-height\)\);[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.app-shell\s*\{[^}]+min-width: var\(--app-min-width\);[^}]+\}/s)?.[0]).toBeTruthy();
   });
 
   it('lets workspace content layouts use the remaining grid height instead of viewport math', () => {

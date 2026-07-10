@@ -1,9 +1,22 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, Clipboard } from 'lucide-react';
-import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent
+} from 'react';
+import {
+  QUICK_PANEL_MIN_DETAIL_WIDTH,
+  QUICK_PANEL_MIN_LIST_WIDTH,
+  QUICK_PANEL_MIN_WIDTH,
+  QUICK_PANEL_SPLITTER_WIDTH
+} from '../../shared/layout';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
 import { matchesSpellSearch, type SearchScope } from '../spellSearch';
+import { calculateSplitRatio, clampSplitRatio, type SplitPaneConstraints } from '../splitPane';
 import {
   DEFAULT_SORT_DIRECTIONS,
   sortSpells,
@@ -26,6 +39,10 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [sortMode, setSortMode] = useState<SpellSortMode | null>(null);
   const [sortDirection, setSortDirection] = useState<SpellSortDirection | null>(null);
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
+  const [splitRatio, setSplitRatio] = useState(60);
+  const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
+  const resizingRef = useRef(false);
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
@@ -88,8 +105,79 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
     setSortDirection(null);
   }
 
+  function getSplitConstraints(): SplitPaneConstraints | null {
+    const panel = panelRef.current;
+    if (!panel) {
+      return null;
+    }
+    return {
+      containerWidth: panel.getBoundingClientRect().width,
+      dividerWidth: QUICK_PANEL_SPLITTER_WIDTH,
+      minStartWidth: QUICK_PANEL_MIN_LIST_WIDTH,
+      minEndWidth: QUICK_PANEL_MIN_DETAIL_WIDTH
+    };
+  }
+
+  function updateSplitFromPointer(clientX: number): void {
+    const panel = panelRef.current;
+    const constraints = getSplitConstraints();
+    if (!panel || !constraints) {
+      return;
+    }
+    setSplitRatio(calculateSplitRatio(clientX, panel.getBoundingClientRect().left, constraints));
+  }
+
+  function startResizing(event: ReactPointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    resizingRef.current = true;
+    setIsResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateSplitFromPointer(event.clientX);
+  }
+
+  function resizeWithPointer(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (resizingRef.current) {
+      updateSplitFromPointer(event.clientX);
+    }
+  }
+
+  function stopResizing(event: ReactPointerEvent<HTMLDivElement>): void {
+    resizingRef.current = false;
+    setIsResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function resizeWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    const constraints = getSplitConstraints();
+    if (!constraints) {
+      return;
+    }
+    event.preventDefault();
+    setSplitRatio((current) => {
+      if (event.key === 'Home') {
+        return clampSplitRatio(0, constraints);
+      }
+      if (event.key === 'End') {
+        return clampSplitRatio(100, constraints);
+      }
+      return clampSplitRatio(current + (event.key === 'ArrowLeft' ? -2 : 2), constraints);
+    });
+  }
+
   return (
-    <section className="panel-grid">
+    <section
+      className={isResizing ? 'panel-grid resizing' : 'panel-grid'}
+      ref={panelRef}
+      style={{
+        minWidth: QUICK_PANEL_MIN_WIDTH,
+        gridTemplateColumns: `minmax(${QUICK_PANEL_MIN_LIST_WIDTH}px, ${splitRatio}fr) ${QUICK_PANEL_SPLITTER_WIDTH}px minmax(${QUICK_PANEL_MIN_DETAIL_WIDTH}px, ${100 - splitRatio}fr)`
+      }}
+    >
       <div className="search-pane">
         <div className="quick-panel-controls">
           <SpellSearchFilter
@@ -172,14 +260,24 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
           {filtered.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
         </div>
       </div>
+      <div
+        aria-label={t('spell.resizePanels')}
+        aria-orientation="vertical"
+        aria-valuenow={Math.round(splitRatio)}
+        className="quick-spell-resizer"
+        onKeyDown={resizeWithKeyboard}
+        onLostPointerCapture={stopResizing}
+        onPointerDown={startResizing}
+        onPointerMove={resizeWithPointer}
+        onPointerUp={stopResizing}
+        role="separator"
+        tabIndex={0}
+        title={t('spell.resizePanels')}
+      />
       <aside className="quick-spell-detail" aria-label={t('spell.body')}>
         {selected ? (
           <>
             <div className="quick-spell-detail-heading">
-              <div className="quick-spell-detail-title">
-                <strong title={getSpellName(selected, t)}>{getSpellName(selected, t)}</strong>
-                {renderSpellTraits(selected)}
-              </div>
               <button
                 className="secondary-button"
                 onClick={() => void copySelected(selected)}
@@ -231,21 +329,17 @@ function SortHeaderButton({
 }
 
 function renderSpellTraits(spell: Spell) {
-  const visibleTags = spell.tags.slice(0, 3);
-  const hiddenCount = Math.max(spell.tags.length - visibleTags.length, 0);
-
-  if (!visibleTags.length) {
+  if (!spell.tags.length) {
     return null;
   }
 
   return (
     <div className="spell-result-traits">
-      {visibleTags.map((tag) => (
+      {spell.tags.map((tag) => (
         <span className="spell-result-trait" key={tag} title={tag}>
           {tag}
         </span>
       ))}
-      {hiddenCount ? <span className="spell-result-trait-more">+{hiddenCount}</span> : null}
     </div>
   );
 }

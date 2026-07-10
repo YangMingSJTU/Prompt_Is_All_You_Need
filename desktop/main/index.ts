@@ -3,6 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { resolveAppName } from '../shared/appIdentity';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
+import {
+  APP_TITLEBAR_HEIGHT,
+  MAIN_WINDOW_DEFAULT_HEIGHT,
+  MAIN_WINDOW_DEFAULT_WIDTH,
+  MAIN_WINDOW_MIN_HEIGHT,
+  MAIN_WINDOW_MIN_WIDTH
+} from '../shared/layout';
 import type { ScanProvider, ScanRunRequest, ScanSourceConfig, SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
 import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
 import {
@@ -30,17 +37,18 @@ async function createWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
   mainWindow = new BrowserWindow({
-    width: 1120,
-    height: 760,
-    minWidth: 980,
-    minHeight: 640,
+    width: MAIN_WINDOW_DEFAULT_WIDTH,
+    height: MAIN_WINDOW_DEFAULT_HEIGHT,
+    minWidth: MAIN_WINDOW_MIN_WIDTH,
+    minHeight: MAIN_WINDOW_MIN_HEIGHT,
+    useContentSize: true,
     title: appName,
     icon: getAppIconPath(),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#0f1115',
       symbolColor: '#f5f0df',
-      height: 40
+      height: APP_TITLEBAR_HEIGHT
     },
     autoHideMenuBar: true,
     show: false,

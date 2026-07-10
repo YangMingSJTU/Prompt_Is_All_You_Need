@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  Candidate,
-  CandidatePromotionResult,
-  Spell,
-  SpellCreateInput,
-  SpellDeleteResult,
-  SpellUpdatePatch,
-  UsageAnalytics
+import {
+  MAX_SPELL_TRAITS,
+  type Candidate,
+  type CandidatePromotionResult,
+  type Spell,
+  type SpellCreateInput,
+  type SpellDeleteResult,
+  type SpellUpdatePatch,
+  type UsageAnalytics
 } from '../../shared/types';
 import type { AppDatabase } from './database';
 
@@ -160,7 +161,7 @@ export function createSpellService(db: AppDatabase) {
           spellId,
           input.name?.trim() ?? '',
           input.body,
-          JSON.stringify(normalizeTags(input.tags ?? [])),
+          JSON.stringify(validateTags(input.tags ?? [])),
           'manual',
           now,
           now
@@ -184,7 +185,7 @@ export function createSpellService(db: AppDatabase) {
         throw new Error('Spell body cannot be empty');
       }
       const name = patch.name === undefined ? current.name : patch.name.trim();
-      const tags = patch.tags === undefined ? parseTags(current.tags) : normalizeTags(patch.tags);
+      const tags = patch.tags === undefined ? parseTags(current.tags) : validateTags(patch.tags);
       const now = new Date().toISOString();
       db.run(
         `UPDATE spells
@@ -364,6 +365,18 @@ function rowToSpell(row: SpellRow): Spell {
 }
 
 function normalizeTags(tags: string[]): string[] {
+  return collectNormalizedTags(tags).slice(0, MAX_SPELL_TRAITS);
+}
+
+function validateTags(tags: string[]): string[] {
+  const normalized = collectNormalizedTags(tags);
+  if (normalized.length > MAX_SPELL_TRAITS) {
+    throw new Error(`A spell can have at most ${MAX_SPELL_TRAITS} traits`);
+  }
+  return normalized;
+}
+
+function collectNormalizedTags(tags: string[]): string[] {
   const normalized: string[] = [];
   for (const tag of tags) {
     const value = tag.trim();

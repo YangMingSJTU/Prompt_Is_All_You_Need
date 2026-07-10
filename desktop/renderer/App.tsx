@@ -1,6 +1,12 @@
 import { BarChart3, Library, Package, Search, Settings } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { resolveAppName } from '../shared/appIdentity';
+import {
+  APP_SIDEBAR_WIDTH,
+  APP_TITLEBAR_HEIGHT,
+  MAIN_WINDOW_MIN_HEIGHT,
+  MAIN_WINDOW_MIN_WIDTH
+} from '../shared/layout';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
 import type { Candidate, SkillRecord, Spell, UsageAnalytics } from '../shared/types';
 import appIconUrl from '../../assets/icons/app-icon.png';
@@ -25,6 +31,13 @@ const NAV_ITEMS: Array<{
   { id: 'skills', labelKey: 'nav.skills', icon: Package },
   { id: 'analytics', labelKey: 'nav.analytics', icon: BarChart3 }
 ];
+
+const APP_FRAME_STYLE = {
+  '--app-min-width': `${MAIN_WINDOW_MIN_WIDTH}px`,
+  '--app-min-height': `${MAIN_WINDOW_MIN_HEIGHT}px`,
+  '--app-sidebar-width': `${APP_SIDEBAR_WIDTH}px`,
+  '--app-titlebar-height': `${APP_TITLEBAR_HEIGHT}px`
+} as CSSProperties;
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -104,7 +117,7 @@ export function App() {
 
   return (
     <FeedbackToastProvider>
-      <div className="app-frame">
+      <div className="app-frame" style={APP_FRAME_STYLE}>
         <header className="app-titlebar">
           <div className="titlebar-brand">
             <img alt="" src={appIconUrl} />
