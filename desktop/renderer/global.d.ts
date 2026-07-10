@@ -11,6 +11,7 @@ import type {
   SkillRecord,
   Spell,
   SpellCreateInput,
+  SpellDeleteResult,
   SpellUpdatePatch,
   SourceFileSummary,
   UsageAnalytics
@@ -26,6 +27,7 @@ declare global {
       createSpell(input: SpellCreateInput): Promise<Spell>;
       updateSpell(spellId: string, patch: SpellUpdatePatch): Promise<Spell>;
       deleteSpell(spellId: string): Promise<void>;
+      deleteSpells(spellIds: string[]): Promise<SpellDeleteResult>;
       listCandidates(): Promise<Candidate[]>;
       promoteCandidate(candidateId: string): Promise<Spell>;
       promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult>;

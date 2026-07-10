@@ -678,6 +678,11 @@ p {
   background: var(--hover);
 }
 
+.secondary-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .sort-menu-root {
   position: relative;
   display: inline-flex;
@@ -948,9 +953,42 @@ p {
   background: var(--surface);
 }
 
+.spell-selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  min-width: 0;
+  min-height: 42px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 5px 8px 5px 11px;
+}
+
+.spell-select-all {
+  display: inline-flex;
+  width: fit-content;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.spell-selection-toolbar .secondary-button {
+  height: 30px;
+  padding: 0 9px;
+}
+
 .spell-list-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: 24px minmax(0, 1fr) 32px;
   gap: 8px;
   min-width: 0;
   min-height: 72px;
@@ -968,6 +1006,27 @@ p {
 .spell-list-row.selected,
 .spell-list-row:hover {
   background: var(--hover);
+}
+
+.spell-list-row.bulk-selected {
+  background: #fffaf0;
+}
+
+.spell-row-select {
+  display: inline-flex;
+  width: 24px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+}
+
+.spell-select-all input,
+.spell-row-select input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
 }
 
 .spell-row-main {

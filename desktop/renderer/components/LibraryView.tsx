@@ -1,5 +1,5 @@
 import { Clipboard, Plus, Save, Search, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
@@ -27,9 +27,11 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
   const [addingTag, setAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [sortMode, setSortMode] = useState<SpellSortMode>('updated');
+  const [selectedSpellIds, setSelectedSpellIds] = useState<string[]>([]);
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
@@ -56,6 +58,15 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     });
     return sortSpells(filtered, sortMode, (spell) => getSpellName(spell, t));
   }, [query, selectedTags, sortMode, spells, t]);
+  const filteredSpellIds = useMemo(() => filteredSpells.map((spell) => spell.id), [filteredSpells]);
+  const selectedVisibleSpellCount = useMemo(() => {
+    const selectedIds = new Set(selectedSpellIds);
+    return filteredSpellIds.filter((spellId) => selectedIds.has(spellId)).length;
+  }, [filteredSpellIds, selectedSpellIds]);
+  const allFilteredSpellsSelected =
+    filteredSpellIds.length > 0 && selectedVisibleSpellCount === filteredSpellIds.length;
+  const someFilteredSpellsSelected =
+    selectedVisibleSpellCount > 0 && !allFilteredSpellsSelected;
 
   const selectedExistingSpell = useMemo(
     () => filteredSpells.find((spell) => spell.id === selectedId) ?? filteredSpells[0] ?? null,
@@ -65,13 +76,33 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [draft, setDraft] = useState<SpellDraft>(() => createDraft(selectedSpell));
 
   useEffect(() => {
+    const visibleIds = new Set(filteredSpellIds);
+    setSelectedSpellIds((current) => {
+      const next = current.filter((spellId) => visibleIds.has(spellId));
+      return next.length === current.length ? current : next;
+    });
+  }, [filteredSpellIds]);
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = someFilteredSpellsSelected;
+    }
+  }, [someFilteredSpellsSelected]);
+
+  useEffect(() => {
+    if (selectedVisibleSpellCount === 0) {
+      setConfirmingBulkDelete(false);
+    }
+  }, [selectedVisibleSpellCount]);
+
+  useEffect(() => {
     if (isCreating) {
       return;
     }
     if (selectedSpell) {
       setSelectedId(selectedSpell.id);
     }
-    setConfirmingDelete(false);
+    setConfirmingBulkDelete(false);
     setAddingTag(false);
     setNewTag('');
     setDraft(createDraft(selectedSpell));
@@ -125,15 +156,20 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     await onChanged();
   }
 
-  async function deleteSpell(): Promise<void> {
-    if (!selectedSpell) {
+  async function deleteSelectedSpells(): Promise<void> {
+    if (selectedSpellIds.length === 0) {
       return;
     }
-    const remaining = filteredSpells.filter((spell) => spell.id !== selectedSpell.id);
-    await window.spellbook.deleteSpell(selectedSpell.id);
-    setSelectedId(remaining[0]?.id ?? null);
-    setConfirmingDelete(false);
-    showToast(t('spell.deleted'));
+    const selectedIds = new Set(selectedSpellIds);
+    const remaining = filteredSpells.filter((spell) => !selectedIds.has(spell.id));
+    const result = await window.spellbook.deleteSpells(selectedSpellIds);
+    const deletedIds = new Set(result.deletedIds);
+    setSelectedSpellIds([]);
+    setConfirmingBulkDelete(false);
+    if (!isCreating && selectedSpell && deletedIds.has(selectedSpell.id)) {
+      setSelectedId(remaining[0]?.id ?? null);
+    }
+    showToast(t('spell.bulkDeleted'));
     await onChanged();
   }
 
@@ -147,7 +183,8 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setQuery('');
     setSelectedTags([]);
     setSelectedId(null);
-    setConfirmingDelete(false);
+    setConfirmingBulkDelete(false);
+    setSelectedSpellIds([]);
     setAddingTag(false);
     setNewTag('');
     setDraft(createDraft(null));
@@ -158,8 +195,23 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setIsCreating(false);
     setSelectedId(spells[0]?.id ?? null);
     setDraft(createDraft(spells[0] ?? null));
+    setConfirmingBulkDelete(false);
     setAddingTag(false);
     setNewTag('');
+  }
+
+  function toggleSpellSelection(spellId: string): void {
+    setSelectedSpellIds((current) =>
+      current.includes(spellId)
+        ? current.filter((item) => item !== spellId)
+        : [...current, spellId]
+    );
+    setConfirmingBulkDelete(false);
+  }
+
+  function toggleFilteredSpellSelection(): void {
+    setSelectedSpellIds(allFilteredSpellsSelected ? [] : filteredSpellIds);
+    setConfirmingBulkDelete(false);
   }
 
   function toggleFilterTag(tag: string): void {
@@ -247,16 +299,69 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
           ) : null}
         </div>
         <div className="spell-list">
+          {filteredSpells.length ? (
+            <div className="spell-selection-toolbar">
+              <label
+                className="spell-select-all"
+                title={allFilteredSpellsSelected ? t('spell.clearSelection') : t('spell.selectAll')}
+              >
+                <input
+                  aria-label={allFilteredSpellsSelected ? t('spell.clearSelection') : t('spell.selectAll')}
+                  checked={allFilteredSpellsSelected}
+                  onChange={toggleFilteredSpellSelection}
+                  ref={selectAllCheckboxRef}
+                  type="checkbox"
+                />
+                <span>{t('spell.selectAll')}</span>
+              </label>
+              <div className="delete-action batch-delete-action">
+                <button
+                  className="secondary-button danger-button"
+                  disabled={selectedSpellIds.length === 0}
+                  onClick={() => setConfirmingBulkDelete(true)}
+                  type="button"
+                >
+                  <Trash2 size={15} />
+                  {t('spell.delete')}
+                </button>
+                {confirmingBulkDelete ? (
+                  <div className="delete-confirm-popover">
+                    <button className="danger-confirm" onClick={() => void deleteSelectedSpells()} type="button">
+                      {t('spell.deleteConfirm')}
+                    </button>
+                    <button onClick={() => setConfirmingBulkDelete(false)} type="button">
+                      {t('spell.deleteCancel')}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {filteredSpells.map((spell) => (
             <article
-              className={selectedSpell?.id === spell.id ? 'spell-list-row selected' : 'spell-list-row'}
+              className={[
+                'spell-list-row',
+                selectedSpell?.id === spell.id ? 'selected' : '',
+                selectedSpellIds.includes(spell.id) ? 'bulk-selected' : ''
+              ]
+                .filter(Boolean)
+                .join(' ')}
               key={spell.id}
             >
+              <label className="spell-row-select" title={t('spell.select')}>
+                <input
+                  aria-label={`${t('spell.select')} ${getSpellName(spell, t)}`}
+                  checked={selectedSpellIds.includes(spell.id)}
+                  onChange={() => toggleSpellSelection(spell.id)}
+                  type="checkbox"
+                />
+              </label>
               <button
                 className="spell-row-main"
                 onClick={() => {
                   setIsCreating(false);
                   setSelectedId(spell.id);
+                  setConfirmingBulkDelete(false);
                 }}
                 type="button"
               >
@@ -341,28 +446,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                   <X size={16} />
                   {t('spell.cancel')}
                 </button>
-                {selectedSpell ? (
-                  <div className="delete-action">
-                    <button
-                      className="secondary-button danger-button"
-                      onClick={() => setConfirmingDelete(true)}
-                      type="button"
-                    >
-                      <Trash2 size={16} />
-                      {t('spell.delete')}
-                    </button>
-                    {confirmingDelete ? (
-                      <div className="delete-confirm-popover">
-                        <button className="danger-confirm" onClick={() => void deleteSpell()} type="button">
-                          {t('spell.deleteConfirm')}
-                        </button>
-                        <button onClick={() => setConfirmingDelete(false)} type="button">
-                          {t('spell.deleteCancel')}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
                 <button className="primary-button" disabled={!draft.body.trim()} type="submit">
                   <Save size={16} />
                   {isCreating ? t('spell.create') : t('spell.save')}

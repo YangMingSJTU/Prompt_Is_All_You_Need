@@ -192,6 +192,29 @@ describe('spell service', () => {
     expect((await service.getAnalytics()).totalCopies).toBe(0);
   });
 
+  it('bulk deletes spells with deduped ids and reports missing ids', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    await service.seedStarterSpells();
+    const [review] = await service.searchSpells('review');
+    const [commit] = await service.searchSpells('commit');
+    const [debug] = await service.searchSpells('debug');
+
+    await service.copySpell(commit.id);
+    await service.copySpell(commit.id);
+    await service.copySpell(review.id);
+
+    const result = await service.deleteSpells([commit.id, 'missing-spell', review.id, commit.id, '']);
+    const remainingIds = (await service.listSpells()).map((spell) => spell.id);
+
+    expect(result).toEqual({
+      deletedIds: [commit.id, review.id],
+      missingIds: ['missing-spell']
+    });
+    expect(remainingIds).toEqual([debug.id]);
+    expect((await service.getAnalytics()).totalCopies).toBe(0);
+  });
+
   it('promotes selected candidates in bulk and skips duplicate spell bodies', async () => {
     const db = await createTestDatabase();
     const service = createSpellService(db);

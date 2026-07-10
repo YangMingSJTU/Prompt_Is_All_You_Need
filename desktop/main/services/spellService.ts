@@ -4,6 +4,7 @@ import type {
   CandidatePromotionResult,
   Spell,
   SpellCreateInput,
+  SpellDeleteResult,
   SpellUpdatePatch,
   UsageAnalytics
 } from '../../shared/types';
@@ -200,13 +201,27 @@ export function createSpellService(db: AppDatabase) {
     },
 
     async deleteSpell(spellId: string): Promise<void> {
-      const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!current) {
+      const result = await this.deleteSpells([spellId]);
+      if (result.missingIds.includes(spellId)) {
         throw new Error(`Spell not found: ${spellId}`);
       }
-      db.run('DELETE FROM usage_events WHERE spell_id = ?', [spellId]);
-      db.run('DELETE FROM spells WHERE id = ?', [spellId]);
+    },
+
+    async deleteSpells(spellIds: string[]): Promise<SpellDeleteResult> {
+      const deletedIds: string[] = [];
+      const missingIds: string[] = [];
+      for (const spellId of normalizeIds(spellIds)) {
+        const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (!current) {
+          missingIds.push(spellId);
+          continue;
+        }
+        db.run('DELETE FROM usage_events WHERE spell_id = ?', [spellId]);
+        db.run('DELETE FROM spells WHERE id = ?', [spellId]);
+        deletedIds.push(spellId);
+      }
       await db.save();
+      return { deletedIds, missingIds };
     },
 
     async saveCandidates(candidates: Candidate[]): Promise<void> {

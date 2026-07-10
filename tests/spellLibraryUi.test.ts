@@ -97,6 +97,37 @@ describe('spell library UI structure', () => {
     expect(styles.match(/\.new-spell-button\s*\{[^}]+height: 34px;[^}]+\}/s)?.[0]).toBeTruthy();
   });
 
+  it('offers batch selection and deletion for visible spell rows', () => {
+    const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const preload = readFileSync('desktop/main/preload.ts', 'utf8');
+    const globals = readFileSync('desktop/renderer/global.d.ts', 'utf8');
+
+    expect(component).toContain('selectedSpellIds');
+    expect(component).toContain('toggleSpellSelection');
+    expect(component).toContain('toggleFilteredSpellSelection');
+    expect(component).toContain('deleteSelectedSpells');
+    expect(component).toContain('window.spellbook.deleteSpells');
+    expect(component).toContain('className="spell-selection-toolbar"');
+    expect(component).toContain('className="spell-select-all"');
+    expect(component).toContain('className="spell-row-select"');
+    expect(component.match(/type="checkbox"/g)).toHaveLength(2);
+    expect(component).toContain('selectAllCheckboxRef.current.indeterminate');
+    expect(component).toContain("t('spell.selectAll')");
+    expect(component).toContain("t('spell.clearSelection')");
+    expect(component).toContain("t('spell.delete')");
+    expect(component).not.toContain("t('spell.selectedCount')");
+    expect(component).not.toContain("t('spell.deleteSelected')");
+    expect(component).not.toContain('window.spellbook.deleteSpell(');
+    expect(component).not.toContain('async function deleteSpell()');
+    expect(styles).toContain('.spell-selection-toolbar');
+    expect(styles).toContain('.spell-select-all');
+    expect(styles).not.toContain('.spell-bulk-toolbar');
+    expect(styles).toContain('.spell-row-select');
+    expect(preload).toContain('deleteSpells');
+    expect(globals).toContain('deleteSpells(spellIds: string[])');
+  });
+
   it('keeps the spell library panes from touching the window bottom', () => {
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const libraryGrid = styles.match(/\.spell-library-grid\s*\{[^}]+\}/s)?.[0] ?? '';

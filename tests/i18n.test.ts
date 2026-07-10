@@ -114,6 +114,22 @@ describe('i18n', () => {
     expect(enCopy).not.toContain('tags');
   });
 
+  it('provides batch spell deletion copy in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('spell.selectAll')).toBe('全选');
+    expect(zh('spell.clearSelection')).toBe('清除选择');
+    expect(zh('spell.delete')).toBe('删除');
+    expect(zh('spell.deleteConfirm')).toBe('确认删除');
+    expect(zh('spell.bulkDeleted')).toBe('已删除选中咒语');
+    expect(en('spell.selectAll')).toBe('Select all');
+    expect(en('spell.clearSelection')).toBe('Clear selection');
+    expect(en('spell.delete')).toBe('Delete');
+    expect(en('spell.deleteConfirm')).toBe('Confirm delete');
+    expect(en('spell.bulkDeleted')).toBe('Selected spells deleted');
+  });
+
   it('uses spell-themed analytics copy in Chinese without renaming English analytics', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));

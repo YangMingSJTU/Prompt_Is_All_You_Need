@@ -50,6 +50,11 @@ export interface SpellCreateInput {
   tags?: string[];
 }
 
+export interface SpellDeleteResult {
+  deletedIds: string[];
+  missingIds: string[];
+}
+
 export interface ScanSourceConfig {
   provider: ScanProvider;
   target: ScanTarget;
