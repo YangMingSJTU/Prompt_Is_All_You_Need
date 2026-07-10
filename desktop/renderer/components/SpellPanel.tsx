@@ -4,7 +4,7 @@ import type { Spell } from '../../shared/types';
 import type { I18nKey, TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
 import { matchesSpellSearch, type SearchScope } from '../spellSearch';
-import { sortSpells, type SpellSortMode } from '../spellSort';
+import { sortSpells, type SpellSortDirection, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellSortMenu } from './SpellSortMenu';
 
@@ -43,6 +43,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
   const [sortMode, setSortMode] = useState<SpellSortMode>('usage');
+  const [sortDirection, setSortDirection] = useState<SpellSortDirection>('desc');
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const { showToast } = useFeedbackToast();
 
@@ -64,8 +65,8 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
       return matchesQuery && matchesTags;
     });
-    return sortSpells(filteredSpells, sortMode, (spell) => getSpellName(spell, t));
-  }, [spells, query, searchScope, selectedTags, sortMode, t]);
+    return sortSpells(filteredSpells, sortMode, sortDirection, (spell) => getSpellName(spell, t));
+  }, [spells, query, searchScope, selectedTags, sortMode, sortDirection, t]);
 
   const selected = filtered.find((spell) => spell.id === selectedId) ?? filtered[0] ?? null;
   const searchPlaceholder = t(getSearchScopeOption(searchScope).placeholderKey);
@@ -118,11 +119,21 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
             className="quick-panel-sort"
             t={t}
             value={sortMode}
+            direction={sortDirection}
             onChange={setSortMode}
+            onDirectionChange={setSortDirection}
             variant="button"
           />
         </div>
         <div className="result-list">
+          {filtered.length ? (
+            <div className="result-list-header" aria-hidden="true">
+              <span>{t('spell.name')}</span>
+              <span>{t('spell.usageCount')}</span>
+              <span>{t('spell.updatedAt')}</span>
+              <span />
+            </div>
+          ) : null}
           {filtered.map((spell) => (
             <div
               className={selected?.id === spell.id ? 'result-row selected' : 'result-row'}
@@ -133,14 +144,20 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
               tabIndex={0}
             >
               <div className="spell-result-main">
-                <span className="spell-result-name" title={getSpellName(spell, t)}>
-                  {getSpellName(spell, t)}
-                </span>
+                <div className="spell-result-title-row">
+                  <span className="spell-result-name" title={getSpellName(spell, t)}>
+                    {getSpellName(spell, t)}
+                  </span>
+                  {renderSpellTraits(spell)}
+                </div>
                 <span className="spell-result-text" title={getSpellDisplayText(spell)}>
                   {getSpellDisplayText(spell)}
                 </span>
               </div>
-              {renderSpellTraits(spell)}
+              <span className="spell-result-usage">{spell.copyCount}</span>
+              <span className="spell-result-updated" title={formatUpdatedAtTitle(spell.updatedAt)}>
+                {formatUpdatedAt(spell.updatedAt)}
+              </span>
               <div className="spell-result-actions">
                 <button
                   aria-label={t('spell.copy')}
@@ -320,7 +337,7 @@ function renderSpellTraits(spell: Spell) {
   const hiddenCount = Math.max(spell.tags.length - visibleTags.length, 0);
 
   if (!visibleTags.length) {
-    return <div className="spell-result-traits" />;
+    return null;
   }
 
   return (
@@ -333,6 +350,22 @@ function renderSpellTraits(spell: Spell) {
       {hiddenCount ? <span className="spell-result-trait-more">+{hiddenCount}</span> : null}
     </div>
   );
+}
+
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  return date.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
+}
+
+function formatUpdatedAtTitle(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
 }
 
 function getSearchScopeOption(scope: SearchScope) {

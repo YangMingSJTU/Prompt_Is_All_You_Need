@@ -103,6 +103,8 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(sortMenu).toContain('ArrowUpDown');
     expect(sortMenu).toContain('role="menu"');
     expect(sortMenu).toContain('role="menuitemradio"');
+    expect(sortMenu).toContain('sort-direction-group');
+    expect(sortMenu).toContain('onDirectionChange');
     expect(sortMenu).toContain('aria-checked');
     expect(sortMenu).toContain('Check');
 
@@ -113,10 +115,12 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(styles).toContain('.sort-menu-option');
     expect(styles).not.toContain('.floating-sort {');
 
-    expect(i18n).toContain("'floating.sort.usage': '常用优先'");
-    expect(i18n).toContain("'floating.sort.created': '最近添加'");
-    expect(i18n).toContain("'floating.sort.updated': '最近更新'");
-    expect(i18n).toContain("'floating.sort.name': '名称 A-Z'");
-    expect(i18n).toContain("'floating.sort.nameLength': '名称从短到长'");
+    expect(i18n).toContain("'floating.sort.usage': '使用次数'");
+    expect(i18n).toContain("'floating.sort.created': '创建时间'");
+    expect(i18n).toContain("'floating.sort.updated': '更新时间'");
+    expect(i18n).toContain("'floating.sort.name': '名称'");
+    expect(i18n).toContain("'floating.sort.direction.asc': '正序'");
+    expect(i18n).toContain("'floating.sort.direction.desc': '倒序'");
+    expect(i18n).not.toContain('nameLength');
   });
 });

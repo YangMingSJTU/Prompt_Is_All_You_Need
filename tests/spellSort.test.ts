@@ -19,21 +19,27 @@ function spell(input: Partial<Spell> & Pick<Spell, 'id' | 'name'>): Spell {
 }
 
 describe('spell sorting', () => {
-  it('sorts by copy count and then recently updated for usage-first views', () => {
+  it('sorts by copy count in both directions without mutating input', () => {
     const spells = [
       spell({ id: 'a', name: 'Alpha', copyCount: 1, updatedAt: '2026-01-01T00:00:00.000Z' }),
       spell({ id: 'b', name: 'Beta', copyCount: 3, updatedAt: '2026-01-01T00:00:00.000Z' }),
       spell({ id: 'c', name: 'Gamma', copyCount: 3, updatedAt: '2026-02-01T00:00:00.000Z' })
     ];
 
-    expect(sortSpells(spells, 'usage', (item) => item.name).map((item) => item.id)).toEqual([
-      'c',
+    expect(sortSpells(spells, 'usage', 'desc', (item) => item.name).map((item) => item.id)).toEqual([
       'b',
+      'c',
       'a'
     ]);
+    expect(sortSpells(spells, 'usage', 'asc', (item) => item.name).map((item) => item.id)).toEqual([
+      'a',
+      'b',
+      'c'
+    ]);
+    expect(spells.map((item) => item.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('sorts by created updated name and name length without mutating input', () => {
+  it('sorts by created updated and name with explicit direction', () => {
     const spells = [
       spell({
         id: 'long',
@@ -55,25 +61,30 @@ describe('spell sorting', () => {
       })
     ];
 
-    expect(sortSpells(spells, 'created', (item) => item.name).map((item) => item.id)).toEqual([
+    expect(sortSpells(spells, 'created', 'desc', (item) => item.name).map((item) => item.id)).toEqual([
       'beta',
       'alpha',
       'long'
     ]);
-    expect(sortSpells(spells, 'updated', (item) => item.name).map((item) => item.id)).toEqual([
+    expect(sortSpells(spells, 'created', 'asc', (item) => item.name).map((item) => item.id)).toEqual([
       'long',
       'alpha',
       'beta'
     ]);
-    expect(sortSpells(spells, 'name', (item) => item.name).map((item) => item.id)).toEqual([
+    expect(sortSpells(spells, 'updated', 'desc', (item) => item.name).map((item) => item.id)).toEqual([
+      'long',
+      'alpha',
+      'beta'
+    ]);
+    expect(sortSpells(spells, 'name', 'asc', (item) => item.name).map((item) => item.id)).toEqual([
       'alpha',
       'beta',
       'long'
     ]);
-    expect(sortSpells(spells, 'nameLength', (item) => item.name).map((item) => item.id)).toEqual([
+    expect(sortSpells(spells, 'name', 'desc', (item) => item.name).map((item) => item.id)).toEqual([
+      'long',
       'beta',
-      'alpha',
-      'long'
+      'alpha'
     ]);
     expect(spells.map((item) => item.id)).toEqual(['long', 'beta', 'alpha']);
   });

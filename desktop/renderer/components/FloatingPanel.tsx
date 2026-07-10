@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
-import { sortSpells, type SpellSortMode } from '../spellSort';
+import { sortSpells, type SpellSortDirection, type SpellSortMode } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellSortMenu } from './SpellSortMenu';
 
@@ -17,6 +17,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   const [spells, setSpells] = useState<Spell[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sortMode, setSortMode] = useState<SpellSortMode>('usage');
+  const [sortDirection, setSortDirection] = useState<SpellSortDirection>('desc');
   const { showToast } = useFeedbackToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -43,9 +44,9 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   }, []);
 
   const visibleSpells = useMemo(() => {
-    const sorted = sortSpells(spells, sortMode, (spell) => getFloatingSpellName(spell, t));
+    const sorted = sortSpells(spells, sortMode, sortDirection, (spell) => getFloatingSpellName(spell, t));
     return query.trim() ? sorted : sorted.slice(0, 5);
-  }, [query, sortMode, spells, t]);
+  }, [query, sortMode, sortDirection, spells, t]);
   const selected = useMemo(() => visibleSpells[selectedIndex] ?? null, [visibleSpells, selectedIndex]);
 
   async function copySpell(spell: Spell): Promise<void> {
@@ -91,8 +92,13 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
         <SpellSortMenu
           t={t}
           value={sortMode}
+          direction={sortDirection}
           onChange={(value) => {
             setSortMode(value);
+            setSelectedIndex(0);
+          }}
+          onDirectionChange={(value) => {
+            setSortDirection(value);
             setSelectedIndex(0);
           }}
           variant="icon"

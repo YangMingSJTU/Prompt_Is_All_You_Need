@@ -320,16 +320,40 @@ p {
 .result-list {
   display: grid;
   align-content: start;
-  gap: 3px;
+  gap: 2px;
   min-height: 0;
   margin-top: 14px;
   overflow: auto;
 }
 
+.result-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 76px 96px 32px;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 10px 7px;
+}
+
+.result-list-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .result-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 76px 96px 32px;
   gap: 12px;
   align-items: center;
   border: 0;
@@ -380,6 +404,13 @@ p {
   gap: 4px;
 }
 
+.spell-result-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
 .spell-result-name {
   display: block;
   min-width: 0;
@@ -404,10 +435,9 @@ p {
 
 .spell-result-traits {
   display: flex;
-  max-width: 280px;
   min-width: 0;
+  max-width: 340px;
   align-items: center;
-  justify-content: flex-end;
   gap: 6px;
   overflow: hidden;
 }
@@ -435,6 +465,21 @@ p {
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.spell-result-usage,
+.spell-result-updated {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spell-result-usage {
+  text-align: right;
 }
 
 .spell-result-actions {
@@ -893,10 +938,19 @@ p {
 }
 
 .sort-menu-button span {
+  display: inline-flex;
   min-width: 0;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sort-menu-button small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .sort-menu-root.compact .sort-menu-button {
@@ -944,6 +998,32 @@ p {
 
 .sort-menu-option svg {
   color: var(--accent);
+}
+
+.sort-direction-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin-top: 5px;
+  border-top: 1px solid var(--border);
+  padding-top: 5px;
+}
+
+.sort-direction-button {
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sort-direction-button:hover,
+.sort-direction-button.selected {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .spell-preview,

@@ -1,20 +1,36 @@
 import { ArrowUpDown, Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from '../i18n';
-import { SPELL_SORT_OPTIONS, type SpellSortMode } from '../spellSort';
+import {
+  DEFAULT_SORT_DIRECTIONS,
+  SPELL_SORT_OPTIONS,
+  type SpellSortDirection,
+  type SpellSortMode
+} from '../spellSort';
 
 interface SpellSortMenuProps {
   value: SpellSortMode;
+  direction: SpellSortDirection;
   onChange(value: SpellSortMode): void;
+  onDirectionChange(value: SpellSortDirection): void;
   t: TFunction;
   variant: 'button' | 'icon';
   className?: string;
 }
 
-export function SpellSortMenu({ value, onChange, t, variant, className }: SpellSortMenuProps) {
+export function SpellSortMenu({
+  value,
+  direction,
+  onChange,
+  onDirectionChange,
+  t,
+  variant,
+  className
+}: SpellSortMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const currentOption = SPELL_SORT_OPTIONS.find((option) => option.value === value) ?? SPELL_SORT_OPTIONS[0];
+  const directionLabel = direction === 'asc' ? t('floating.sort.direction.asc') : t('floating.sort.direction.desc');
   const rootClassName = ['sort-menu-root', variant === 'icon' ? 'compact' : '', className ?? '']
     .filter(Boolean)
     .join(' ');
@@ -46,7 +62,11 @@ export function SpellSortMenu({ value, onChange, t, variant, className }: SpellS
 
   function selectSortMode(nextValue: SpellSortMode): void {
     onChange(nextValue);
-    setOpen(false);
+    onDirectionChange(DEFAULT_SORT_DIRECTIONS[nextValue]);
+  }
+
+  function selectDirection(nextDirection: SpellSortDirection): void {
+    onDirectionChange(nextDirection);
   }
 
   return (
@@ -57,11 +77,20 @@ export function SpellSortMenu({ value, onChange, t, variant, className }: SpellS
         aria-label={t('floating.sort.label')}
         className="sort-menu-button"
         onClick={() => setOpen((current) => !current)}
-        title={variant === 'icon' ? t(currentOption.labelKey) : t('floating.sort.label')}
+        title={
+          variant === 'icon'
+            ? `${t(currentOption.labelKey)} · ${directionLabel}`
+            : t('floating.sort.label')
+        }
         type="button"
       >
         <ArrowUpDown size={15} />
-        {variant === 'button' ? <span>{t(currentOption.labelKey)}</span> : null}
+        {variant === 'button' ? (
+          <span>
+            {t(currentOption.labelKey)}
+            <small>{directionLabel}</small>
+          </span>
+        ) : null}
       </button>
       {open ? (
         <div className="sort-menu-popover" role="menu">
@@ -78,6 +107,24 @@ export function SpellSortMenu({ value, onChange, t, variant, className }: SpellS
               {value === option.value ? <Check size={14} /> : null}
             </button>
           ))}
+          <div className="sort-direction-group" aria-label={t('floating.sort.direction')} role="group">
+            <button
+              aria-pressed={direction === 'asc'}
+              className={direction === 'asc' ? 'sort-direction-button selected' : 'sort-direction-button'}
+              onClick={() => selectDirection('asc')}
+              type="button"
+            >
+              {t('floating.sort.direction.asc')}
+            </button>
+            <button
+              aria-pressed={direction === 'desc'}
+              className={direction === 'desc' ? 'sort-direction-button selected' : 'sort-direction-button'}
+              onClick={() => selectDirection('desc')}
+              type="button"
+            >
+              {t('floating.sort.direction.desc')}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>

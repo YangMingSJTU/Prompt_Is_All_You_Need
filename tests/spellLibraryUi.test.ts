@@ -35,8 +35,15 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('spell.tags.some');
     expect(component).not.toContain('count-pill');
     expect(component).not.toContain("t('metric.spells')");
+    expect(component).toContain('result-list-header');
+    expect(component).toContain("t('spell.usageCount')");
+    expect(component).toContain("t('spell.updatedAt')");
+    expect(component).toContain('spell-result-title-row');
     expect(component).toContain('spell-result-text');
     expect(component).toContain('spell-result-traits');
+    expect(component).toContain('spell-result-usage');
+    expect(component).toContain('spell-result-updated');
+    expect(component).toContain('formatUpdatedAt(spell.updatedAt)');
     expect(component).toContain('spell-result-actions');
     expect(component).toContain('copySelected(spell)');
     expect(component).not.toContain('detail-pane');
@@ -165,7 +172,9 @@ describe('spell library UI structure', () => {
     const searchGroup = styles.match(/\.quick-panel-search-group\s*\{[^}]+\}/s)?.[0] ?? '';
     const filterButton = styles.match(/\.spell-filter-button\s*\{[^}]+\}/s)?.[0] ?? '';
     const panelGrid = styles.match(/\.panel-grid\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultHeader = styles.match(/\.result-list-header\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultRow = styles.match(/\.result-row\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultTitleRow = styles.match(/\.spell-result-title-row\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTraits = styles.match(/\.spell-result-traits\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTrait = styles.match(/\.spell-result-trait\s*\{[^}]+\}/s)?.[0] ?? '';
     const workspace = styles.match(/\.workspace\s*\{[^}]+\}/s)?.[0] ?? '';
@@ -197,8 +206,11 @@ describe('spell library UI structure', () => {
     expect(searchGroup).toContain('grid-template-columns: minmax(0, 1fr) 34px;');
     expect(filterButton).toContain('width: 34px;');
     expect(panelGrid).toContain('grid-template-columns: minmax(0, 1fr);');
-    expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) auto auto;');
+    expect(resultHeader).toContain('grid-template-columns: minmax(0, 1fr) 76px 96px 32px;');
+    expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) 76px 96px 32px;');
+    expect(resultTitleRow).toContain('display: flex;');
     expect(resultTraits).toContain('display: flex;');
+    expect(resultTraits).not.toContain('justify-content: flex-end;');
     expect(resultTrait).toContain('width: fit-content;');
     expect(popover).toContain('position: absolute;');
     expect(popover).toContain('width: 300px;');
