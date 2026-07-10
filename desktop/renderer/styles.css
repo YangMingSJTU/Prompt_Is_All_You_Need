@@ -332,7 +332,7 @@ p {
   z-index: 2;
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) 76px 96px 32px;
+  grid-template-columns: minmax(0, 1fr) 96px 76px 32px;
   gap: 12px;
   align-items: center;
   border-bottom: 1px solid var(--border);
@@ -343,17 +343,63 @@ p {
   padding: 0 10px 7px;
 }
 
-.result-list-header span {
+.result-list-header > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.result-sort-header {
+  display: inline-flex;
+  min-width: 0;
+  width: 100%;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.result-sort-header:first-child {
+  justify-content: flex-start;
+  padding-left: 0;
+}
+
+.result-sort-header:hover,
+.result-sort-header.active {
+  color: var(--text);
+}
+
+.result-sort-header:focus-visible {
+  outline: 2px solid rgba(209, 164, 58, 0.32);
+  outline-offset: 1px;
+}
+
+.result-sort-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-sort-header svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
 .result-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) 76px 96px 32px;
+  grid-template-columns: minmax(0, 1fr) 96px 76px 32px;
   gap: 12px;
   align-items: center;
   border: 0;
@@ -476,10 +522,7 @@ p {
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.spell-result-usage {
-  text-align: right;
+  text-align: center;
 }
 
 .spell-result-actions {
@@ -499,7 +542,7 @@ p {
 .quick-panel-controls {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -552,10 +595,6 @@ p {
   border-color: #e5d3a2;
   background: var(--accent-soft);
   color: #6f4f08;
-}
-
-.quick-panel-sort .sort-menu-button {
-  height: 34px;
 }
 
 .spell-filter-popover {

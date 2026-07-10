@@ -1,12 +1,16 @@
-import { Check, Clipboard, Funnel, FunnelX, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Clipboard, Funnel, FunnelX, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Spell } from '../../shared/types';
 import type { I18nKey, TFunction } from '../i18n';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
 import { matchesSpellSearch, type SearchScope } from '../spellSearch';
-import { sortSpells, type SpellSortDirection, type SpellSortMode } from '../spellSort';
+import {
+  DEFAULT_SORT_DIRECTIONS,
+  sortSpells,
+  type SpellSortDirection,
+  type SpellSortMode
+} from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
-import { SpellSortMenu } from './SpellSortMenu';
 
 interface SpellPanelProps {
   spells: Spell[];
@@ -42,8 +46,8 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
-  const [sortMode, setSortMode] = useState<SpellSortMode>('usage');
-  const [sortDirection, setSortDirection] = useState<SpellSortDirection>('desc');
+  const [sortMode, setSortMode] = useState<SpellSortMode | null>(null);
+  const [sortDirection, setSortDirection] = useState<SpellSortDirection | null>(null);
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const { showToast } = useFeedbackToast();
 
@@ -65,6 +69,9 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
       return matchesQuery && matchesTags;
     });
+    if (!sortMode || !sortDirection) {
+      return filteredSpells;
+    }
     return sortSpells(filteredSpells, sortMode, sortDirection, (spell) => getSpellName(spell, t));
   }, [spells, query, searchScope, selectedTags, sortMode, sortDirection, t]);
 
@@ -91,6 +98,21 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
     setSelectedId(spellId);
   }
 
+  function toggleSort(nextMode: SpellSortMode): void {
+    const defaultDirection = DEFAULT_SORT_DIRECTIONS[nextMode];
+    if (sortMode !== nextMode) {
+      setSortMode(nextMode);
+      setSortDirection(defaultDirection);
+      return;
+    }
+    if (sortDirection === defaultDirection) {
+      setSortDirection(defaultDirection === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortMode(null);
+    setSortDirection(null);
+  }
+
   return (
     <section className="panel-grid">
       <div className="search-pane">
@@ -115,22 +137,31 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
               t={t}
             />
           </div>
-          <SpellSortMenu
-            className="quick-panel-sort"
-            t={t}
-            value={sortMode}
-            direction={sortDirection}
-            onChange={setSortMode}
-            onDirectionChange={setSortDirection}
-            variant="button"
-          />
         </div>
         <div className="result-list">
           {filtered.length ? (
-            <div className="result-list-header" aria-hidden="true">
-              <span>{t('spell.name')}</span>
-              <span>{t('spell.usageCount')}</span>
-              <span>{t('spell.updatedAt')}</span>
+            <div className="result-list-header">
+              <SortHeaderButton
+                label={t('spell.name')}
+                mode="name"
+                sortDirection={sortDirection}
+                sortMode={sortMode}
+                onSort={toggleSort}
+              />
+              <SortHeaderButton
+                label={t('spell.updatedAt')}
+                mode="updated"
+                sortDirection={sortDirection}
+                sortMode={sortMode}
+                onSort={toggleSort}
+              />
+              <SortHeaderButton
+                label={t('spell.usageCount')}
+                mode="usage"
+                sortDirection={sortDirection}
+                sortMode={sortMode}
+                onSort={toggleSort}
+              />
               <span />
             </div>
           ) : null}
@@ -154,10 +185,10 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
                   {getSpellDisplayText(spell)}
                 </span>
               </div>
-              <span className="spell-result-usage">{spell.copyCount}</span>
               <span className="spell-result-updated" title={formatUpdatedAtTitle(spell.updatedAt)}>
                 {formatUpdatedAt(spell.updatedAt)}
               </span>
+              <span className="spell-result-usage">{spell.copyCount}</span>
               <div className="spell-result-actions">
                 <button
                   aria-label={t('spell.copy')}
@@ -178,6 +209,37 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+function SortHeaderButton({
+  label,
+  mode,
+  sortMode,
+  sortDirection,
+  onSort
+}: {
+  label: string;
+  mode: SpellSortMode;
+  sortMode: SpellSortMode | null;
+  sortDirection: SpellSortDirection | null;
+  onSort(mode: SpellSortMode): void;
+}) {
+  const active = sortMode === mode && sortDirection !== null;
+  const isDefaultDirection = sortDirection === DEFAULT_SORT_DIRECTIONS[mode];
+  const Icon = active ? (isDefaultDirection ? ArrowDown : ArrowUp) : ArrowUpDown;
+
+  return (
+    <button
+      aria-pressed={active}
+      className={active ? 'result-sort-header active' : 'result-sort-header'}
+      onClick={() => onSort(mode)}
+      title={label}
+      type="button"
+    >
+      <span>{label}</span>
+      <Icon size={13} />
+    </button>
   );
 }
 

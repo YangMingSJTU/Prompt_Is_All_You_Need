@@ -115,7 +115,7 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(styles).toContain('.sort-menu-option');
     expect(styles).not.toContain('.floating-sort {');
 
-    expect(i18n).toContain("'floating.sort.usage': '使用次数'");
+    expect(i18n).toContain("'floating.sort.usage': '施法次数'");
     expect(i18n).toContain("'floating.sort.created': '创建时间'");
     expect(i18n).toContain("'floating.sort.updated': '更新时间'");
     expect(i18n).toContain("'floating.sort.name': '名称'");

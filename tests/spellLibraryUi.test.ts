@@ -15,9 +15,11 @@ describe('spell library UI structure', () => {
     expect(component).toContain('<Funnel size={16} />');
     expect(component).toContain('searchScope');
     expect(component).toContain('matchesSpellSearch');
-    expect(component).toContain('SpellSortMenu');
     expect(component).toContain('sortSpells');
-    expect(component).toContain('variant="button"');
+    expect(component).toContain('SortHeaderButton');
+    expect(component).toContain('DEFAULT_SORT_DIRECTIONS');
+    expect(component).toContain('toggleSort');
+    expect(component).toContain('result-sort-header');
     expect(component).toContain('quick-panel-controls');
     expect(component).toContain('quick-panel-search-group');
     expect(component).toContain('aria-haspopup="dialog"');
@@ -39,11 +41,25 @@ describe('spell library UI structure', () => {
     expect(component).toContain("t('spell.usageCount')");
     expect(component).toContain("t('spell.updatedAt')");
     expect(component).toContain('spell-result-title-row');
+    expect(component).toContain('mode="usage"');
+    expect(component).toContain('mode="updated"');
+    expect(component).toContain('setSortDirection(defaultDirection)');
+    expect(component).toContain("defaultDirection === 'asc' ? 'desc' : 'asc'");
+    expect(component).toContain('sortDirection === DEFAULT_SORT_DIRECTIONS[mode]');
+    expect(component).toContain('isDefaultDirection ? ArrowDown : ArrowUp');
+    expect(component).toContain('setSortMode(null)');
+    expect(component).toContain('setSortDirection(null)');
     expect(component).toContain('spell-result-text');
     expect(component).toContain('spell-result-traits');
     expect(component).toContain('spell-result-usage');
     expect(component).toContain('spell-result-updated');
     expect(component).toContain('formatUpdatedAt(spell.updatedAt)');
+    expect(component.indexOf('label={t(\'spell.updatedAt\')}')).toBeLessThan(
+      component.indexOf('label={t(\'spell.usageCount\')}')
+    );
+    expect(component.indexOf('<span className="spell-result-updated"')).toBeLessThan(
+      component.indexOf('<span className="spell-result-usage"')
+    );
     expect(component).toContain('spell-result-actions');
     expect(component).toContain('copySelected(spell)');
     expect(component).not.toContain('detail-pane');
@@ -164,7 +180,7 @@ describe('spell library UI structure', () => {
     expect(spellList).toContain('overflow: auto;');
   });
 
-  it('uses one filter dialog with search scope and traits beside the sort control', () => {
+  it('uses one filter dialog with search scope and sortable result headers', () => {
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const component = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
@@ -173,6 +189,7 @@ describe('spell library UI structure', () => {
     const filterButton = styles.match(/\.spell-filter-button\s*\{[^}]+\}/s)?.[0] ?? '';
     const panelGrid = styles.match(/\.panel-grid\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultHeader = styles.match(/\.result-list-header\s*\{[^}]+\}/s)?.[0] ?? '';
+    const resultSortHeader = styles.match(/\.result-sort-header\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultRow = styles.match(/\.result-row\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTitleRow = styles.match(/\.spell-result-title-row\s*\{[^}]+\}/s)?.[0] ?? '';
     const resultTraits = styles.match(/\.spell-result-traits\s*\{[^}]+\}/s)?.[0] ?? '';
@@ -200,14 +217,16 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('quick-panel-actions');
     expect(component).not.toContain('search-scope-menu-root');
     expect(component).not.toContain('trait-filter-menu-root');
+    expect(component).not.toContain('className="quick-panel-sort"');
     expect(workspace).not.toContain('grid-template-rows: 53px minmax(0, 1fr)');
     expect(controls).toContain('display: grid;');
-    expect(controls).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(controls).toContain('grid-template-columns: minmax(0, 1fr);');
     expect(searchGroup).toContain('grid-template-columns: minmax(0, 1fr) 34px;');
     expect(filterButton).toContain('width: 34px;');
     expect(panelGrid).toContain('grid-template-columns: minmax(0, 1fr);');
-    expect(resultHeader).toContain('grid-template-columns: minmax(0, 1fr) 76px 96px 32px;');
-    expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) 76px 96px 32px;');
+    expect(resultHeader).toContain('grid-template-columns: minmax(0, 1fr) 96px 76px 32px;');
+    expect(resultSortHeader).toContain('justify-content: center;');
+    expect(resultRow).toContain('grid-template-columns: minmax(0, 1fr) 96px 76px 32px;');
     expect(resultTitleRow).toContain('display: flex;');
     expect(resultTraits).toContain('display: flex;');
     expect(resultTraits).not.toContain('justify-content: flex-end;');
