@@ -45,7 +45,9 @@ interface LibraryViewProps {
   t: TFunction;
 }
 
-type EditorState = { mode: 'create' } | { mode: 'edit'; spellId: string };
+type EditorState =
+  | { mode: 'create'; candidateId?: string; initialDraft?: SpellEditorDraft }
+  | { mode: 'edit'; spellId: string };
 
 export function LibraryView({ spells, candidates, createRequestId = 0, onChanged, t }: LibraryViewProps) {
   const [query, setQuery] = useState('');
@@ -285,7 +287,9 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
         body: draft.body,
         tags: draft.tags
       };
-      const spell = await window.spellbook.createSpell(input);
+      const spell = editorState.candidateId
+        ? await window.spellbook.createSpellFromCandidate(editorState.candidateId, input)
+        : await window.spellbook.createSpell(input);
       setSelectedId(spell.id);
       setEditorState(null);
       showToast(t('spell.created'));
@@ -378,6 +382,20 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setConfirmingBulkDelete(false);
     setOpenSpellMenuId(null);
     setEditorState((current) => current ?? { mode: 'create' });
+  }
+
+  function openCandidateEditor(candidate: Candidate): void {
+    setConfirmingBulkDelete(false);
+    setOpenSpellMenuId(null);
+    setEditorState({
+      mode: 'create',
+      candidateId: candidate.id,
+      initialDraft: {
+        name: '',
+        body: candidate.template,
+        tags: []
+      }
+    });
   }
 
   function openSpellEditor(spell: Spell): void {
@@ -785,6 +803,18 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                         {candidate.sourceCount} {t('metric.sources')}
                       </span>
                     </div>
+                    <div className="candidate-row-actions">
+                      <button
+                        aria-label={t('library.saveWithDetails')}
+                        className="icon-button candidate-save-button"
+                        disabled={isSavingCandidates}
+                        onClick={() => openCandidateEditor(candidate)}
+                        title={t('library.saveWithDetails')}
+                        type="button"
+                      >
+                        <Save size={15} />
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -794,7 +824,14 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
       </div>
       {editorState && (editorState.mode === 'create' || editingSpell) ? (
         <SpellEditorDialog
-          key={editorState.mode === 'edit' ? editorState.spellId : 'new-spell'}
+          initialDraft={editorState.mode === 'create' ? editorState.initialDraft : undefined}
+          key={
+            editorState.mode === 'edit'
+              ? editorState.spellId
+              : editorState.candidateId
+                ? `candidate-${editorState.candidateId}`
+                : 'new-spell'
+          }
           mode={editorState.mode}
           onClose={() => setEditorState(null)}
           onCopy={editingSpell ? () => copy(editingSpell) : undefined}

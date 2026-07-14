@@ -1502,6 +1502,7 @@ p {
 
 .candidate-row-select {
   align-self: start;
+  height: 20px;
 }
 
 .section-heading.compact {
@@ -1832,7 +1833,7 @@ p {
 }
 
 .candidate-row {
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto 32px;
   gap: 8px;
   align-items: start;
   min-height: var(--candidate-row-min-height);
@@ -1861,6 +1862,21 @@ p {
   line-height: 1.35;
   padding: 2px 2px 0 4px;
   white-space: nowrap;
+}
+
+.candidate-row-actions {
+  display: flex;
+  align-self: start;
+  justify-content: flex-end;
+}
+
+.candidate-save-button {
+  flex: 0 0 auto;
+}
+
+.candidate-save-button:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .spell-text-block {

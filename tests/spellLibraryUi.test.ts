@@ -256,7 +256,7 @@ describe('spell library UI structure', () => {
     expect(editor).not.toContain('initialBody');
   });
 
-  it('removes per-row candidate creation and exposes persistent favorite and blacklist controls', () => {
+  it('opens candidate creation in the shared editor and exposes persistent favorite and blacklist controls', () => {
     const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const panel = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const filter = readFileSync('desktop/renderer/components/SpellSearchFilter.tsx', 'utf8');
@@ -265,9 +265,9 @@ describe('spell library UI structure', () => {
     const main = readFileSync('desktop/main/index.ts', 'utf8');
 
     expect(component).toContain("candidate.status === 'pending'");
-    expect(component).not.toContain('openCandidateEditor');
-    expect(component).not.toContain('initialBody');
-    expect(component).not.toContain('window.spellbook.createSpellFromCandidate');
+    expect(component).toContain('openCandidateEditor');
+    expect(component).toContain('initialDraft');
+    expect(component).toContain('window.spellbook.createSpellFromCandidate');
     expect(component).toContain('window.spellbook.updateSpellState');
     expect(component).toContain('aria-pressed={spell.isFavorite}');
     expect(component).toContain('className="spell-row-menu"');
@@ -278,11 +278,11 @@ describe('spell library UI structure', () => {
     expect(filter).toContain("export type SpellStatusFilter = 'active' | 'favorite' | 'blocked'");
     expect(filter).toContain("onStatusChange('active')");
     expect(filter).toContain("'spell.filter.status.blocked'");
-    expect(preload).not.toContain('createSpellFromCandidate');
+    expect(preload).toContain('createSpellFromCandidate');
     expect(preload).toContain('updateSpellState');
-    expect(globals).not.toContain('createSpellFromCandidate(');
+    expect(globals).toContain('createSpellFromCandidate(candidateId: string, input: SpellCreateInput)');
     expect(globals).toContain('updateSpellState(spellId: string, patch: SpellStatePatch)');
-    expect(main).not.toContain("'candidates:createSpell'");
+    expect(main).toContain("'candidates:createSpell'");
     expect(main).toContain("'spells:updateState'");
   });
 
@@ -323,6 +323,7 @@ describe('spell library UI structure', () => {
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const candidateList = styles.match(/\.candidate-list\.compact\s*\{[^}]+\}/s)?.[0] ?? '';
     const candidateRow = styles.match(/\.candidate-row\s*\{[^}]+\}/s)?.[0] ?? '';
+    const candidateRowSelect = styles.match(/\.candidate-row-select\s*\{[^}]+\}/s)?.[0] ?? '';
     const candidateContent = styles.match(/\.candidate-row-content\s*\{[^}]+\}/s)?.[0] ?? '';
 
     expect(component).toContain('selectedCandidateIds');
@@ -334,19 +335,25 @@ describe('spell library UI structure', () => {
     expect(component).toContain('candidate-selection-toolbar');
     expect(component).toContain('candidate-row-select');
     expect(component).toContain('candidate-row-meta');
+    expect(component).toContain('candidate-row-actions');
+    expect(component).toContain("t('library.saveWithDetails')");
+    expect(component).toContain('onClick={() => openCandidateEditor(candidate)}');
     expect(component).toContain("candidate.sourceCount} {t('metric.sources')}");
     expect(component).not.toContain('candidate.score');
     expect(component).not.toContain("t('metric.score')");
-    expect(component).not.toContain('openCandidateEditor');
+    expect(component).toContain('openCandidateEditor');
+    expect(component).toContain("{t('library.save')}");
     expect(component).toContain("t('library.saveSelected')");
     expect(component).toContain("t('library.selectedSaved')");
     expect(styles).toContain('.candidate-row.bulk-selected');
     expect(candidateList).toContain('--candidate-row-min-height: 64px;');
     expect(candidateList).toContain('--candidate-row-max-height: 144px;');
     expect(candidateList).toContain('grid-auto-rows: max-content;');
-    expect(candidateRow).toContain('grid-template-columns: 24px minmax(0, 1fr) auto;');
+    expect(candidateRow).toContain('grid-template-columns: 24px minmax(0, 1fr) auto 32px;');
     expect(candidateRow).toContain('min-height: var(--candidate-row-min-height);');
     expect(candidateRow).toContain('max-height: var(--candidate-row-max-height);');
+    expect(candidateRowSelect).toContain('align-self: start;');
+    expect(candidateRowSelect).toContain('height: 20px;');
     expect(candidateContent).toContain('max-height: calc(var(--candidate-row-max-height) - 20px);');
     expect(candidateContent).toContain('overflow-y: auto;');
   });

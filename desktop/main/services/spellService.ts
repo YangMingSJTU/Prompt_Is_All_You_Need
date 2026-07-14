@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { deriveSpellName } from '../../shared/spellNaming';
 import {
   MAX_SPELL_TRAITS,
   type Candidate,
@@ -157,30 +158,30 @@ export function createSpellService(db: AppDatabase) {
     },
 
     async createSpell(input: SpellCreateInput): Promise<Spell> {
-      if (!input.body.trim()) {
-        throw new Error('Spell body cannot be empty');
+      const row = insertSpell(db, input, 'manual');
+      await db.save();
+      return rowToSpell(row);
+    },
+
+    async createSpellFromCandidate(
+      candidateId: string,
+      input: SpellCreateInput
+    ): Promise<Spell> {
+      const candidate = db.get<CandidateRow>(
+        "SELECT * FROM candidates WHERE id = ? AND status = 'pending'",
+        [candidateId]
+      );
+      if (!candidate) {
+        throw new Error(`Pending candidate not found: ${candidateId}`);
       }
       const now = new Date().toISOString();
-      const spellId = randomUUID();
-      db.run(
-        `INSERT INTO spells
-          (id, name, body, tags, source, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          spellId,
-          input.name?.trim() ?? '',
-          input.body,
-          JSON.stringify(validateTags(input.tags ?? [])),
-          'manual',
-          now,
-          now
-        ]
-      );
+      const row = insertSpell(db, input, 'candidate', now);
+      db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', [
+        'saved',
+        now,
+        candidateId
+      ]);
       await db.save();
-      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!row) {
-        throw new Error(`Created spell not found: ${spellId}`);
-      }
       return rowToSpell(row);
     },
 
@@ -313,26 +314,18 @@ export function createSpellService(db: AppDatabase) {
           result.skipped.push({ candidateId, reason: 'duplicate' });
           continue;
         }
-        const spellId = randomUUID();
-        db.run(
-          `INSERT OR REPLACE INTO spells
-            (id, name, body, tags, source, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            spellId,
-            candidate.title,
-            candidate.template,
-            JSON.stringify([]),
-            'candidate',
-            now,
-            now
-          ]
+        const row = insertSpell(
+          db,
+          {
+            name: deriveSpellName(candidate.template, candidate.title),
+            body: candidate.template,
+            tags: []
+          },
+          'candidate',
+          now
         );
         db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
-        const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-        if (row) {
-          result.created.push(rowToSpell(row));
-        }
+        result.created.push(rowToSpell(row));
       }
       await db.save();
       return result;
@@ -378,6 +371,37 @@ function rowToSpell(row: SpellRow): Spell {
     updatedAt: row.updated_at,
     copyCount: Number(row.copy_count ?? 0)
   };
+}
+
+function insertSpell(
+  db: AppDatabase,
+  input: SpellCreateInput,
+  source: 'manual' | 'candidate',
+  now = new Date().toISOString()
+): SpellRow {
+  if (!input.body.trim()) {
+    throw new Error('Spell body cannot be empty');
+  }
+  const spellId = randomUUID();
+  db.run(
+    `INSERT INTO spells
+      (id, name, body, tags, source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      spellId,
+      input.name?.trim() ?? '',
+      input.body,
+      JSON.stringify(validateTags(input.tags ?? [])),
+      source,
+      now,
+      now
+    ]
+  );
+  const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+  if (!row) {
+    throw new Error(`Created spell not found: ${spellId}`);
+  }
+  return row;
 }
 
 function normalizeTags(tags: string[]): string[] {

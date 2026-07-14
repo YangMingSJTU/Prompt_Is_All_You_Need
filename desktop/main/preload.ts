@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('spellbook', {
   deleteSpells: (spellIds: string[]): Promise<SpellDeleteResult> =>
     ipcRenderer.invoke('spells:deleteBatch', spellIds),
   listCandidates: () => ipcRenderer.invoke('candidates:list'),
+  createSpellFromCandidate: (candidateId: string, input: SpellCreateInput) =>
+    ipcRenderer.invoke('candidates:createSpell', candidateId, input),
   promoteCandidates: (candidateIds: string[]) => ipcRenderer.invoke('candidates:promoteBatch', candidateIds),
   runScan: (request: ScanRunRequest) => ipcRenderer.invoke('scanner:run', request),
   getAnalytics: () => ipcRenderer.invoke('analytics:get'),

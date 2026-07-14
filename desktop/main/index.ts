@@ -150,6 +150,11 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('spells:delete', (_event, spellId: string) => spellService.deleteSpell(spellId));
   ipcMain.handle('spells:deleteBatch', (_event, spellIds: string[]) => spellService.deleteSpells(spellIds));
   ipcMain.handle('candidates:list', () => spellService.listCandidates());
+  ipcMain.handle(
+    'candidates:createSpell',
+    (_event, candidateId: string, input: SpellCreateInput) =>
+      spellService.createSpellFromCandidate(candidateId, input)
+  );
   ipcMain.handle('candidates:promoteBatch', (_event, candidateIds: string[]) =>
     spellService.promoteCandidates(candidateIds)
   );

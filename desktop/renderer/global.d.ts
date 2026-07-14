@@ -31,6 +31,7 @@ declare global {
       deleteSpell(spellId: string): Promise<void>;
       deleteSpells(spellIds: string[]): Promise<SpellDeleteResult>;
       listCandidates(): Promise<Candidate[]>;
+      createSpellFromCandidate(candidateId: string, input: SpellCreateInput): Promise<Spell>;
       promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult>;
       runScan(request: ScanRunRequest): Promise<{
         id: string;

@@ -341,6 +341,8 @@ describe('spell service', () => {
     const candidates = await service.listCandidates();
 
     expect(result.created.map((spell) => spell.body)).toEqual(['Investigate failing tests and propose a fix.']);
+    expect(result.created[0].name).toBe('Investigate failing tests an...');
+    expect(result.created[0].tags).toEqual([]);
     expect(result.skipped).toEqual([{ candidateId: 'candidate-duplicate', reason: 'duplicate' }]);
     expect(spells.filter((spell) => spell.body.includes('Review the current git diff')).length).toBe(1);
     expect(candidates.find((candidate) => candidate.id === 'candidate-duplicate')?.status).toBe('saved');
@@ -350,6 +352,44 @@ describe('spell service', () => {
       'candidate-new'
     ]);
     expect(candidates.every((candidate) => !('score' in candidate))).toBe(true);
+  });
+
+  it('creates a customized spell from a candidate and marks the recommendation saved', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    await service.saveCandidates([
+      {
+        id: 'candidate-custom',
+        slug: 'custom-candidate',
+        title: 'Original candidate title',
+        description: '',
+        template: 'Original candidate body.',
+        candidateType: 'spell',
+        sourceCount: 2,
+        status: 'pending',
+        examples: [],
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z'
+      }
+    ]);
+
+    const created = await service.createSpellFromCandidate('candidate-custom', {
+      name: 'Customized spell',
+      body: 'Edited candidate body.',
+      tags: [' review ', 'review', 'saved']
+    });
+    const candidates = await service.listCandidates();
+
+    expect(created).toMatchObject({
+      name: 'Customized spell',
+      body: 'Edited candidate body.',
+      tags: ['review', 'saved'],
+      source: 'candidate'
+    });
+    expect(candidates.find((candidate) => candidate.id === 'candidate-custom')?.status).toBe('saved');
+    expect((await service.listSpells()).map((spell) => spell.body)).toEqual([
+      'Edited candidate body.'
+    ]);
   });
 
   it('promotes candidate spells without trimming or wrapping the raw body', async () => {
@@ -375,6 +415,8 @@ describe('spell service', () => {
     const result = await service.promoteCandidates(['candidate-raw']);
     const copied = await service.copySpell(result.created[0].id);
 
+    expect(result.created[0].name).toBe('Keep this prompt spacing exa...');
+    expect(result.created[0].tags).toEqual([]);
     expect(result.created[0].body).toBe(rawBody);
     expect(copied.body).toBe(rawBody);
   });

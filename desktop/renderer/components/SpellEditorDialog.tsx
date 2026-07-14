@@ -19,6 +19,7 @@ export interface SpellEditorDraft {
 }
 
 interface SpellEditorDialogProps {
+  initialDraft?: SpellEditorDraft;
   mode: 'create' | 'edit';
   spell: Spell | null;
   onClose(): void;
@@ -28,6 +29,7 @@ interface SpellEditorDialogProps {
 }
 
 export function SpellEditorDialog({
+  initialDraft: providedInitialDraft,
   mode,
   spell,
   onClose,
@@ -36,7 +38,9 @@ export function SpellEditorDialog({
   t
 }: SpellEditorDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [initialDraft] = useState<SpellEditorDraft>(() => createDraft(spell));
+  const [initialDraft] = useState<SpellEditorDraft>(() =>
+    createDraft(spell, providedInitialDraft)
+  );
   const [draft, setDraft] = useState<SpellEditorDraft>(initialDraft);
   const [addingTag, setAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -246,7 +250,17 @@ export function SpellEditorDialog({
   );
 }
 
-function createDraft(spell: Spell | null): SpellEditorDraft {
+function createDraft(
+  spell: Spell | null,
+  providedDraft?: SpellEditorDraft
+): SpellEditorDraft {
+  if (providedDraft) {
+    return {
+      name: providedDraft.name,
+      body: providedDraft.body,
+      tags: providedDraft.tags.slice(0, MAX_SPELL_TRAITS)
+    };
+  }
   return {
     name: spell?.name ?? '',
     body: spell?.body ?? '',

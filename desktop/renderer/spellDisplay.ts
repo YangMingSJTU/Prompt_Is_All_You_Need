@@ -1,4 +1,7 @@
 import type { Candidate, Spell } from '../shared/types';
+import { deriveSpellName } from '../shared/spellNaming';
+
+export { deriveSpellName } from '../shared/spellNaming';
 
 export function getSpellDisplayText(spell: Pick<Spell, 'body'>): string {
   return spell.body;
@@ -13,15 +16,6 @@ export function getSpellDisplayName(
   fallback: string
 ): string {
   return spell.name || deriveSpellName(spell.body, fallback);
-}
-
-export function deriveSpellName(body: string, fallback: string): string {
-  const normalized = body.replace(/\s+/g, ' ').trim();
-  if (!normalized) {
-    return fallback;
-  }
-  const maxLength = 28;
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
 export function formatSpellUpdatedAt(value: string): string {
