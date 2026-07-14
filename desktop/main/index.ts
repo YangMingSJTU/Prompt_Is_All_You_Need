@@ -5,12 +5,19 @@ import { resolveAppName } from '../shared/appIdentity';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
 import {
   APP_TITLEBAR_HEIGHT,
+  FLOATING_WINDOW_DEFAULT_HEIGHT,
+  FLOATING_WINDOW_DEFAULT_WIDTH,
+  FLOATING_WINDOW_MAX_HEIGHT,
+  FLOATING_WINDOW_MAX_WIDTH,
+  FLOATING_WINDOW_MIN_HEIGHT,
+  FLOATING_WINDOW_MIN_WIDTH,
   MAIN_WINDOW_DEFAULT_HEIGHT,
   MAIN_WINDOW_DEFAULT_WIDTH,
   MAIN_WINDOW_MIN_HEIGHT,
   MAIN_WINDOW_MIN_WIDTH
 } from '../shared/layout';
 import type {
+  FloatingWindowState,
   ScanProvider,
   ScanRunRequest,
   ScanSourceConfig,
@@ -36,6 +43,7 @@ import { getAppIconPath, getTrayIconPath } from './services/appAssets';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
+let floatingWindowPinned = false;
 let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let databasePath = '';
@@ -79,18 +87,22 @@ async function createFloatingWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
   floatingWindow = new BrowserWindow({
-    width: 420,
-    height: 320,
-    minWidth: 380,
-    minHeight: 280,
-    maxWidth: 460,
-    maxHeight: 360,
+    width: FLOATING_WINDOW_DEFAULT_WIDTH,
+    height: FLOATING_WINDOW_DEFAULT_HEIGHT,
+    minWidth: FLOATING_WINDOW_MIN_WIDTH,
+    minHeight: FLOATING_WINDOW_MIN_HEIGHT,
+    maxWidth: FLOATING_WINDOW_MAX_WIDTH,
+    maxHeight: FLOATING_WINDOW_MAX_HEIGHT,
     title: appName,
     icon: getAppIconPath(),
     show: false,
     frame: false,
-    resizable: false,
-    alwaysOnTop: true,
+    resizable: true,
+    movable: true,
+    thickFrame: true,
+    alwaysOnTop: floatingWindowPinned,
+    maximizable: false,
+    fullscreenable: false,
     skipTaskbar: true,
     backgroundColor: '#ffffff',
     webPreferences: {
@@ -102,7 +114,9 @@ async function createFloatingWindow(): Promise<void> {
   });
 
   floatingWindow.on('blur', () => {
-    floatingWindow?.hide();
+    if (!floatingWindowPinned) {
+      floatingWindow?.hide();
+    }
   });
 
   await loadRenderer(floatingWindow, 'floating');
@@ -134,10 +148,16 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('spells:search', (_event, query: string) => spellService.searchSpells(query ?? ''));
   ipcMain.handle('spells:list', () => spellService.listSpells());
   ipcMain.handle('spells:popular', (_event, limit?: number) => spellService.listPopularSpells(limit ?? 6));
-  ipcMain.handle('spells:copy', async (_event, spellId: string) => {
+  ipcMain.handle('spells:copy', async (event, spellId: string) => {
     const spell = await spellService.copySpell(spellId);
     clipboard.writeText(spell.body);
-    floatingWindow?.hide();
+    if (
+      floatingWindow &&
+      event.sender === floatingWindow.webContents &&
+      !floatingWindowPinned
+    ) {
+      floatingWindow.hide();
+    }
     return spell;
   });
   ipcMain.handle('spells:create', (_event, input: SpellCreateInput) => spellService.createSpell(input));
@@ -269,6 +289,20 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('floating:close', () => {
     floatingWindow?.hide();
   });
+  ipcMain.handle('floating:getState', () => getFloatingWindowState());
+  ipcMain.handle('floating:setPinned', (_event, pinned: boolean) =>
+    setFloatingWindowPinned(Boolean(pinned))
+  );
+}
+
+function getFloatingWindowState(): FloatingWindowState {
+  return { pinned: floatingWindowPinned };
+}
+
+function setFloatingWindowPinned(pinned: boolean): FloatingWindowState {
+  floatingWindowPinned = pinned;
+  floatingWindow?.setAlwaysOnTop(pinned);
+  return getFloatingWindowState();
 }
 
 function registerDesktopControls(): void {

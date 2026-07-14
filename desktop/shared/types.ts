@@ -62,6 +62,10 @@ export interface SpellDeleteResult {
   missingIds: string[];
 }
 
+export interface FloatingWindowState {
+  pinned: boolean;
+}
+
 export interface ScanSourceConfig {
   provider: ScanProvider;
   target: ScanTarget;

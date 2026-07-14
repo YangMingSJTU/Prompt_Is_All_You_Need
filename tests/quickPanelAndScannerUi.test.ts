@@ -74,18 +74,22 @@ describe('scanner placement and floating quick panel UI', () => {
     );
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
 
-    expect(main).toContain('width: 420');
-    expect(main).toContain('height: 320');
-    expect(main).toContain('minWidth: 380');
-    expect(main).toContain('minHeight: 280');
-    expect(main).toContain('maxWidth: 460');
-    expect(main).toContain('maxHeight: 360');
+    expect(main).toContain('width: FLOATING_WINDOW_DEFAULT_WIDTH');
+    expect(main).toContain('height: FLOATING_WINDOW_DEFAULT_HEIGHT');
+    expect(main).toContain('minWidth: FLOATING_WINDOW_MIN_WIDTH');
+    expect(main).toContain('minHeight: FLOATING_WINDOW_MIN_HEIGHT');
+    expect(main).toContain('maxWidth: FLOATING_WINDOW_MAX_WIDTH');
+    expect(main).toContain('maxHeight: FLOATING_WINDOW_MAX_HEIGHT');
+    expect(main).toContain('resizable: true');
+    expect(main).toContain('movable: true');
+    expect(main).toContain('thickFrame: true');
 
     expect(component).toContain('listSpells()');
     expect(component).not.toContain('searchSpells(');
-    expect(component).toContain('filtered.slice(0, 5)');
+    expect(component).not.toContain('slice(0, 5)');
     expect(component).toContain('filterSpells');
     expect(component).toContain('getSpellFilterTags');
+    expect(component).toContain("sortSpells(filtered, 'usage', 'desc'");
     expect(component).toContain('SpellSearchFilter');
     expect(component).toContain('searchScope={searchScope}');
     expect(component).toContain('statusFilter={statusFilter}');
@@ -95,11 +99,18 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(component).toContain('floating-row-name');
     expect(component).toContain('floating-row-content');
     expect(component).toContain('getFloatingSpellSummary(spell)');
+    expect(component).toContain('className="floating-row-copy"');
+    expect(component).toContain('onClick={() => void copySpell(spell)}');
+    expect(component).toContain('updateSpellState(spell.id, { isFavorite: nextFavorite })');
+    expect(component).toContain('aria-pressed={spell.isFavorite}');
+    expect(component).toContain('showTooltips={false}');
+    expect(component).not.toContain('title=');
     expect(component).not.toContain('floating-preview');
     expect(searchFilter).toContain('inputRef?: Ref<HTMLInputElement>');
     expect(searchFilter).toContain('onInputKeyDown?: KeyboardEventHandler<HTMLInputElement>');
     expect(searchFilter).toContain('ref={inputRef}');
     expect(searchFilter).toContain('onKeyDown={onInputKeyDown}');
+    expect(searchFilter).toContain('showTooltips?: boolean');
 
     expect(styles).toContain('.floating-row-identity');
     expect(styles).toContain('.floating-row-name');
@@ -109,14 +120,14 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(styles).not.toContain('.floating-preview');
   });
 
-  it('removes dedicated floating-panel sorting and its unused resources', () => {
+  it('uses fixed usage sorting without restoring a dedicated sort menu', () => {
     const component = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
     const sortLogic = readFileSync('desktop/renderer/spellSort.ts', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const i18n = readFileSync('desktop/renderer/i18n.ts', 'utf8');
 
     expect(component).not.toContain('SpellSortMenu');
-    expect(component).not.toContain('sortSpells');
+    expect(component).toContain("sortSpells(filtered, 'usage', 'desc'");
     expect(existsSync('desktop/renderer/components/SpellSortMenu.tsx')).toBe(false);
     expect(styles).not.toContain('.sort-menu-');
     expect(styles).not.toContain('.sort-direction-');
@@ -125,5 +136,34 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(i18n).not.toContain('floating.sort.');
     expect(sortLogic).not.toContain('SPELL_SORT_OPTIONS');
     expect(sortLogic).not.toContain("'created'");
+  });
+
+  it('adds draggable chrome and a pinned resident mode to the floating window', () => {
+    const main = readFileSync('desktop/main/index.ts', 'utf8');
+    const preload = readFileSync('desktop/main/preload.ts', 'utf8');
+    const globals = readFileSync('desktop/renderer/global.d.ts', 'utf8');
+    const component = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+
+    expect(main).toContain('let floatingWindowPinned = false');
+    expect(main).toContain('alwaysOnTop: floatingWindowPinned');
+    expect(main).toContain("floatingWindow.on('blur'");
+    expect(main).toContain('if (!floatingWindowPinned)');
+    expect(main).toContain('event.sender === floatingWindow.webContents');
+    expect(main).toContain("ipcMain.handle('floating:getState'");
+    expect(main).toContain("ipcMain.handle('floating:setPinned'");
+    expect(main).toContain('floatingWindow?.setAlwaysOnTop(pinned)');
+
+    expect(preload).toContain("ipcRenderer.invoke('floating:getState')");
+    expect(preload).toContain("ipcRenderer.invoke('floating:setPinned', pinned)");
+    expect(globals).toContain('getFloatingWindowState(): Promise<FloatingWindowState>');
+    expect(globals).toContain('setFloatingWindowPinned(pinned: boolean): Promise<FloatingWindowState>');
+
+    expect(component).toContain('className="floating-titlebar"');
+    expect(component).toContain('aria-pressed={isPinned}');
+    expect(component).toContain('<Pin');
+    expect(component).toContain('<X');
+    expect(styles.match(/\.floating-titlebar\s*\{[^}]+-webkit-app-region: drag;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.floating-titlebar-controls\s*\{[^}]+-webkit-app-region: no-drag;[^}]+\}/s)?.[0]).toBeTruthy();
   });
 });

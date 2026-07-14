@@ -14,6 +14,10 @@ describe('i18n', () => {
     expect(t('analytics.topCopied')).toBe('常用咒语');
     expect(t('spell.resizePanels')).toBe('拖动调整分栏宽度');
     expect(t('spell.placeholder.titleContent')).toBe('搜索标题或内容');
+    expect(t('floating.title')).toBe('闪念施法');
+    expect(t('floating.pin')).toBe('固定窗口');
+    expect(t('floating.unpin')).toBe('取消固定');
+    expect(t('floating.close')).toBe('关闭');
   });
 
   it('uses English for English local language', () => {
@@ -26,6 +30,10 @@ describe('i18n', () => {
     expect(t('analytics.usage')).toBe('Usage');
     expect(t('analytics.topCopied')).toBe('Top copied spells');
     expect(t('spell.placeholder.titleContent')).toBe('Search title or content');
+    expect(t('floating.title')).toBe('Quick Cast');
+    expect(t('floating.pin')).toBe('Pin window');
+    expect(t('floating.unpin')).toBe('Unpin window');
+    expect(t('floating.close')).toBe('Close');
   });
 
   it('falls back to Chinese for unsupported languages', () => {

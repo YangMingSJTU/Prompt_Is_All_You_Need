@@ -14,6 +14,7 @@ import type { SearchScope, SpellStatusFilter } from '../spellSearch';
 interface SpellSearchFilterProps {
   autoFocus?: boolean;
   inputRef?: Ref<HTMLInputElement>;
+  showTooltips?: boolean;
   query: string;
   searchScope: SearchScope;
   selectedTags: string[];
@@ -50,6 +51,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: SpellStatusFilter; labelKey: I18nKey
 export function SpellSearchFilter({
   autoFocus = false,
   inputRef,
+  showTooltips = true,
   query,
   searchScope,
   selectedTags,
@@ -139,7 +141,7 @@ export function SpellSearchFilter({
           aria-label={t('spell.filter')}
           className={hasActiveFilters ? 'spell-filter-button active' : 'spell-filter-button'}
           onClick={() => (open ? closeFilterMenu() : setOpen(true))}
-          title={t('spell.filter')}
+          title={showTooltips ? t('spell.filter') : undefined}
           type="button"
         >
           <Funnel size={16} />
@@ -228,7 +230,7 @@ export function SpellSearchFilter({
                         key={tag}
                         onClick={() => onToggleTag(tag)}
                         role="checkbox"
-                        title={tag}
+                        title={showTooltips ? tag : undefined}
                         type="button"
                       >
                         <span>{tag}</span>

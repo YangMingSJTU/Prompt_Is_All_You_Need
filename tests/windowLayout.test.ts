@@ -2,6 +2,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   APP_SIDEBAR_WIDTH,
+  FLOATING_WINDOW_DEFAULT_HEIGHT,
+  FLOATING_WINDOW_DEFAULT_WIDTH,
+  FLOATING_WINDOW_MAX_HEIGHT,
+  FLOATING_WINDOW_MAX_WIDTH,
+  FLOATING_WINDOW_MIN_HEIGHT,
+  FLOATING_WINDOW_MIN_WIDTH,
   MAIN_WINDOW_DEFAULT_HEIGHT,
   MAIN_WINDOW_DEFAULT_WIDTH,
   MAIN_WINDOW_MIN_HEIGHT,
@@ -18,6 +24,15 @@ import {
 } from '../desktop/shared/layout';
 
 describe('window layout constraints', () => {
+  it('keeps the floating panel compact while allowing bounded resizing', () => {
+    expect(FLOATING_WINDOW_DEFAULT_WIDTH).toBeGreaterThan(FLOATING_WINDOW_MIN_WIDTH);
+    expect(FLOATING_WINDOW_DEFAULT_WIDTH).toBeLessThan(FLOATING_WINDOW_MAX_WIDTH);
+    expect(FLOATING_WINDOW_DEFAULT_HEIGHT).toBeGreaterThan(FLOATING_WINDOW_MIN_HEIGHT);
+    expect(FLOATING_WINDOW_DEFAULT_HEIGHT).toBeLessThan(FLOATING_WINDOW_MAX_HEIGHT);
+    expect(FLOATING_WINDOW_MAX_WIDTH - FLOATING_WINDOW_MIN_WIDTH).toBeGreaterThanOrEqual(200);
+    expect(FLOATING_WINDOW_MAX_HEIGHT - FLOATING_WINDOW_MIN_HEIGHT).toBeGreaterThanOrEqual(300);
+  });
+
   it('keeps the minimum content width wider than the largest page layout', () => {
     expect(QUICK_PANEL_MIN_WIDTH).toBe(
       QUICK_PANEL_MIN_LIST_WIDTH + QUICK_PANEL_SPLITTER_WIDTH + QUICK_PANEL_MIN_DETAIL_WIDTH

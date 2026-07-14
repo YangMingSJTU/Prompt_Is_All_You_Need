@@ -6,6 +6,7 @@ import type {
 import type {
   Candidate,
   CandidatePromotionResult,
+  FloatingWindowState,
   ScanRunRequest,
   SkillPlatform,
   SkillRecord,
@@ -52,6 +53,8 @@ declare global {
       updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;
       selectDirectory(defaultPath?: string): Promise<string | null>;
       onFloatingFocus(callback: () => void): () => void;
+      getFloatingWindowState(): Promise<FloatingWindowState>;
+      setFloatingWindowPinned(pinned: boolean): Promise<FloatingWindowState>;
       closeFloatingWindow(): Promise<void>;
     };
   }

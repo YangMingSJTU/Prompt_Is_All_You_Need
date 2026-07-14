@@ -1,4 +1,4 @@
-import { Clipboard, Heart } from 'lucide-react';
+import { Clipboard, Heart, Pin, X } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
@@ -10,6 +10,7 @@ import {
   type SpellStatusFilter
 } from '../spellSearch';
 import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
+import { sortSpells } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellSearchFilter } from './SpellSearchFilter';
 
@@ -20,7 +21,8 @@ interface FloatingPanelProps {
 export function FloatingPanel({ t }: FloatingPanelProps) {
   const [query, setQuery] = useState('');
   const [spells, setSpells] = useState<Spell[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedSpellId, setSelectedSpellId] = useState<string | null>(null);
+  const [isPinned, setIsPinned] = useState(false);
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<SpellStatusFilter>('active');
@@ -29,11 +31,11 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
   const loadSpells = useCallback(async () => {
     setSpells(await window.spellbook.listSpells());
-    setSelectedIndex(0);
   }, []);
 
   useEffect(() => {
     void loadSpells();
+    void window.spellbook.getFloatingWindowState().then((state) => setIsPinned(state.pinned));
   }, [loadSpells]);
 
   useEffect(() => {
@@ -59,23 +61,44 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
       { query, searchScope, selectedTags, statusFilter },
       (spell) => getFloatingSpellName(spell, t)
     );
-    const hasActiveFilters =
-      query.trim().length > 0 ||
-      searchScope !== 'title-content' ||
-      selectedTags.length > 0 ||
-      statusFilter !== 'active';
-    return hasActiveFilters ? filtered : filtered.slice(0, 5);
+    return sortSpells(filtered, 'usage', 'desc', (spell) => getFloatingSpellName(spell, t));
   }, [query, searchScope, selectedTags, spells, statusFilter, t]);
 
   useEffect(() => {
-    setSelectedIndex(0);
+    setSelectedSpellId(null);
   }, [query, searchScope, selectedTags, statusFilter]);
 
+  const selectedIndex = useMemo(() => {
+    const index = visibleSpells.findIndex((spell) => spell.id === selectedSpellId);
+    return index >= 0 ? index : 0;
+  }, [selectedSpellId, visibleSpells]);
   const selected = useMemo(() => visibleSpells[selectedIndex] ?? null, [visibleSpells, selectedIndex]);
 
   async function copySpell(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
+    setSelectedSpellId(spell.id);
+    setSpells((current) =>
+      current.map((item) =>
+        item.id === spell.id ? { ...item, copyCount: item.copyCount + 1 } : item
+      )
+    );
     showToast(t('status.copied'));
+  }
+
+  async function toggleFavorite(spell: Spell): Promise<void> {
+    const nextFavorite = !spell.isFavorite;
+    await window.spellbook.updateSpellState(spell.id, { isFavorite: nextFavorite });
+    setSpells((current) =>
+      current.map((item) =>
+        item.id === spell.id ? { ...item, isFavorite: nextFavorite } : item
+      )
+    );
+    showToast(t(nextFavorite ? 'spell.favorited' : 'spell.unfavorited'));
+  }
+
+  async function togglePinned(): Promise<void> {
+    const state = await window.spellbook.setFloatingWindowPinned(!isPinned);
+    setIsPinned(state.pinned);
   }
 
   async function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): Promise<void> {
@@ -86,12 +109,14 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setSelectedIndex((current) => Math.min(current + 1, Math.max(visibleSpells.length - 1, 0)));
+      const nextIndex = Math.min(selectedIndex + 1, Math.max(visibleSpells.length - 1, 0));
+      setSelectedSpellId(visibleSpells[nextIndex]?.id ?? null);
       return;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setSelectedIndex((current) => Math.max(current - 1, 0));
+      const nextIndex = Math.max(selectedIndex - 1, 0);
+      setSelectedSpellId(visibleSpells[nextIndex]?.id ?? null);
       return;
     }
     if (event.key === 'Enter' && selected) {
@@ -108,48 +133,85 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
   return (
     <main className="floating-shell">
-      <SpellSearchFilter
-        autoFocus
-        inputRef={inputRef}
-        query={query}
-        searchScope={searchScope}
-        selectedTags={selectedTags}
-        statusFilter={statusFilter}
-        tags={allTags}
-        onClearTags={() => setSelectedTags([])}
-        onInputKeyDown={(event) => void handleKeyDown(event)}
-        onQueryChange={setQuery}
-        onScopeChange={setSearchScope}
-        onStatusChange={setStatusFilter}
-        onToggleTag={toggleFilterTag}
-        t={t}
-      />
-      <section className="floating-results">
-        {visibleSpells.map((spell, index) => (
+      <header className="floating-titlebar">
+        <span className="floating-titlebar-title">{t('floating.title')}</span>
+        <div className="floating-titlebar-controls">
           <button
-            className={index === selectedIndex ? 'floating-row selected' : 'floating-row'}
-            key={spell.id}
-            onClick={() => {
-              setSelectedIndex(index);
-              void copySpell(spell);
-            }}
-            onMouseEnter={() => setSelectedIndex(index)}
+            aria-label={t(isPinned ? 'floating.unpin' : 'floating.pin')}
+            aria-pressed={isPinned}
+            className={isPinned ? 'floating-titlebar-button active' : 'floating-titlebar-button'}
+            onClick={() => void togglePinned()}
             type="button"
           >
-            <span className="floating-row-identity">
-              <span className="floating-row-name" title={getFloatingSpellName(spell, t)}>
-                {getFloatingSpellName(spell, t)}
-              </span>
-              <span className="floating-row-content">{getFloatingSpellSummary(spell)}</span>
-            </span>
-            <span className="floating-row-actions">
-              {spell.isFavorite ? <Heart className="floating-row-favorite" fill="currentColor" size={14} /> : null}
-              <Clipboard size={15} />
-            </span>
+            <Pin fill={isPinned ? 'currentColor' : 'none'} size={15} />
           </button>
-        ))}
-        {visibleSpells.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}
-      </section>
+          <button
+            aria-label={t('floating.close')}
+            className="floating-titlebar-button close"
+            onClick={() => void window.spellbook.closeFloatingWindow()}
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </header>
+      <div className="floating-content">
+        <SpellSearchFilter
+          autoFocus
+          inputRef={inputRef}
+          query={query}
+          searchScope={searchScope}
+          selectedTags={selectedTags}
+          showTooltips={false}
+          statusFilter={statusFilter}
+          tags={allTags}
+          onClearTags={() => setSelectedTags([])}
+          onInputKeyDown={(event) => void handleKeyDown(event)}
+          onQueryChange={setQuery}
+          onScopeChange={setSearchScope}
+          onStatusChange={setStatusFilter}
+          onToggleTag={toggleFilterTag}
+          t={t}
+        />
+        <section className="floating-results">
+          {visibleSpells.map((spell) => (
+            <div
+              className={spell.id === selected?.id ? 'floating-row selected' : 'floating-row'}
+              key={spell.id}
+              onMouseEnter={() => setSelectedSpellId(spell.id)}
+            >
+              <button
+                aria-label={`${t('spell.copy')} ${getFloatingSpellName(spell, t)}`}
+                className="floating-row-copy"
+                onClick={() => void copySpell(spell)}
+                type="button"
+              >
+                <span className="floating-row-identity">
+                  <span className="floating-row-name">{getFloatingSpellName(spell, t)}</span>
+                  <span className="floating-row-content">{getFloatingSpellSummary(spell)}</span>
+                </span>
+                <Clipboard size={15} />
+              </button>
+              <button
+                aria-label={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                aria-pressed={spell.isFavorite}
+                className={
+                  spell.isFavorite
+                    ? 'floating-row-favorite-button active'
+                    : 'floating-row-favorite-button'
+                }
+                onClick={() => void toggleFavorite(spell)}
+                type="button"
+              >
+                <Heart fill={spell.isFavorite ? 'currentColor' : 'none'} size={15} />
+              </button>
+            </div>
+          ))}
+          {visibleSpells.length === 0 ? (
+            <div className="floating-empty">{t('floating.noResult')}</div>
+          ) : null}
+        </section>
+      </div>
     </main>
   );
 }

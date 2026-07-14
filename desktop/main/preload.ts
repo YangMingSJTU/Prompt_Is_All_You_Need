@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AppSettings } from '../shared/settings';
 import type {
+  FloatingWindowState,
   ScanRunRequest,
   SkillPlatform,
   SpellCreateInput,
@@ -41,5 +42,9 @@ contextBridge.exposeInMainWorld('spellbook', {
     ipcRenderer.on('floating:focus-search', listener);
     return () => ipcRenderer.removeListener('floating:focus-search', listener);
   },
+  getFloatingWindowState: (): Promise<FloatingWindowState> =>
+    ipcRenderer.invoke('floating:getState'),
+  setFloatingWindowPinned: (pinned: boolean): Promise<FloatingWindowState> =>
+    ipcRenderer.invoke('floating:setPinned', pinned),
   closeFloatingWindow: () => ipcRenderer.invoke('floating:close')
 });
