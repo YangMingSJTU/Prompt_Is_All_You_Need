@@ -1,4 +1,5 @@
 import {
+  BrainCircuit,
   Clipboard,
   Heart,
   PanelRightClose,
@@ -67,6 +68,21 @@ type EditorState =
   | { mode: 'create'; candidateId?: string; initialDraft?: SpellEditorDraft }
   | { mode: 'edit'; spellId: string };
 
+type RecommendationIntroPhase = 'opening' | 'message' | 'ready';
+
+const RECOMMENDATION_INTRO_SESSION_KEY = 'spellbook:recommendation-empty-intro-seen';
+const RECOMMENDATION_MESSAGE_DELAY_MS = 2200;
+const RECOMMENDATION_READY_DELAY_MS = 4900;
+
+function getInitialRecommendationIntroPhase(): RecommendationIntroPhase {
+  if (typeof window === 'undefined') {
+    return 'ready';
+  }
+  const introSeen = window.sessionStorage.getItem(RECOMMENDATION_INTRO_SESSION_KEY) === '1';
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return introSeen || reducedMotion ? 'ready' : 'opening';
+}
+
 export function LibraryView({
   spells,
   candidates,
@@ -90,10 +106,14 @@ export function LibraryView({
   const [isSavingCandidates, setIsSavingCandidates] = useState(false);
   const [splitRatio, setSplitRatio] = useState(60);
   const [isResizing, setIsResizing] = useState(false);
+  const [recommendationIntroPhase, setRecommendationIntroPhase] =
+    useState<RecommendationIntroPhase>(getInitialRecommendationIntroPhase);
   const bulkDeleteActionRef = useRef<HTMLDivElement>(null);
   const candidateDockRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef(false);
+  const recommendationIntroStartedRef = useRef(false);
+  const recommendationIntroCompletedRef = useRef(recommendationIntroPhase === 'ready');
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const selectAllCandidatesCheckboxRef = useRef<HTMLInputElement>(null);
   const { showToast } = useFeedbackToast();
@@ -182,6 +202,55 @@ export function LibraryView({
       selectAllCandidatesCheckboxRef.current.indeterminate = somePendingCandidatesSelected;
     }
   }, [somePendingCandidatesSelected]);
+
+  useEffect(() => {
+    if (recommendationPanelOpen && pendingCandidates.length === 0) {
+      return;
+    }
+    if (window.sessionStorage.getItem(RECOMMENDATION_INTRO_SESSION_KEY) === '1') {
+      recommendationIntroCompletedRef.current = true;
+      setRecommendationIntroPhase('ready');
+    }
+  }, [pendingCandidates.length, recommendationPanelOpen]);
+
+  useEffect(() => {
+    if (!recommendationPanelOpen || pendingCandidates.length > 0) {
+      return;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      window.sessionStorage.setItem(RECOMMENDATION_INTRO_SESSION_KEY, '1');
+      recommendationIntroCompletedRef.current = true;
+      setRecommendationIntroPhase('ready');
+      return;
+    }
+    const introSeen = window.sessionStorage.getItem(RECOMMENDATION_INTRO_SESSION_KEY) === '1';
+    if (
+      recommendationIntroCompletedRef.current ||
+      (introSeen && !recommendationIntroStartedRef.current)
+    ) {
+      recommendationIntroCompletedRef.current = true;
+      setRecommendationIntroPhase('ready');
+      return;
+    }
+
+    if (!recommendationIntroStartedRef.current) {
+      recommendationIntroStartedRef.current = true;
+      window.sessionStorage.setItem(RECOMMENDATION_INTRO_SESSION_KEY, '1');
+      setRecommendationIntroPhase('opening');
+    }
+    const messageTimer = window.setTimeout(
+      () => setRecommendationIntroPhase('message'),
+      RECOMMENDATION_MESSAGE_DELAY_MS
+    );
+    const readyTimer = window.setTimeout(() => {
+      recommendationIntroCompletedRef.current = true;
+      setRecommendationIntroPhase('ready');
+    }, RECOMMENDATION_READY_DELAY_MS);
+    return () => {
+      window.clearTimeout(messageTimer);
+      window.clearTimeout(readyTimer);
+    };
+  }, [pendingCandidates.length, recommendationPanelOpen]);
 
   useEffect(() => {
     if (selectedVisibleSpellCount === 0) {
@@ -771,19 +840,50 @@ export function LibraryView({
                   </>
                 ) : (
                   <div className="candidate-empty-state">
-                    <div className="candidate-memory-reveal">
+                    <div
+                      className={`candidate-memory-reveal phase-${recommendationIntroPhase}`}
+                    >
                       <div aria-hidden="true" className="candidate-memory-book">
+                        <span className="candidate-memory-cover candidate-memory-cover-left" />
+                        <span className="candidate-memory-cover candidate-memory-cover-right" />
+                        <span
+                          className="candidate-memory-page-stack candidate-memory-page-stack-left"
+                        />
+                        <span
+                          className="candidate-memory-page-stack candidate-memory-page-stack-right"
+                        />
                         <div className="candidate-memory-page candidate-memory-page-left">
-                          <span className="candidate-memory-history-line" />
-                          <span className="candidate-memory-history-line" />
-                          <span className="candidate-memory-history-line" />
+                          <div className="candidate-memory-ai-seal">
+                            <span className="candidate-memory-seal-ring" />
+                            <BrainCircuit size={23} strokeWidth={1.6} />
+                            <span className="candidate-memory-node node-one" />
+                            <span className="candidate-memory-node node-two" />
+                            <span className="candidate-memory-node node-three" />
+                          </div>
+                          <span className="candidate-memory-spell candidate-memory-spell-reasoning">
+                            推理回响
+                          </span>
+                          <span className="candidate-memory-spell candidate-memory-spell-memory">
+                            记忆召回
+                          </span>
                         </div>
                         <div className="candidate-memory-page candidate-memory-page-right">
-                          <span className="candidate-memory-history-line" />
-                          <span className="candidate-memory-history-line" />
-                          <span className="candidate-memory-history-line" />
+                          <div className="candidate-memory-model-map">
+                            <span className="candidate-memory-map-node map-node-one" />
+                            <span className="candidate-memory-map-node map-node-two" />
+                            <span className="candidate-memory-map-node map-node-three" />
+                            <span className="candidate-memory-map-link map-link-one" />
+                            <span className="candidate-memory-map-link map-link-two" />
+                          </div>
+                          <span className="candidate-memory-spell candidate-memory-spell-vector">
+                            向量共鸣
+                          </span>
+                          <span className="candidate-memory-spell candidate-memory-spell-agent">
+                            智能体觉醒
+                          </span>
                         </div>
                         <span className="candidate-memory-spine" />
+                        <span className="candidate-memory-bookmark" />
                         <span className="candidate-memory-searchlight" />
                         <Sparkles
                           className="candidate-memory-spark candidate-memory-spark-top"
@@ -794,32 +894,36 @@ export function LibraryView({
                           size={13}
                         />
                       </div>
-                      <strong
-                        aria-label={t('library.emptyRecommendationsTitle')}
-                        className="candidate-memory-phrase"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="candidate-memory-phrase-line candidate-memory-phrase-lead"
+                      {recommendationIntroPhase === 'message' ? (
+                        <strong
+                          aria-label={t('library.emptyRecommendationsTitle')}
+                          className="candidate-memory-phrase"
                         >
-                          {t('library.emptyRecommendationsLead')}
-                        </span>
-                        <span
-                          aria-hidden="true"
-                          className="candidate-memory-phrase-line candidate-memory-phrase-tail"
-                        >
-                          {t('library.emptyRecommendationsTail')}
-                        </span>
-                      </strong>
+                          <span
+                            aria-hidden="true"
+                            className="candidate-memory-phrase-line candidate-memory-phrase-lead"
+                          >
+                            {t('library.emptyRecommendationsLead')}
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            className="candidate-memory-phrase-line candidate-memory-phrase-tail"
+                          >
+                            {t('library.emptyRecommendationsTail')}
+                          </span>
+                        </strong>
+                      ) : null}
                     </div>
-                    <button
-                      className="primary-button candidate-empty-action"
-                      onClick={onOpenRecommendationDiscovery}
-                      type="button"
-                    >
-                      <ScanSearch size={15} />
-                      {t('library.find')}
-                    </button>
+                    {recommendationIntroPhase === 'ready' ? (
+                      <button
+                        className="primary-button candidate-empty-action"
+                        onClick={onOpenRecommendationDiscovery}
+                        type="button"
+                      >
+                        <ScanSearch size={15} />
+                        {t('library.find')}
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
