@@ -153,6 +153,17 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(main).toContain("ipcMain.handle('floating:getState'");
     expect(main).toContain("ipcMain.handle('floating:setPinned'");
     expect(main).toContain('floatingWindow?.setAlwaysOnTop(pinned)');
+    expect(
+      main.match(
+        /ipcMain\.handle\('floating:close', \(\) => \{\s+setFloatingWindowPinned\(false\);\s+floatingWindow\?\.hide\(\);\s+\}\);/
+      )?.[0]
+    ).toBeTruthy();
+    expect(
+      main.match(
+        /if \(floatingWindow\.isVisible\(\)\) \{[^}]+setFloatingWindowPinned\(false\);[^}]+floatingWindow\.hide\(\);/s
+      )?.[0]
+    ).toBeTruthy();
+    expect(main).toContain('setFloatingWindowPinned(false);\n  positionFloatingWindow();');
 
     expect(preload).toContain("ipcRenderer.invoke('floating:getState')");
     expect(preload).toContain("ipcRenderer.invoke('floating:setPinned', pinned)");
@@ -163,6 +174,8 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(component).toContain('aria-pressed={isPinned}');
     expect(component).toContain('<Pin');
     expect(component).toContain('<X');
+    expect(component).toContain('const syncFloatingWindowState = useCallback');
+    expect(component).toContain('void syncFloatingWindowState();');
     expect(styles.match(/\.floating-titlebar\s*\{[^}]+-webkit-app-region: drag;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles.match(/\.floating-titlebar-controls\s*\{[^}]+-webkit-app-region: no-drag;[^}]+\}/s)?.[0]).toBeTruthy();
   });

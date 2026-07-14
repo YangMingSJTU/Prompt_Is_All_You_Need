@@ -33,20 +33,26 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     setSpells(await window.spellbook.listSpells());
   }, []);
 
+  const syncFloatingWindowState = useCallback(async () => {
+    const state = await window.spellbook.getFloatingWindowState();
+    setIsPinned(state.pinned);
+  }, []);
+
   useEffect(() => {
     void loadSpells();
-    void window.spellbook.getFloatingWindowState().then((state) => setIsPinned(state.pinned));
-  }, [loadSpells]);
+    void syncFloatingWindowState();
+  }, [loadSpells, syncFloatingWindowState]);
 
   useEffect(() => {
     const dispose = window.spellbook.onFloatingFocus(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
       void loadSpells();
+      void syncFloatingWindowState();
     });
     inputRef.current?.focus();
     return dispose;
-  }, [loadSpells]);
+  }, [loadSpells, syncFloatingWindowState]);
 
   const allTags = useMemo(() => getSpellFilterTags(spells, statusFilter), [spells, statusFilter]);
 

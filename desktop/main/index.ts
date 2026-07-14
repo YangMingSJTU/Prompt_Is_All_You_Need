@@ -287,6 +287,7 @@ async function bootstrap(): Promise<void> {
     };
   });
   ipcMain.handle('floating:close', () => {
+    setFloatingWindowPinned(false);
     floatingWindow?.hide();
   });
   ipcMain.handle('floating:getState', () => getFloatingWindowState());
@@ -391,9 +392,11 @@ function toggleFloatingWindow(): void {
     return;
   }
   if (floatingWindow.isVisible()) {
+    setFloatingWindowPinned(false);
     floatingWindow.hide();
     return;
   }
+  setFloatingWindowPinned(false);
   positionFloatingWindow();
   floatingWindow.show();
   floatingWindow.focus();
