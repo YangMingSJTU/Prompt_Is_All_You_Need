@@ -4,6 +4,7 @@ import { resolveAppName } from '../shared/appIdentity';
 import {
   APP_SIDEBAR_WIDTH,
   APP_TITLEBAR_HEIGHT,
+  MAIN_WINDOW_COMPACT_MIN_WIDTH,
   MAIN_WINDOW_MIN_HEIGHT,
   MAIN_WINDOW_MIN_WIDTH
 } from '../shared/layout';
@@ -14,7 +15,7 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { FeedbackToastProvider } from './components/FeedbackToast';
 import { FloatingPanel } from './components/FloatingPanel';
 import { LibraryView } from './components/LibraryView';
-import { SettingsView } from './components/SettingsView';
+import { SettingsView, type SettingsTab } from './components/SettingsView';
 import { SkillLibraryView } from './components/SkillLibraryView';
 import { SpellPanel } from './components/SpellPanel';
 import { createTranslator, resolveLocalePreference } from './i18n';
@@ -32,8 +33,7 @@ const NAV_ITEMS: Array<{
   { id: 'analytics', labelKey: 'nav.analytics', icon: BarChart3 }
 ];
 
-const APP_FRAME_STYLE = {
-  '--app-min-width': `${MAIN_WINDOW_MIN_WIDTH}px`,
+const APP_FRAME_BASE_STYLE = {
   '--app-min-height': `${MAIN_WINDOW_MIN_HEIGHT}px`,
   '--app-sidebar-width': `${APP_SIDEBAR_WIDTH}px`,
   '--app-titlebar-height': `${APP_TITLEBAR_HEIGHT}px`
@@ -47,6 +47,7 @@ export function App() {
   );
   const mode = useMemo(() => new URLSearchParams(globalThis.location.search).get('mode'), []);
   const [view, setView] = useState<View>('panel');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('preferences');
   const [spells, setSpells] = useState<Spell[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
@@ -85,6 +86,23 @@ export function App() {
     document.title = resolveAppName(settings.language, globalThis.navigator?.language);
   }, [settings.language]);
 
+  useEffect(() => {
+    const recommendationWindowOpen =
+      view !== 'library' || settings.recommendationPanelOpen;
+    void window.spellbook.setRecommendationPanelWindowOpen(recommendationWindowOpen);
+  }, [settings.recommendationPanelOpen, view]);
+
+  const updateRecommendationPanelOpen = useCallback(async (open: boolean, panelWidth?: number) => {
+    const result = await window.spellbook.updateSettings({ recommendationPanelOpen: open });
+    await window.spellbook.setRecommendationPanelWindowOpen(open, panelWidth);
+    setSettings(result.settings);
+  }, []);
+
+  const openSettings = useCallback((tab: SettingsTab) => {
+    setSettingsTab(tab);
+    setView('settings');
+  }, []);
+
   const selectedView = useMemo(() => {
     if (view === 'library') {
       return (
@@ -92,6 +110,9 @@ export function App() {
           spells={spells}
           candidates={candidates}
           onChanged={refresh}
+          onOpenRecommendationDiscovery={() => openSettings('localData')}
+          onRecommendationPanelOpenChange={updateRecommendationPanelOpen}
+          recommendationPanelOpen={settings.recommendationPanelOpen}
           t={t}
         />
       );
@@ -105,7 +126,9 @@ export function App() {
     if (view === 'settings') {
       return (
         <SettingsView
+          activeTab={settingsTab}
           onChanged={refresh}
+          onTabChange={setSettingsTab}
           settings={settings}
           onSettingsChanged={setSettings}
           t={t}
@@ -113,11 +136,17 @@ export function App() {
       );
     }
     return <SpellPanel spells={spells} onChanged={refresh} t={t} />;
-  }, [analytics, candidates, refresh, settings, skills, spells, t, view]);
+  }, [analytics, candidates, openSettings, refresh, settings, settingsTab, skills, spells, t, updateRecommendationPanelOpen, view]);
+
+  const compactLibraryWindow = view === 'library' && !settings.recommendationPanelOpen;
+  const appFrameStyle = {
+    ...APP_FRAME_BASE_STYLE,
+    '--app-min-width': `${compactLibraryWindow ? MAIN_WINDOW_COMPACT_MIN_WIDTH : MAIN_WINDOW_MIN_WIDTH}px`
+  } as CSSProperties;
 
   return (
     <FeedbackToastProvider>
-      <div className="app-frame" style={APP_FRAME_STYLE}>
+      <div className="app-frame" style={appFrameStyle}>
         <header className="app-titlebar">
           <div className="titlebar-brand">
             <img alt="" src={appIconUrl} />
@@ -146,7 +175,7 @@ export function App() {
             <div className="sidebar-footer">
               <button
                 className={view === 'settings' ? 'settings-entry active' : 'settings-entry'}
-                onClick={() => setView('settings')}
+                onClick={() => openSettings('preferences')}
                 type="button"
               >
                 <Settings size={16} />

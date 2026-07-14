@@ -56,6 +56,10 @@ export async function scanJsonlFiles(files: string[], sourceTool: SourceTool): P
   return { prompts, sourceFiles, warningCount };
 }
 
+export function hasSuccessfulSourceScan(sourceFiles: SourceFileSummary[]): boolean {
+  return sourceFiles.some((sourceFile) => sourceFile.status === 'scanned');
+}
+
 export async function discoverJsonlFiles(root: string, limit = 500): Promise<string[]> {
   const files: string[] = [];
 

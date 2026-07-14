@@ -34,6 +34,9 @@ export function createSettingsService(db: AppDatabase): SettingsService {
         quickPanelShortcut: normalizeShortcut(values.get('quickPanelShortcut')),
         quickPanelPlacement: normalizePlacement(values.get('quickPanelPlacement')),
         quickPanelPinned: normalizePinned(values.get('quickPanelPinned')),
+        recommendationPanelOpen: normalizeRecommendationPanelOpen(
+          values.get('recommendationPanelOpen')
+        ),
         scanSources: normalizeScanSources(values.get('scanSources'))
       };
     },
@@ -56,6 +59,10 @@ export function createSettingsService(db: AppDatabase): SettingsService {
           patch.quickPanelPinned === undefined
             ? current.quickPanelPinned
             : normalizePinned(patch.quickPanelPinned),
+        recommendationPanelOpen:
+          patch.recommendationPanelOpen === undefined
+            ? current.recommendationPanelOpen
+            : normalizeRecommendationPanelOpen(patch.recommendationPanelOpen),
         scanSources:
           patch.scanSources === undefined
             ? current.scanSources
@@ -66,6 +73,7 @@ export function createSettingsService(db: AppDatabase): SettingsService {
       writeSetting(db, 'quickPanelShortcut', next.quickPanelShortcut, now);
       writeSetting(db, 'quickPanelPlacement', next.quickPanelPlacement, now);
       writeSetting(db, 'quickPanelPinned', String(next.quickPanelPinned), now);
+      writeSetting(db, 'recommendationPanelOpen', String(next.recommendationPanelOpen), now);
       writeSetting(db, 'scanSources', JSON.stringify(next.scanSources), now);
       await db.save();
       return next;
@@ -86,13 +94,21 @@ function normalizePlacement(value: unknown): QuickPanelPlacement {
 }
 
 function normalizePinned(value: unknown): boolean {
+  return normalizeBooleanSetting(value, DEFAULT_APP_SETTINGS.quickPanelPinned);
+}
+
+function normalizeRecommendationPanelOpen(value: unknown): boolean {
+  return normalizeBooleanSetting(value, DEFAULT_APP_SETTINGS.recommendationPanelOpen);
+}
+
+function normalizeBooleanSetting(value: unknown, fallback: boolean): boolean {
   if (value === true || value === 'true') {
     return true;
   }
   if (value === false || value === 'false') {
     return false;
   }
-  return DEFAULT_APP_SETTINGS.quickPanelPinned;
+  return fallback;
 }
 
 export function defaultScanSources(): ScanSourceConfig[] {

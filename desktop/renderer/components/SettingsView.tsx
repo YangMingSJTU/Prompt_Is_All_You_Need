@@ -15,13 +15,15 @@ import type { TFunction } from '../i18n';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
+  activeTab: SettingsTab;
   onChanged(): Promise<void>;
+  onTabChange(tab: SettingsTab): void;
   settings: AppSettings;
   onSettingsChanged(settings: AppSettings): void;
   t: TFunction;
 }
 
-type SettingsTab = 'preferences' | 'shortcut' | 'localData';
+export type SettingsTab = 'preferences' | 'shortcut' | 'localData';
 
 const SETTINGS_TABS: Array<{
   id: SettingsTab;
@@ -60,8 +62,14 @@ const SCAN_TARGET_OPTIONS: Array<{
 
 const SCAN_PROVIDERS: ScanProvider[] = ['claude', 'codex'];
 
-export function SettingsView({ onChanged, settings, onSettingsChanged, t }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('preferences');
+export function SettingsView({
+  activeTab,
+  onChanged,
+  onSettingsChanged,
+  onTabChange,
+  settings,
+  t
+}: SettingsViewProps) {
   const [info, setInfo] = useState<SettingsInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [recordingShortcut, setRecordingShortcut] = useState(false);
@@ -112,7 +120,7 @@ export function SettingsView({ onChanged, settings, onSettingsChanged, t }: Sett
               <button
                 className={activeTab === item.id ? 'settings-tab active' : 'settings-tab'}
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => onTabChange(item.id)}
                 type="button"
               >
                 <Icon size={15} />

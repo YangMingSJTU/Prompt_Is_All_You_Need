@@ -11,10 +11,12 @@ import {
   FLOATING_WINDOW_MAX_WIDTH,
   FLOATING_WINDOW_MIN_HEIGHT,
   FLOATING_WINDOW_MIN_WIDTH,
+  MAIN_WINDOW_COMPACT_MIN_WIDTH,
   MAIN_WINDOW_DEFAULT_HEIGHT,
   MAIN_WINDOW_DEFAULT_WIDTH,
   MAIN_WINDOW_MIN_HEIGHT,
-  MAIN_WINDOW_MIN_WIDTH
+  MAIN_WINDOW_MIN_WIDTH,
+  SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA
 } from '../shared/layout';
 import type {
   FloatingWindowState,
@@ -35,7 +37,12 @@ import {
 import { openAppDatabase } from './services/database';
 import { createSpellService } from './services/spellService';
 import { generateCandidates } from './services/candidateGenerator';
-import { defaultHistoryRoots, discoverJsonlFiles, scanJsonlFiles } from './services/scanner';
+import {
+  defaultHistoryRoots,
+  discoverJsonlFiles,
+  hasSuccessfulSourceScan,
+  scanJsonlFiles
+} from './services/scanner';
 import { createSettingsService, defaultScanSources, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
@@ -48,6 +55,10 @@ let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let databasePath = '';
 let activeQuickPanelShortcut: ShortcutAccelerator | null = null;
+let mainWindowCompact = false;
+let mainWindowExpandedWidth = MAIN_WINDOW_DEFAULT_WIDTH;
+let mainWindowRecommendationDelta = SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA;
+let restoreMainWindowMaximized = false;
 
 async function createWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
@@ -198,6 +209,16 @@ async function bootstrap(): Promise<void> {
     historyRoots: defaultHistoryRoots(),
     skillRoots: skillService.getSkillRoots()
   }));
+  ipcMain.handle(
+    'window:setRecommendationPanelOpen',
+    (event, open: boolean, requestedPanelWidth?: number) => {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner !== mainWindow) {
+        return;
+      }
+      setMainWindowRecommendationPanelOpen(owner, open, requestedPanelWidth);
+    }
+  );
   ipcMain.handle('dialog:selectDirectory', async (event, defaultPath?: string) => {
     const owner = BrowserWindow.fromWebContents(event.sender);
     const options = {
@@ -274,8 +295,10 @@ async function bootstrap(): Promise<void> {
       allPrompts.push(...summary.prompts);
     }
 
-    const candidates = generateCandidates(allPrompts);
-    await spellService.replaceCandidates(candidates);
+    if (hasSuccessfulSourceScan(summaries)) {
+      const candidates = generateCandidates(allPrompts);
+      await spellService.replaceCandidates(candidates);
+    }
 
     return {
       id: randomUUID(),
@@ -420,6 +443,68 @@ function positionFloatingWindow(): void {
     panelBounds: bounds
   });
   floatingWindow.setPosition(position.x, position.y);
+}
+
+function setMainWindowRecommendationPanelOpen(
+  window: BrowserWindow,
+  open: boolean,
+  requestedPanelWidth?: number
+): void {
+  if (open) {
+    if (!mainWindowCompact) {
+      window.setMinimumSize(MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT);
+      return;
+    }
+
+    mainWindowCompact = false;
+    window.setMinimumSize(MAIN_WINDOW_COMPACT_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT);
+    if (restoreMainWindowMaximized) {
+      restoreMainWindowMaximized = false;
+      window.setMinimumSize(MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT);
+      window.maximize();
+      return;
+    }
+
+    const bounds = window.getContentBounds();
+    const display = screen.getDisplayMatching(bounds);
+    const targetWidth = Math.min(
+      Math.max(mainWindowExpandedWidth, bounds.width + mainWindowRecommendationDelta),
+      display.workArea.width
+    );
+    const targetX = Math.max(
+      display.workArea.x,
+      Math.min(bounds.x, display.workArea.x + display.workArea.width - targetWidth)
+    );
+    window.setContentBounds({ ...bounds, x: targetX, width: targetWidth });
+    window.setMinimumSize(MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT);
+    return;
+  }
+
+  if (mainWindowCompact) {
+    return;
+  }
+
+  restoreMainWindowMaximized = window.isMaximized();
+  if (restoreMainWindowMaximized) {
+    window.unmaximize();
+  }
+  const bounds = window.getContentBounds();
+  const maximumDelta = Math.max(0, bounds.width - MAIN_WINDOW_COMPACT_MIN_WIDTH);
+  const measuredDelta =
+    typeof requestedPanelWidth === 'number' && Number.isFinite(requestedPanelWidth)
+      ? Math.round(requestedPanelWidth)
+      : mainWindowRecommendationDelta;
+  mainWindowRecommendationDelta = Math.min(
+    Math.max(SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA, measuredDelta),
+    maximumDelta
+  );
+  mainWindowExpandedWidth = bounds.width;
+  mainWindowCompact = true;
+  window.setMinimumSize(MAIN_WINDOW_COMPACT_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT);
+  window.setContentBounds({
+    ...bounds,
+    width: Math.max(MAIN_WINDOW_COMPACT_MIN_WIDTH, bounds.width - mainWindowRecommendationDelta)
+  });
 }
 
 app.whenReady().then(async () => {

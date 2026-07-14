@@ -1,4 +1,13 @@
-import { Clipboard, Heart, Plus, Save, Trash2 } from 'lucide-react';
+import {
+  Clipboard,
+  Heart,
+  PanelRightClose,
+  PanelRightOpen,
+  Plus,
+  Save,
+  ScanSearch,
+  Trash2
+} from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -47,6 +56,9 @@ interface LibraryViewProps {
   candidates: Candidate[];
   createRequestId?: number;
   onChanged(): Promise<void>;
+  onOpenRecommendationDiscovery(): void;
+  onRecommendationPanelOpenChange(open: boolean, panelWidth?: number): Promise<void>;
+  recommendationPanelOpen: boolean;
   t: TFunction;
 }
 
@@ -54,7 +66,16 @@ type EditorState =
   | { mode: 'create'; candidateId?: string; initialDraft?: SpellEditorDraft }
   | { mode: 'edit'; spellId: string };
 
-export function LibraryView({ spells, candidates, createRequestId = 0, onChanged, t }: LibraryViewProps) {
+export function LibraryView({
+  spells,
+  candidates,
+  createRequestId = 0,
+  onChanged,
+  onOpenRecommendationDiscovery,
+  onRecommendationPanelOpenChange,
+  recommendationPanelOpen,
+  t
+}: LibraryViewProps) {
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
@@ -69,6 +90,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [splitRatio, setSplitRatio] = useState(60);
   const [isResizing, setIsResizing] = useState(false);
   const bulkDeleteActionRef = useRef<HTMLDivElement>(null);
+  const candidateDockRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
@@ -363,6 +385,16 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setSortState((current) => getNextSpellTableSortState(current, nextMode));
   }
 
+  function changeRecommendationPanelOpen(open: boolean): Promise<void> {
+    const panelWidth = open
+      ? undefined
+      : Math.round(
+          (candidateDockRef.current?.getBoundingClientRect().width ??
+            SPELL_LIBRARY_MIN_CANDIDATE_WIDTH) + SPELL_LIBRARY_SPLITTER_WIDTH
+        );
+    return onRecommendationPanelOpenChange(open, panelWidth);
+  }
+
   function handleBulkDeleteBlur(event: ReactFocusEvent<HTMLDivElement>): void {
     if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
       return;
@@ -434,7 +466,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     });
   }
 
-  const splitStyle = pendingCandidates.length
+  const splitStyle = recommendationPanelOpen
     ? ({
         gridTemplateColumns: `minmax(${SPELL_LIBRARY_MIN_LIST_WIDTH}px, ${splitRatio}fr) ${SPELL_LIBRARY_SPLITTER_WIDTH}px minmax(${SPELL_LIBRARY_MIN_CANDIDATE_WIDTH}px, ${100 - splitRatio}fr)`
       } satisfies CSSProperties)
@@ -445,7 +477,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
       <div
         className={[
           'spell-library-content',
-          pendingCandidates.length ? 'has-candidates' : '',
+          recommendationPanelOpen ? 'has-recommendations' : '',
           isResizing ? 'resizing' : ''
         ]
           .filter(Boolean)
@@ -478,6 +510,11 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
               <Plus size={16} />
               <span>{t('spell.new')}</span>
             </button>
+            <RecommendationPanelToggle
+              onChange={changeRecommendationPanelOpen}
+              open={recommendationPanelOpen}
+              t={t}
+            />
           </div>
           <div className="spell-list" id="spell-library-list">
             {filteredSpells.length ? (
@@ -604,7 +641,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
             {filteredSpells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
           </div>
         </div>
-        {pendingCandidates.length ? (
+        {recommendationPanelOpen ? (
           <>
             <div
               aria-controls="spell-library-list"
@@ -623,80 +660,130 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
               tabIndex={0}
               title={t('spell.resizePanels')}
             />
-            <div aria-label={t('library.candidates')} className="candidate-dock">
+            <div
+              aria-label={t('library.candidates')}
+              className="candidate-dock"
+              id="spell-recommendation-panel"
+              ref={candidateDockRef}
+            >
               <div className="candidate-dock-header">
                 <h3>{t('library.candidates')}</h3>
+                <button
+                  className="secondary-button candidate-discover-button"
+                  onClick={onOpenRecommendationDiscovery}
+                  type="button"
+                >
+                  <ScanSearch size={14} />
+                  <span>{t('library.discover')}</span>
+                </button>
               </div>
               <div aria-busy={isSavingCandidates} className="candidate-list compact">
-                <div className="spell-selection-toolbar candidate-selection-toolbar">
-                  <label
-                    className="spell-select-all candidate-select-all"
-                    title={
-                      allPendingCandidatesSelected ? t('spell.clearSelection') : t('spell.selectAll')
-                    }
-                  >
-                    <input
-                      aria-label={
-                        allPendingCandidatesSelected ? t('spell.clearSelection') : t('spell.selectAll')
-                      }
-                      checked={allPendingCandidatesSelected}
-                      onChange={togglePendingCandidateSelection}
-                      ref={selectAllCandidatesCheckboxRef}
-                      type="checkbox"
-                    />
-                    <span>{t('spell.selectAll')}</span>
-                  </label>
-                  <button
-                    aria-label={t('library.saveSelected')}
-                    className="primary-button candidate-batch-save"
-                    disabled={selectedPendingCandidateCount === 0 || isSavingCandidates}
-                    onClick={() => void saveSelectedCandidates()}
-                    title={t('library.saveSelected')}
-                    type="button"
-                  >
-                    <Save size={15} />
-                    {t('library.save')}
-                  </button>
-                </div>
-                {pendingCandidates.map((candidate) => (
-                  <article
-                    className={
-                      selectedCandidateIds.includes(candidate.id)
-                        ? 'candidate-row bulk-selected'
-                        : 'candidate-row'
-                    }
-                    key={candidate.id}
-                  >
-                    <label className="spell-row-select candidate-row-select" title={t('spell.select')}>
-                      <input
-                        aria-label={`${t('spell.select')} ${candidate.title}`}
-                        checked={selectedCandidateIds.includes(candidate.id)}
-                        onChange={() => toggleCandidateSelection(candidate.id)}
-                        type="checkbox"
-                      />
-                    </label>
-                    <div className="candidate-row-content">
-                      <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
-                    </div>
-                    <div className="candidate-row-meta">
-                      <span>
-                        {candidate.sourceCount} {t('metric.sources')}
-                      </span>
-                    </div>
-                    <div className="candidate-row-actions">
+                {pendingCandidates.length ? (
+                  <>
+                    <div className="spell-selection-toolbar candidate-selection-toolbar">
+                      <label
+                        className="spell-select-all candidate-select-all"
+                        title={
+                          allPendingCandidatesSelected
+                            ? t('spell.clearSelection')
+                            : t('spell.selectAll')
+                        }
+                      >
+                        <input
+                          aria-label={
+                            allPendingCandidatesSelected
+                              ? t('spell.clearSelection')
+                              : t('spell.selectAll')
+                          }
+                          checked={allPendingCandidatesSelected}
+                          onChange={togglePendingCandidateSelection}
+                          ref={selectAllCandidatesCheckboxRef}
+                          type="checkbox"
+                        />
+                        <span>{t('spell.selectAll')}</span>
+                      </label>
                       <button
-                        aria-label={t('spell.save')}
-                        className="icon-button candidate-save-button"
-                        disabled={isSavingCandidates}
-                        onClick={() => openCandidateEditor(candidate)}
-                        title={t('spell.save')}
+                        aria-label={t('library.saveSelected')}
+                        className="primary-button candidate-batch-save"
+                        disabled={selectedPendingCandidateCount === 0 || isSavingCandidates}
+                        onClick={() => void saveSelectedCandidates()}
+                        title={t('library.saveSelected')}
                         type="button"
                       >
                         <Save size={15} />
+                        {t('library.save')}
                       </button>
                     </div>
-                  </article>
-                ))}
+                    {pendingCandidates.map((candidate) => (
+                      <article
+                        className={
+                          selectedCandidateIds.includes(candidate.id)
+                            ? 'candidate-row bulk-selected'
+                            : 'candidate-row'
+                        }
+                        key={candidate.id}
+                      >
+                        <label
+                          className="spell-row-select candidate-row-select"
+                          title={t('spell.select')}
+                        >
+                          <input
+                            aria-label={`${t('spell.select')} ${candidate.title}`}
+                            checked={selectedCandidateIds.includes(candidate.id)}
+                            onChange={() => toggleCandidateSelection(candidate.id)}
+                            type="checkbox"
+                          />
+                        </label>
+                        <div className="candidate-row-content">
+                          <pre className="spell-text-block compact">
+                            {getCandidateDisplayText(candidate)}
+                          </pre>
+                        </div>
+                        <div className="candidate-row-meta">
+                          <span>
+                            {candidate.sourceCount} {t('metric.sources')}
+                          </span>
+                        </div>
+                        <div className="candidate-row-actions">
+                          <button
+                            aria-label={t('spell.save')}
+                            className="icon-button candidate-save-button"
+                            disabled={isSavingCandidates}
+                            onClick={() => openCandidateEditor(candidate)}
+                            title={t('spell.save')}
+                            type="button"
+                          >
+                            <Save size={15} />
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </>
+                ) : (
+                  <div className="candidate-empty-state">
+                    <div aria-hidden="true" className="candidate-empty-visual">
+                      <div className="candidate-empty-sheet">
+                        <span />
+                        <span />
+                        <span />
+                        <i />
+                      </div>
+                      <ScanSearch size={24} />
+                    </div>
+                    <div className="candidate-empty-copy">
+                      <strong>{t('library.emptyRecommendationsTitle')}</strong>
+                      <span>{t('library.emptyRecommendationsDescription')}</span>
+                    </div>
+                    <button
+                      className="primary-button candidate-empty-action"
+                      onClick={onOpenRecommendationDiscovery}
+                      type="button"
+                    >
+                      <ScanSearch size={15} />
+                      {t('library.discover')}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -721,5 +808,37 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
         />
       ) : null}
     </section>
+  );
+}
+
+function RecommendationPanelToggle({
+  onChange,
+  open,
+  t
+}: {
+  onChange(open: boolean): Promise<void>;
+  open: boolean;
+  t: TFunction;
+}) {
+  const label = t(open ? 'library.hideRecommendations' : 'library.showRecommendations');
+  const Icon = open ? PanelRightClose : PanelRightOpen;
+
+  return (
+    <button
+      aria-controls="spell-recommendation-panel"
+      aria-expanded={open}
+      aria-label={label}
+      aria-pressed={open}
+      className={
+        open
+          ? 'secondary-button recommendation-panel-toggle active'
+          : 'secondary-button recommendation-panel-toggle'
+      }
+      onClick={() => void onChange(!open)}
+      title={label}
+      type="button"
+    >
+      <Icon size={16} />
+    </button>
   );
 }

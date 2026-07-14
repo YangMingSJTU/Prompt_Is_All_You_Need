@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { scanJsonlFiles } from '../desktop/main/services/scanner';
+import {
+  hasSuccessfulSourceScan,
+  scanJsonlFiles
+} from '../desktop/main/services/scanner';
 
 describe('scanner', () => {
   it('scans jsonl files and ignores tool results', async () => {
@@ -21,6 +24,15 @@ describe('scanner', () => {
 
     expect(result.prompts).toHaveLength(1);
     expect(result.prompts[0].rawText).toBe('review current diff');
+    expect(hasSuccessfulSourceScan(result.sourceFiles)).toBe(true);
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it('does not treat unreadable history files as a successful refresh', async () => {
+    const result = await scanJsonlFiles([join(tmpdir(), 'missing-spell-history.jsonl')], 'codex');
+
+    expect(result.sourceFiles).toHaveLength(1);
+    expect(result.sourceFiles[0].status).toBe('skipped');
+    expect(hasSuccessfulSourceScan(result.sourceFiles)).toBe(false);
   });
 });

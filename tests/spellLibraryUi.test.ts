@@ -102,7 +102,14 @@ describe('spell library UI structure', () => {
     expect(component).toContain('spell-library-grid');
     expect(component).toContain('spell-list-pane');
     expect(component).toContain('spell-library-content');
-    expect(component).toContain('pendingCandidates.length ? \'has-candidates\'');
+    expect(component).toContain("recommendationPanelOpen ? 'has-recommendations'");
+    expect(component).toContain('function RecommendationPanelToggle');
+    expect(component).toContain('aria-expanded={open}');
+    expect(component).toContain('aria-pressed={open}');
+    expect(component).toContain('onClick={() => void onChange(!open)}');
+    expect(component).toContain('PanelRightOpen');
+    expect(component).toContain('PanelRightClose');
+    expect(component).toContain("t('library.candidates')");
     expect(component).toContain('className="spell-library-resizer"');
     expect(component).toContain('calculateSplitRatio');
     expect(component).toContain('clampSplitRatio');
@@ -110,6 +117,12 @@ describe('spell library UI structure', () => {
     expect(component).toContain('SPELL_LIBRARY_MIN_CANDIDATE_WIDTH');
     expect(component).not.toContain('SPELL_LIBRARY_SPLIT_STYLE');
     expect(component).toContain('candidate-dock-header');
+    expect(component).toContain('onClick={onOpenRecommendationDiscovery}');
+    expect(component).toContain('<ScanSearch');
+    expect(component).toContain("t('library.discover')");
+    expect(component).toContain('className="candidate-empty-state"');
+    expect(component).toContain("t('library.emptyRecommendationsTitle')");
+    expect(component).toContain("t('library.emptyRecommendationsDescription')");
     expect(listPaneLayout).toContain('spell-library-toolbar');
     expect(listPaneLayout).toContain('SpellSearchFilter');
     expect(listPaneLayout).not.toContain('SpellSortMenu');
@@ -148,6 +161,13 @@ describe('spell library UI structure', () => {
     ).toBeTruthy();
     expect(styles.match(/\.spell-library-resizer\s*\{[^}]+cursor: col-resize;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles.match(/\.candidate-dock\s*\{[^}]+grid-template-rows: 42px minmax\(0, 1fr\);[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.recommendation-panel-toggle\s*\{[^}]+width: 34px;[^}]+height: 34px;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.recommendation-panel-toggle\.active\s*\{[^}]+background: var\(--primary\);[^}]+color: var\(--primary-text\);[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(component).toContain('candidateDockRef.current?.getBoundingClientRect().width');
+    expect(component).toContain('onRecommendationPanelOpenChange(open, panelWidth)');
+    expect(styles.match(/\.candidate-discover-button\s*\{[^}]+height: 28px;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.candidate-empty-state\s*\{[^}]+align-content: center;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles).toContain('@keyframes candidate-scan');
     expect(styles.match(/\.candidate-list\.compact\s*\{[^}]+border: 0;[^}]+\}/s)?.[0]).toBeTruthy();
   });
 
@@ -278,6 +298,9 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('restoreSpell');
     expect(component).not.toContain('isBlocked');
     expect(panel).toContain('aria-pressed={spell.isFavorite}');
+    expect(panel).toMatch(
+      /<Heart fill=\{selected\.isFavorite[\s\S]*?\/?>\s*\{t\(selected\.isFavorite \? 'spell\.unfavorite' : 'spell\.favorite'\)\}/
+    );
     expect(panel).toContain('statusFilter');
     expect(searchLogic).toContain("export type SpellStatusFilter = 'active' | 'favorite'");
     expect(filter).toContain("import type { SearchScope, SpellStatusFilter } from '../spellSearch'");

@@ -51,6 +51,7 @@ declare global {
       getSettings(): Promise<AppSettings>;
       getSettingsInfo(): Promise<SettingsInfo>;
       updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;
+      setRecommendationPanelWindowOpen(open: boolean, panelWidth?: number): Promise<void>;
       selectDirectory(defaultPath?: string): Promise<string | null>;
       onFloatingFocus(callback: () => void): () => void;
       getFloatingWindowState(): Promise<FloatingWindowState>;

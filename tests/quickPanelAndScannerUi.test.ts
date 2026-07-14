@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 describe('scanner placement and floating quick panel UI', () => {
   it('merges local scanning into local data settings instead of a separate page', () => {
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
+    const library = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const settings = readFileSync('desktop/renderer/components/SettingsView.tsx', 'utf8');
 
     const navItems = app.match(/const NAV_ITEMS[\s\S]+?\];/)?.[0] ?? '';
@@ -32,6 +33,14 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).not.toContain('settings.scanSources\n                .filter');
     expect(settings).not.toContain('sourceFiles');
     expect(settings).not.toContain('source-table');
+
+    expect(app).toContain("onOpenRecommendationDiscovery={() => openSettings('localData')}");
+    expect(app).toContain('activeTab={settingsTab}');
+    expect(settings).toContain('activeTab: SettingsTab');
+    expect(settings).toContain('onTabChange(tab: SettingsTab): void');
+    expect(settings).toContain("useState<ScanTarget>('spells')");
+    expect(library).toContain('onClick={onOpenRecommendationDiscovery}');
+    expect(library).toContain("t('library.discover')");
   });
 
   it('uses native directory picking and flexible scan results in local data settings', () => {
@@ -45,6 +54,7 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(main).toContain("ipcMain.handle('dialog:selectDirectory'");
     expect(main).toContain('showOpenDialog');
     expect(main).toContain("'openDirectory'");
+    expect(main).toContain('if (hasSuccessfulSourceScan(summaries))');
 
     expect(preload).toContain('selectDirectory');
     expect(preload).toContain("ipcRenderer.invoke('dialog:selectDirectory'");

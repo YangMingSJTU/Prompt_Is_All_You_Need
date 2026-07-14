@@ -8,6 +8,7 @@ import {
   FLOATING_WINDOW_MAX_WIDTH,
   FLOATING_WINDOW_MIN_HEIGHT,
   FLOATING_WINDOW_MIN_WIDTH,
+  MAIN_WINDOW_COMPACT_MIN_WIDTH,
   MAIN_WINDOW_DEFAULT_HEIGHT,
   MAIN_WINDOW_DEFAULT_WIDTH,
   MAIN_WINDOW_MIN_HEIGHT,
@@ -19,6 +20,7 @@ import {
   SPELL_LIBRARY_HORIZONTAL_PADDING,
   SPELL_LIBRARY_MIN_CANDIDATE_WIDTH,
   SPELL_LIBRARY_MIN_LIST_WIDTH,
+  SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA,
   SPELL_LIBRARY_SPLITTER_WIDTH,
   SPELL_LIBRARY_MIN_WORKSPACE_WIDTH
 } from '../desktop/shared/layout';
@@ -53,6 +55,13 @@ describe('window layout constraints', () => {
     expect(MAIN_WINDOW_MIN_WIDTH - APP_SIDEBAR_WIDTH).toBeGreaterThanOrEqual(
       SPELL_LIBRARY_MIN_WORKSPACE_WIDTH
     );
+    expect(SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA).toBe(
+      SPELL_LIBRARY_SPLITTER_WIDTH + SPELL_LIBRARY_MIN_CANDIDATE_WIDTH
+    );
+    expect(MAIN_WINDOW_COMPACT_MIN_WIDTH).toBe(
+      APP_SIDEBAR_WIDTH + SPELL_LIBRARY_HORIZONTAL_PADDING + SPELL_LIBRARY_MIN_LIST_WIDTH
+    );
+    expect(MAIN_WINDOW_COMPACT_MIN_WIDTH).toBeLessThan(MAIN_WINDOW_MIN_WIDTH);
   });
 
   it('uses content-area window sizing and shared renderer constraints', () => {
@@ -63,10 +72,40 @@ describe('window layout constraints', () => {
     expect(mainProcess).toContain('useContentSize: true');
     expect(mainProcess).toContain('minWidth: MAIN_WINDOW_MIN_WIDTH');
     expect(mainProcess).toContain('minHeight: MAIN_WINDOW_MIN_HEIGHT');
-    expect(app).toContain("'--app-min-width': `${MAIN_WINDOW_MIN_WIDTH}px`");
+    expect(app).toContain("'--app-min-width':");
+    expect(app).toContain('compactLibraryWindow ? MAIN_WINDOW_COMPACT_MIN_WIDTH : MAIN_WINDOW_MIN_WIDTH');
     expect(app).toContain("'--app-min-height': `${MAIN_WINDOW_MIN_HEIGHT}px`");
     expect(app).toContain("'--app-sidebar-width': `${APP_SIDEBAR_WIDTH}px`");
     expect(panel).toContain('minWidth: QUICK_PANEL_MIN_WIDTH');
+  });
+
+  it('shrinks the main window with the recommendation panel and restores it safely', () => {
+    const mainProcess = readFileSync('desktop/main/index.ts', 'utf8');
+    const preload = readFileSync('desktop/main/preload.ts', 'utf8');
+    const globals = readFileSync('desktop/renderer/global.d.ts', 'utf8');
+    const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
+    const library = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
+
+    expect(mainProcess).toContain("'window:setRecommendationPanelOpen'");
+    expect(mainProcess).toContain('owner !== mainWindow');
+    expect(mainProcess).toContain('setMainWindowRecommendationPanelOpen');
+    expect(mainProcess).toContain('window.getContentBounds()');
+    expect(mainProcess).toContain('window.setContentBounds');
+    expect(mainProcess).toContain(
+      'window.setMinimumSize(MAIN_WINDOW_COMPACT_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT)'
+    );
+    expect(mainProcess).toContain('screen.getDisplayMatching(bounds)');
+    expect(mainProcess).toContain(': mainWindowRecommendationDelta');
+    expect(preload).toContain('setRecommendationPanelWindowOpen');
+    expect(globals).toContain(
+      'setRecommendationPanelWindowOpen(open: boolean, panelWidth?: number): Promise<void>'
+    );
+    expect(app).toContain("view !== 'library' || settings.recommendationPanelOpen");
+    expect(app).toContain('compactLibraryWindow');
+    expect(app).toContain('MAIN_WINDOW_COMPACT_MIN_WIDTH');
+    expect(library).toContain('candidateDockRef');
+    expect(library).toContain('getBoundingClientRect().width');
+    expect(library).toContain('SPELL_LIBRARY_SPLITTER_WIDTH');
   });
 
   it('keeps every main view scrollable or wrappable within the minimum workspace', () => {

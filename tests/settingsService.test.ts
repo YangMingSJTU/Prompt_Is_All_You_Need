@@ -22,7 +22,8 @@ describe('settings service', () => {
       language: 'en',
       quickPanelShortcut: 'CommandOrControl+Alt+K',
       quickPanelPlacement: 'mouse',
-      quickPanelPinned: true
+      quickPanelPinned: true,
+      recommendationPanelOpen: false
     });
 
     expect(createSettingsService(db).getSettings()).toEqual({
@@ -30,12 +31,14 @@ describe('settings service', () => {
       quickPanelShortcut: 'CommandOrControl+Alt+K',
       quickPanelPlacement: 'mouse',
       quickPanelPinned: true,
+      recommendationPanelOpen: false,
       scanSources: defaultScanSources()
     });
 
     await service.updateSettings({ quickPanelPinned: false });
 
     expect(createSettingsService(db).getSettings().quickPanelPinned).toBe(false);
+    expect(createSettingsService(db).getSettings().recommendationPanelOpen).toBe(false);
   });
 
   it('loads legacy shortcut ids as accelerators', async () => {

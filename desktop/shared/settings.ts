@@ -11,6 +11,7 @@ export interface AppSettings {
   quickPanelShortcut: ShortcutAccelerator;
   quickPanelPlacement: QuickPanelPlacement;
   quickPanelPinned: boolean;
+  recommendationPanelOpen: boolean;
   scanSources: ScanSourceConfig[];
 }
 
@@ -47,6 +48,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   quickPanelShortcut: DEFAULT_QUICK_PANEL_SHORTCUT,
   quickPanelPlacement: 'center',
   quickPanelPinned: false,
+  recommendationPanelOpen: true,
   scanSources: []
 };
 

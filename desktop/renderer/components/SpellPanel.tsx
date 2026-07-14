@@ -295,6 +295,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
                 type="button"
               >
                 <Heart fill={selected.isFavorite ? 'currentColor' : 'none'} size={16} />
+                {t(selected.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
               </button>
               <button
                 className="secondary-button"
