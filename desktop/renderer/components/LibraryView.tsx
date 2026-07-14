@@ -7,7 +7,6 @@ import {
   Save,
   ScanSearch,
   Sparkles,
-  WandSparkles,
   Trash2
 } from 'lucide-react';
 import {
@@ -772,23 +771,46 @@ export function LibraryView({
                   </>
                 ) : (
                   <div className="candidate-empty-state">
-                    <div aria-hidden="true" className="candidate-empty-visual">
-                      <WandSparkles
-                        className="candidate-empty-wand"
-                        size={46}
-                        strokeWidth={1.6}
-                      />
-                      <Sparkles
-                        className="candidate-empty-spark candidate-empty-spark-top"
-                        size={18}
-                      />
-                      <Sparkles
-                        className="candidate-empty-spark candidate-empty-spark-bottom"
-                        size={13}
-                      />
-                    </div>
-                    <div className="candidate-empty-copy">
-                      <strong>{t('library.emptyRecommendationsTitle')}</strong>
+                    <div className="candidate-memory-reveal">
+                      <div aria-hidden="true" className="candidate-memory-book">
+                        <div className="candidate-memory-page candidate-memory-page-left">
+                          <span className="candidate-memory-history-line" />
+                          <span className="candidate-memory-history-line" />
+                          <span className="candidate-memory-history-line" />
+                        </div>
+                        <div className="candidate-memory-page candidate-memory-page-right">
+                          <span className="candidate-memory-history-line" />
+                          <span className="candidate-memory-history-line" />
+                          <span className="candidate-memory-history-line" />
+                        </div>
+                        <span className="candidate-memory-spine" />
+                        <span className="candidate-memory-searchlight" />
+                        <Sparkles
+                          className="candidate-memory-spark candidate-memory-spark-top"
+                          size={18}
+                        />
+                        <Sparkles
+                          className="candidate-memory-spark candidate-memory-spark-bottom"
+                          size={13}
+                        />
+                      </div>
+                      <strong
+                        aria-label={t('library.emptyRecommendationsTitle')}
+                        className="candidate-memory-phrase"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="candidate-memory-phrase-line candidate-memory-phrase-lead"
+                        >
+                          {t('library.emptyRecommendationsLead')}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="candidate-memory-phrase-line candidate-memory-phrase-tail"
+                        >
+                          {t('library.emptyRecommendationsTail')}
+                        </span>
+                      </strong>
                     </div>
                     <button
                       className="primary-button candidate-empty-action"

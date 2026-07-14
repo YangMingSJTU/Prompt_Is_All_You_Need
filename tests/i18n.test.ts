@@ -172,6 +172,8 @@ describe('i18n', () => {
     expect(zh('library.hideRecommendations')).toBe('隐藏推荐咒语');
     expect(zh('library.find')).toBe('寻找咒语');
     expect(zh('library.emptyRecommendationsTitle')).toBe('想要的咒语，往往藏在遗忘的历史里');
+    expect(zh('library.emptyRecommendationsLead')).toBe('想要的咒语，');
+    expect(zh('library.emptyRecommendationsTail')).toBe('往往藏在遗忘的历史里');
     expect(zh('library.save')).toBe('快捷保存');
     expect(zh('library.saveSelected')).toBe('快捷保存选中');
     expect(zh('library.selectedSaved')).toBe('选中推荐咒语已快捷保存');
@@ -184,6 +186,8 @@ describe('i18n', () => {
     expect(en('library.emptyRecommendationsTitle')).toBe(
       'The spell you need may be hiding in forgotten history'
     );
+    expect(en('library.emptyRecommendationsLead')).toBe('The spell you need');
+    expect(en('library.emptyRecommendationsTail')).toBe('may be hiding in forgotten history');
     expect(en('library.save')).toBe('Quick save');
     expect(en('library.saveSelected')).toBe('Quick save selected');
     expect(en('library.selectedSaved')).toBe('Selected recommendations quick-saved');
