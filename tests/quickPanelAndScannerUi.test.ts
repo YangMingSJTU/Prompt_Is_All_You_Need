@@ -138,8 +138,10 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(sortLogic).not.toContain("'created'");
   });
 
-  it('adds draggable chrome and a pinned resident mode to the floating window', () => {
+  it('adds draggable chrome and remembers the floating window pin preference', () => {
     const main = readFileSync('desktop/main/index.ts', 'utf8');
+    const settings = readFileSync('desktop/shared/settings.ts', 'utf8');
+    const settingsService = readFileSync('desktop/main/services/settingsService.ts', 'utf8');
     const preload = readFileSync('desktop/main/preload.ts', 'utf8');
     const globals = readFileSync('desktop/renderer/global.d.ts', 'utf8');
     const component = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
@@ -153,17 +155,13 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(main).toContain("ipcMain.handle('floating:getState'");
     expect(main).toContain("ipcMain.handle('floating:setPinned'");
     expect(main).toContain('floatingWindow?.setAlwaysOnTop(pinned)');
-    expect(
-      main.match(
-        /ipcMain\.handle\('floating:close', \(\) => \{\s+setFloatingWindowPinned\(false\);\s+floatingWindow\?\.hide\(\);\s+\}\);/
-      )?.[0]
-    ).toBeTruthy();
-    expect(
-      main.match(
-        /if \(floatingWindow\.isVisible\(\)\) \{[^}]+setFloatingWindowPinned\(false\);[^}]+floatingWindow\.hide\(\);/s
-      )?.[0]
-    ).toBeTruthy();
-    expect(main).toContain('setFloatingWindowPinned(false);\n  positionFloatingWindow();');
+    expect(main).toContain('floatingWindowPinned = settingsService.getSettings().quickPanelPinned');
+    expect(main).toContain('await settingsService.updateSettings({ quickPanelPinned: pinned });');
+    expect(main).not.toContain('setFloatingWindowPinned(false)');
+    expect(settings).toContain('quickPanelPinned: boolean;');
+    expect(settings).toContain('quickPanelPinned: false');
+    expect(settingsService).toContain("quickPanelPinned: normalizePinned(values.get('quickPanelPinned'))");
+    expect(settingsService).toContain("writeSetting(db, 'quickPanelPinned', String(next.quickPanelPinned), now)");
 
     expect(preload).toContain("ipcRenderer.invoke('floating:getState')");
     expect(preload).toContain("ipcRenderer.invoke('floating:setPinned', pinned)");

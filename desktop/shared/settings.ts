@@ -10,6 +10,7 @@ export interface AppSettings {
   language: AppLanguage;
   quickPanelShortcut: ShortcutAccelerator;
   quickPanelPlacement: QuickPanelPlacement;
+  quickPanelPinned: boolean;
   scanSources: ScanSourceConfig[];
 }
 
@@ -45,6 +46,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   language: 'system',
   quickPanelShortcut: DEFAULT_QUICK_PANEL_SHORTCUT,
   quickPanelPlacement: 'center',
+  quickPanelPinned: false,
   scanSources: []
 };
 

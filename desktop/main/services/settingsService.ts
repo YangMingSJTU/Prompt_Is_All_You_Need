@@ -33,6 +33,7 @@ export function createSettingsService(db: AppDatabase): SettingsService {
         language: normalizeLanguage(values.get('language')),
         quickPanelShortcut: normalizeShortcut(values.get('quickPanelShortcut')),
         quickPanelPlacement: normalizePlacement(values.get('quickPanelPlacement')),
+        quickPanelPinned: normalizePinned(values.get('quickPanelPinned')),
         scanSources: normalizeScanSources(values.get('scanSources'))
       };
     },
@@ -51,6 +52,10 @@ export function createSettingsService(db: AppDatabase): SettingsService {
           patch.quickPanelPlacement === undefined
             ? current.quickPanelPlacement
             : normalizePlacement(patch.quickPanelPlacement),
+        quickPanelPinned:
+          patch.quickPanelPinned === undefined
+            ? current.quickPanelPinned
+            : normalizePinned(patch.quickPanelPinned),
         scanSources:
           patch.scanSources === undefined
             ? current.scanSources
@@ -60,6 +65,7 @@ export function createSettingsService(db: AppDatabase): SettingsService {
       writeSetting(db, 'language', next.language, now);
       writeSetting(db, 'quickPanelShortcut', next.quickPanelShortcut, now);
       writeSetting(db, 'quickPanelPlacement', next.quickPanelPlacement, now);
+      writeSetting(db, 'quickPanelPinned', String(next.quickPanelPinned), now);
       writeSetting(db, 'scanSources', JSON.stringify(next.scanSources), now);
       await db.save();
       return next;
@@ -77,6 +83,16 @@ function normalizeShortcut(value: unknown): ShortcutAccelerator {
 
 function normalizePlacement(value: unknown): QuickPanelPlacement {
   return isQuickPanelPlacement(value) ? value : DEFAULT_APP_SETTINGS.quickPanelPlacement;
+}
+
+function normalizePinned(value: unknown): boolean {
+  if (value === true || value === 'true') {
+    return true;
+  }
+  if (value === false || value === 'false') {
+    return false;
+  }
+  return DEFAULT_APP_SETTINGS.quickPanelPinned;
 }
 
 export function defaultScanSources(): ScanSourceConfig[] {

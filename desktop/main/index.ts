@@ -142,6 +142,7 @@ async function bootstrap(): Promise<void> {
     packageDirectory: spellbookPaths.packageDirectory
   });
   settingsService = createSettingsService(db);
+  floatingWindowPinned = settingsService.getSettings().quickPanelPinned;
   await spellService.seedStarterSpells();
   applyAppIdentity();
 
@@ -287,7 +288,6 @@ async function bootstrap(): Promise<void> {
     };
   });
   ipcMain.handle('floating:close', () => {
-    setFloatingWindowPinned(false);
     floatingWindow?.hide();
   });
   ipcMain.handle('floating:getState', () => getFloatingWindowState());
@@ -300,7 +300,11 @@ function getFloatingWindowState(): FloatingWindowState {
   return { pinned: floatingWindowPinned };
 }
 
-function setFloatingWindowPinned(pinned: boolean): FloatingWindowState {
+async function setFloatingWindowPinned(pinned: boolean): Promise<FloatingWindowState> {
+  if (!settingsService) {
+    throw new Error('Settings service is not ready');
+  }
+  await settingsService.updateSettings({ quickPanelPinned: pinned });
   floatingWindowPinned = pinned;
   floatingWindow?.setAlwaysOnTop(pinned);
   return getFloatingWindowState();
@@ -392,11 +396,9 @@ function toggleFloatingWindow(): void {
     return;
   }
   if (floatingWindow.isVisible()) {
-    setFloatingWindowPinned(false);
     floatingWindow.hide();
     return;
   }
-  setFloatingWindowPinned(false);
   positionFloatingWindow();
   floatingWindow.show();
   floatingWindow.focus();
