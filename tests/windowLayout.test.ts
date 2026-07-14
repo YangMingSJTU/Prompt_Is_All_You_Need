@@ -27,6 +27,8 @@ import {
 
 describe('window layout constraints', () => {
   it('keeps the floating panel compact while allowing bounded resizing', () => {
+    expect(FLOATING_WINDOW_MAX_WIDTH).toBe(600);
+    expect(FLOATING_WINDOW_MAX_HEIGHT).toBe(640);
     expect(FLOATING_WINDOW_DEFAULT_WIDTH).toBeGreaterThan(FLOATING_WINDOW_MIN_WIDTH);
     expect(FLOATING_WINDOW_DEFAULT_WIDTH).toBeLessThan(FLOATING_WINDOW_MAX_WIDTH);
     expect(FLOATING_WINDOW_DEFAULT_HEIGHT).toBeGreaterThan(FLOATING_WINDOW_MIN_HEIGHT);
