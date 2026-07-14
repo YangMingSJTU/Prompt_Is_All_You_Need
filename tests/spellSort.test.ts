@@ -10,8 +10,7 @@ import {
 const baseSpell: Omit<Spell, 'id' | 'name' | 'body' | 'createdAt' | 'updatedAt' | 'copyCount'> = {
   tags: [],
   source: 'manual',
-  isFavorite: false,
-  isBlocked: false
+  isFavorite: false
 };
 
 function spell(input: Partial<Spell> & Pick<Spell, 'id' | 'name'>): Spell {

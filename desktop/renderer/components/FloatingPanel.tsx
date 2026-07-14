@@ -45,7 +45,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
 
   const visibleSpells = useMemo(() => {
     const sorted = sortSpells(
-      spells.filter((spell) => !spell.isBlocked),
+      spells,
       sortMode,
       sortDirection,
       (spell) => getFloatingSpellName(spell, t)

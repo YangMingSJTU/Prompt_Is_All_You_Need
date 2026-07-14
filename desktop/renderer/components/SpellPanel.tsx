@@ -56,7 +56,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     for (const spell of spells.filter(
-      (item) => !item.isBlocked && (statusFilter !== 'favorite' || item.isFavorite)
+      (item) => statusFilter !== 'favorite' || item.isFavorite
     )) {
       for (const tag of spell.tags) {
         tags.add(tag);
@@ -72,8 +72,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
 
   const filtered = useMemo(() => {
     const filteredSpells = spells.filter((spell) => {
-      const matchesStatus =
-        !spell.isBlocked && (statusFilter !== 'favorite' || spell.isFavorite);
+      const matchesStatus = statusFilter !== 'favorite' || spell.isFavorite;
       const name = getSpellDisplayName(spell, t('spell.untitled'));
       const matchesQuery = matchesSpellSearch({ name, body: spell.body }, query, searchScope);
       const matchesTags =

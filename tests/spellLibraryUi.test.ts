@@ -139,7 +139,7 @@ describe('spell library UI structure', () => {
     expect(styles.match(/\.spell-list-row\s*\{[^}]+min-height: 52px;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(
       styles.match(
-        /\.spell-list-row\s*\{[^}]+grid-template-columns: 24px minmax\(0, 1fr\) 80px 80px 100px;[^}]+\}/s
+        /\.spell-list-row\s*\{[^}]+grid-template-columns: 24px minmax\(0, 1fr\) 80px 80px 68px;[^}]+\}/s
       )?.[0]
     ).toBeTruthy();
     expect(
@@ -256,7 +256,7 @@ describe('spell library UI structure', () => {
     expect(editor).not.toContain('initialBody');
   });
 
-  it('opens candidate creation in the shared editor and exposes persistent favorite and blacklist controls', () => {
+  it('opens candidate creation in the shared editor and exposes persistent favorite controls', () => {
     const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const panel = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const filter = readFileSync('desktop/renderer/components/SpellSearchFilter.tsx', 'utf8');
@@ -270,14 +270,16 @@ describe('spell library UI structure', () => {
     expect(component).toContain('window.spellbook.createSpellFromCandidate');
     expect(component).toContain('window.spellbook.updateSpellState');
     expect(component).toContain('aria-pressed={spell.isFavorite}');
-    expect(component).toContain('className="spell-row-menu"');
-    expect(component).toContain('void blockSpell(spell)');
-    expect(component).toContain('void restoreSpell(spell.id)');
+    expect(component).not.toContain('spell-row-menu');
+    expect(component).not.toContain('blockSpell');
+    expect(component).not.toContain('restoreSpell');
+    expect(component).not.toContain('isBlocked');
     expect(panel).toContain('aria-pressed={spell.isFavorite}');
     expect(panel).toContain('statusFilter');
-    expect(filter).toContain("export type SpellStatusFilter = 'active' | 'favorite' | 'blocked'");
+    expect(filter).toContain("export type SpellStatusFilter = 'active' | 'favorite'");
     expect(filter).toContain("onStatusChange('active')");
-    expect(filter).toContain("'spell.filter.status.blocked'");
+    expect(filter).not.toContain('blocked');
+    expect(filter).not.toContain('showBlockedStatus');
     expect(preload).toContain('createSpellFromCandidate');
     expect(preload).toContain('updateSpellState');
     expect(globals).toContain('createSpellFromCandidate(candidateId: string, input: SpellCreateInput)');

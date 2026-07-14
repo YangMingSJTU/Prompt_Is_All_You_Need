@@ -3,14 +3,13 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { I18nKey, TFunction } from '../i18n';
 import type { SearchScope } from '../spellSearch';
 
-export type SpellStatusFilter = 'active' | 'favorite' | 'blocked';
+export type SpellStatusFilter = 'active' | 'favorite';
 
 interface SpellSearchFilterProps {
   autoFocus?: boolean;
   query: string;
   searchScope: SearchScope;
   selectedTags: string[];
-  showBlockedStatus?: boolean;
   statusFilter: SpellStatusFilter;
   tags: string[];
   onClearTags(): void;
@@ -37,8 +36,7 @@ const SEARCH_SCOPE_OPTIONS: Array<{
 
 const STATUS_FILTER_OPTIONS: Array<{ value: SpellStatusFilter; labelKey: I18nKey }> = [
   { value: 'active', labelKey: 'spell.filter.status.active' },
-  { value: 'favorite', labelKey: 'spell.filter.status.favorite' },
-  { value: 'blocked', labelKey: 'spell.filter.status.blocked' }
+  { value: 'favorite', labelKey: 'spell.filter.status.favorite' }
 ];
 
 export function SpellSearchFilter({
@@ -46,7 +44,6 @@ export function SpellSearchFilter({
   query,
   searchScope,
   selectedTags,
-  showBlockedStatus = false,
   statusFilter,
   tags,
   onClearTags,
@@ -147,9 +144,7 @@ export function SpellSearchFilter({
                 className="spell-filter-scope-options"
                 role="radiogroup"
               >
-                {STATUS_FILTER_OPTIONS.filter(
-                  (option) => showBlockedStatus || option.value !== 'blocked'
-                ).map((option) => (
+                {STATUS_FILTER_OPTIONS.map((option) => (
                   <button
                     aria-checked={statusFilter === option.value}
                     className={

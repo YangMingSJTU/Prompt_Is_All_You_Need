@@ -1,4 +1,4 @@
-import { Ban, Clipboard, Heart, MoreHorizontal, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { Clipboard, Heart, Plus, Save, Trash2 } from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -63,22 +63,17 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [isSavingCandidates, setIsSavingCandidates] = useState(false);
   const [splitRatio, setSplitRatio] = useState(60);
   const [isResizing, setIsResizing] = useState(false);
-  const [openSpellMenuId, setOpenSpellMenuId] = useState<string | null>(null);
   const bulkDeleteActionRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const selectAllCandidatesCheckboxRef = useRef<HTMLInputElement>(null);
-  const spellMenuRef = useRef<HTMLDivElement>(null);
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     for (const spell of spells) {
-      const matchesStatus =
-        statusFilter === 'blocked'
-          ? spell.isBlocked
-          : !spell.isBlocked && (statusFilter !== 'favorite' || spell.isFavorite);
+      const matchesStatus = statusFilter !== 'favorite' || spell.isFavorite;
       if (!matchesStatus) {
         continue;
       }
@@ -114,10 +109,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
 
   const filteredSpells = useMemo(() => {
     const filtered = spells.filter((spell) => {
-      const matchesStatus =
-        statusFilter === 'blocked'
-          ? spell.isBlocked
-          : !spell.isBlocked && (statusFilter !== 'favorite' || spell.isFavorite);
+      const matchesStatus = statusFilter !== 'favorite' || spell.isFavorite;
       const matchesQuery = matchesSpellSearch(
         { name: getSpellDisplayName(spell, t('spell.untitled')), body: spell.body },
         query,
@@ -220,38 +212,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   }, [confirmingBulkDelete]);
 
   useEffect(() => {
-    if (!openSpellMenuId) {
-      return;
-    }
-
-    function closeSpellMenu(event?: Event): void {
-      if (
-        event?.type === 'pointerdown' &&
-        event.target instanceof Node &&
-        spellMenuRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      setOpenSpellMenuId(null);
-    }
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') {
-        closeSpellMenu();
-      }
-    }
-
-    document.addEventListener('pointerdown', closeSpellMenu, true);
-    document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('blur', closeSpellMenu);
-    return () => {
-      document.removeEventListener('pointerdown', closeSpellMenu, true);
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('blur', closeSpellMenu);
-    };
-  }, [openSpellMenuId]);
-
-  useEffect(() => {
     if (filteredSpells.length === 0) {
       setSelectedId(null);
       return;
@@ -317,28 +277,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     await onChanged();
   }
 
-  async function blockSpell(spell: Spell): Promise<void> {
-    const wasFavorite = spell.isFavorite;
-    setOpenSpellMenuId(null);
-    await window.spellbook.updateSpellState(spell.id, { isBlocked: true });
-    await onChanged();
-    showToast(t('spell.blocked'), {
-      actionLabel: t('spell.undo'),
-      onAction: () => {
-        void restoreSpell(spell.id, wasFavorite);
-      }
-    });
-  }
-
-  async function restoreSpell(spellId: string, isFavorite = false): Promise<void> {
-    await window.spellbook.updateSpellState(spellId, {
-      isBlocked: false,
-      isFavorite
-    });
-    showToast(t('spell.unblocked'));
-    await onChanged();
-  }
-
   async function deleteSelectedSpells(): Promise<void> {
     if (selectedSpellIds.length === 0) {
       return;
@@ -380,13 +318,11 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
 
   function openNewSpellEditor(): void {
     setConfirmingBulkDelete(false);
-    setOpenSpellMenuId(null);
     setEditorState((current) => current ?? { mode: 'create' });
   }
 
   function openCandidateEditor(candidate: Candidate): void {
     setConfirmingBulkDelete(false);
-    setOpenSpellMenuId(null);
     setEditorState({
       mode: 'create',
       candidateId: candidate.id,
@@ -401,7 +337,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   function openSpellEditor(spell: Spell): void {
     setSelectedId(spell.id);
     setConfirmingBulkDelete(false);
-    setOpenSpellMenuId(null);
     setEditorState({ mode: 'edit', spellId: spell.id });
   }
 
@@ -537,7 +472,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
               query={query}
               searchScope={searchScope}
               selectedTags={selectedTags}
-              showBlockedStatus
               statusFilter={statusFilter}
               tags={allTags}
               onClearTags={() => setSelectedTags([])}
@@ -625,8 +559,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                 className={[
                   'spell-list-row',
                   selectedSpell?.id === spell.id ? 'selected' : '',
-                  selectedSpellIds.includes(spell.id) ? 'bulk-selected' : '',
-                  spell.isBlocked ? 'blocked' : ''
+                  selectedSpellIds.includes(spell.id) ? 'bulk-selected' : ''
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -655,69 +588,29 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                 </span>
                 <span className="spell-list-usage">{spell.copyCount}</span>
                 <div className="spell-row-actions">
-                  {spell.isBlocked ? (
-                    <button
-                      aria-label={t('spell.unblock')}
-                      className="icon-button"
-                      onClick={() => void restoreSpell(spell.id)}
-                      title={t('spell.unblock')}
-                      type="button"
-                    >
-                      <RotateCcw size={15} />
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        aria-label={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
-                        aria-pressed={spell.isFavorite}
-                        className={
-                          spell.isFavorite
-                            ? 'icon-button spell-favorite-button active'
-                            : 'icon-button spell-favorite-button'
-                        }
-                        onClick={() => void toggleFavorite(spell)}
-                        title={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
-                        type="button"
-                      >
-                        <Heart fill={spell.isFavorite ? 'currentColor' : 'none'} size={15} />
-                      </button>
-                      <button
-                        aria-label={t('spell.copy')}
-                        className="icon-button"
-                        onClick={() => void copy(spell)}
-                        title={t('spell.copy')}
-                        type="button"
-                      >
-                        <Clipboard size={15} />
-                      </button>
-                      <div
-                        className="spell-row-menu-root"
-                        ref={openSpellMenuId === spell.id ? spellMenuRef : undefined}
-                      >
-                        <button
-                          aria-expanded={openSpellMenuId === spell.id}
-                          aria-haspopup="menu"
-                          aria-label={t('spell.moreActions')}
-                          className="icon-button"
-                          onClick={() =>
-                            setOpenSpellMenuId((current) => (current === spell.id ? null : spell.id))
-                          }
-                          title={t('spell.moreActions')}
-                          type="button"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                        {openSpellMenuId === spell.id ? (
-                          <div className="spell-row-menu" role="menu">
-                            <button onClick={() => void blockSpell(spell)} role="menuitem" type="button">
-                              <Ban size={14} />
-                              <span>{t('spell.block')}</span>
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </>
-                  )}
+                  <button
+                    aria-label={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                    aria-pressed={spell.isFavorite}
+                    className={
+                      spell.isFavorite
+                        ? 'icon-button spell-favorite-button active'
+                        : 'icon-button spell-favorite-button'
+                    }
+                    onClick={() => void toggleFavorite(spell)}
+                    title={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                    type="button"
+                  >
+                    <Heart fill={spell.isFavorite ? 'currentColor' : 'none'} size={15} />
+                  </button>
+                  <button
+                    aria-label={t('spell.copy')}
+                    className="icon-button"
+                    onClick={() => void copy(spell)}
+                    title={t('spell.copy')}
+                    type="button"
+                  >
+                    <Clipboard size={15} />
+                  </button>
                 </div>
               </article>
             ))}

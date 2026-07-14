@@ -18,7 +18,6 @@ describe('spell display text', () => {
       tags: ['review'],
       source: 'manual',
       isFavorite: false,
-      isBlocked: false,
       createdAt: '2026-07-07T00:00:00.000Z',
       updatedAt: '2026-07-07T00:00:00.000Z',
       copyCount: 0

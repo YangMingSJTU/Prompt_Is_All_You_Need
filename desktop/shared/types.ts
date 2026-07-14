@@ -34,7 +34,6 @@ export interface Spell {
   tags: string[];
   source: string;
   isFavorite: boolean;
-  isBlocked: boolean;
   createdAt: string;
   updatedAt: string;
   copyCount: number;
@@ -50,7 +49,6 @@ export interface SpellUpdatePatch {
 
 export interface SpellStatePatch {
   isFavorite?: boolean;
-  isBlocked?: boolean;
 }
 
 export interface SpellCreateInput {

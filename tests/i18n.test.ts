@@ -173,24 +173,18 @@ describe('i18n', () => {
     expect(en('metric.candidates')).toBe('Recommendations');
   });
 
-  it('provides favorite blacklist and status filter copy in both languages', () => {
+  it('provides favorite and status filter copy in both languages', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));
 
     expect(zh('spell.filter.status.active')).toBe('可用咒语');
     expect(zh('spell.filter.status.favorite')).toBe('仅收藏');
-    expect(zh('spell.filter.status.blocked')).toBe('黑名单');
     expect(zh('spell.favorite')).toBe('收藏');
-    expect(zh('spell.block')).toBe('加入黑名单');
-    expect(zh('spell.unblock')).toBe('移出黑名单');
-    expect(zh('spell.undo')).toBe('撤销');
+    expect(zh('spell.unfavorite')).toBe('取消收藏');
     expect(en('spell.filter.status.active')).toBe('Available');
     expect(en('spell.filter.status.favorite')).toBe('Favorites only');
-    expect(en('spell.filter.status.blocked')).toBe('Blacklist');
     expect(en('spell.favorite')).toBe('Favorite');
-    expect(en('spell.block')).toBe('Add to blacklist');
-    expect(en('spell.unblock')).toBe('Remove from blacklist');
-    expect(en('spell.undo')).toBe('Undo');
+    expect(en('spell.unfavorite')).toBe('Remove favorite');
   });
 
   it('provides shared spell editor dialog copy in both languages', () => {

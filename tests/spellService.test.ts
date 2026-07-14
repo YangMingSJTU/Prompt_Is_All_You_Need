@@ -172,7 +172,7 @@ describe('spell service', () => {
     expect(await service.listSpells()).toEqual([created]);
   });
 
-  it('persists favorite and blacklist state while keeping blocked spells out of active use', async () => {
+  it('persists favorite state without changing active spell behavior', async () => {
     const db = await createTestDatabase();
     const service = createSpellService(db);
     const created = await service.createSpell({
@@ -182,26 +182,16 @@ describe('spell service', () => {
     });
 
     expect(created.isFavorite).toBe(false);
-    expect(created.isBlocked).toBe(false);
 
     const favorited = await service.updateSpellState(created.id, { isFavorite: true });
     expect(favorited.isFavorite).toBe(true);
-    expect(favorited.isBlocked).toBe(false);
-
-    const blocked = await service.updateSpellState(created.id, { isBlocked: true });
-    expect(blocked.isFavorite).toBe(false);
-    expect(blocked.isBlocked).toBe(true);
-    expect((await service.listSpells())[0]).toMatchObject({ isFavorite: false, isBlocked: true });
-    expect(await service.searchSpells('stateful')).toEqual([]);
-    expect(await service.listPopularSpells()).toEqual([]);
-    await expect(service.copySpell(created.id)).rejects.toThrow('Blocked spell cannot be copied');
-
-    const restored = await service.updateSpellState(created.id, {
-      isBlocked: false,
-      isFavorite: true
-    });
-    expect(restored).toMatchObject({ isFavorite: true, isBlocked: false });
+    expect((await service.listSpells())[0]).toMatchObject({ isFavorite: true });
     expect(await service.searchSpells('stateful')).toHaveLength(1);
+    expect(await service.listPopularSpells()).toHaveLength(1);
+    await expect(service.copySpell(created.id)).resolves.toMatchObject({ id: created.id });
+
+    const unfavorited = await service.updateSpellState(created.id, { isFavorite: false });
+    expect(unfavorited.isFavorite).toBe(false);
   });
 
   it('updates spell name body and tags without changing copy semantics', async () => {
