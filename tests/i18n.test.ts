@@ -170,11 +170,8 @@ describe('i18n', () => {
     expect(zh('library.candidates')).toBe('推荐咒语');
     expect(zh('library.showRecommendations')).toBe('显示推荐咒语');
     expect(zh('library.hideRecommendations')).toBe('隐藏推荐咒语');
-    expect(zh('library.discover')).toBe('发现咒语');
-    expect(zh('library.emptyRecommendationsTitle')).toBe('等待被发现的好咒语');
-    expect(zh('library.emptyRecommendationsDescription')).toBe(
-      '本地历史里，也许正藏着下一条常用咒语。'
-    );
+    expect(zh('library.find')).toBe('寻找咒语');
+    expect(zh('library.emptyRecommendationsTitle')).toBe('想要的咒语，往往藏在遗忘的历史里');
     expect(zh('library.save')).toBe('快捷保存');
     expect(zh('library.saveSelected')).toBe('快捷保存选中');
     expect(zh('library.selectedSaved')).toBe('选中推荐咒语已快捷保存');
@@ -183,12 +180,9 @@ describe('i18n', () => {
     expect(en('library.candidates')).toBe('Recommended Spells');
     expect(en('library.showRecommendations')).toBe('Show recommended spells');
     expect(en('library.hideRecommendations')).toBe('Hide recommended spells');
-    expect(en('library.discover')).toBe('Discover spells');
+    expect(en('library.find')).toBe('Find spells');
     expect(en('library.emptyRecommendationsTitle')).toBe(
-      'Good spells are waiting to be discovered'
-    );
-    expect(en('library.emptyRecommendationsDescription')).toBe(
-      'Your local history may contain your next go-to spell.'
+      'The spell you need may be hiding in forgotten history'
     );
     expect(en('library.save')).toBe('Quick save');
     expect(en('library.saveSelected')).toBe('Quick save selected');

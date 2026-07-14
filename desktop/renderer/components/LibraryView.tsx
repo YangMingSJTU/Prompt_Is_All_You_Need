@@ -6,6 +6,8 @@ import {
   Plus,
   Save,
   ScanSearch,
+  Sparkles,
+  WandSparkles,
   Trash2
 } from 'lucide-react';
 import {
@@ -668,16 +670,25 @@ export function LibraryView({
             >
               <div className="candidate-dock-header">
                 <h3>{t('library.candidates')}</h3>
-                <button
-                  className="secondary-button candidate-discover-button"
-                  onClick={onOpenRecommendationDiscovery}
-                  type="button"
-                >
-                  <ScanSearch size={14} />
-                  <span>{t('library.discover')}</span>
-                </button>
+                {pendingCandidates.length > 0 ? (
+                  <button
+                    className="secondary-button candidate-discover-button"
+                    onClick={onOpenRecommendationDiscovery}
+                    type="button"
+                  >
+                    <ScanSearch size={14} />
+                    <span>{t('library.find')}</span>
+                  </button>
+                ) : null}
               </div>
-              <div aria-busy={isSavingCandidates} className="candidate-list compact">
+              <div
+                aria-busy={isSavingCandidates}
+                className={
+                  pendingCandidates.length > 0
+                    ? 'candidate-list compact'
+                    : 'candidate-list compact empty'
+                }
+              >
                 {pendingCandidates.length ? (
                   <>
                     <div className="spell-selection-toolbar candidate-selection-toolbar">
@@ -762,17 +773,22 @@ export function LibraryView({
                 ) : (
                   <div className="candidate-empty-state">
                     <div aria-hidden="true" className="candidate-empty-visual">
-                      <div className="candidate-empty-sheet">
-                        <span />
-                        <span />
-                        <span />
-                        <i />
-                      </div>
-                      <ScanSearch size={24} />
+                      <WandSparkles
+                        className="candidate-empty-wand"
+                        size={46}
+                        strokeWidth={1.6}
+                      />
+                      <Sparkles
+                        className="candidate-empty-spark candidate-empty-spark-top"
+                        size={18}
+                      />
+                      <Sparkles
+                        className="candidate-empty-spark candidate-empty-spark-bottom"
+                        size={13}
+                      />
                     </div>
                     <div className="candidate-empty-copy">
                       <strong>{t('library.emptyRecommendationsTitle')}</strong>
-                      <span>{t('library.emptyRecommendationsDescription')}</span>
                     </div>
                     <button
                       className="primary-button candidate-empty-action"
@@ -780,7 +796,7 @@ export function LibraryView({
                       type="button"
                     >
                       <ScanSearch size={15} />
-                      {t('library.discover')}
+                      {t('library.find')}
                     </button>
                   </div>
                 )}

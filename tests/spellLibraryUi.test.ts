@@ -117,12 +117,18 @@ describe('spell library UI structure', () => {
     expect(component).toContain('SPELL_LIBRARY_MIN_CANDIDATE_WIDTH');
     expect(component).not.toContain('SPELL_LIBRARY_SPLIT_STYLE');
     expect(component).toContain('candidate-dock-header');
+    expect(component).toContain('{pendingCandidates.length > 0 ? (');
     expect(component).toContain('onClick={onOpenRecommendationDiscovery}');
     expect(component).toContain('<ScanSearch');
-    expect(component).toContain("t('library.discover')");
+    expect(component).toContain("t('library.find')");
+    expect(component).not.toContain("t('library.discover')");
+    expect(component).toContain("'candidate-list compact empty'");
     expect(component).toContain('className="candidate-empty-state"');
     expect(component).toContain("t('library.emptyRecommendationsTitle')");
-    expect(component).toContain("t('library.emptyRecommendationsDescription')");
+    expect(component).not.toContain('emptyRecommendationsDescription');
+    expect(component).toContain('className="candidate-empty-wand"');
+    expect(component).toContain('candidate-empty-spark-top');
+    expect(component).toContain('candidate-empty-spark-bottom');
     expect(listPaneLayout).toContain('spell-library-toolbar');
     expect(listPaneLayout).toContain('SpellSearchFilter');
     expect(listPaneLayout).not.toContain('SpellSortMenu');
@@ -166,8 +172,11 @@ describe('spell library UI structure', () => {
     expect(component).toContain('candidateDockRef.current?.getBoundingClientRect().width');
     expect(component).toContain('onRecommendationPanelOpenChange(open, panelWidth)');
     expect(styles.match(/\.candidate-discover-button\s*\{[^}]+height: 28px;[^}]+\}/s)?.[0]).toBeTruthy();
-    expect(styles.match(/\.candidate-empty-state\s*\{[^}]+align-content: center;[^}]+\}/s)?.[0]).toBeTruthy();
-    expect(styles).toContain('@keyframes candidate-scan');
+    expect(styles.match(/\.candidate-list\.compact\.empty\s*\{[^}]+display: flex;[^}]+align-items: center;[^}]+justify-content: center;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.candidate-empty-state\s*\{[^}]+width: 100%;[^}]+height: auto;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles).toContain('@keyframes candidate-wand-float');
+    expect(styles).toContain('@keyframes candidate-spark-twinkle');
+    expect(styles).not.toContain('.candidate-empty-sheet');
     expect(styles.match(/\.candidate-list\.compact\s*\{[^}]+border: 0;[^}]+\}/s)?.[0]).toBeTruthy();
   });
 

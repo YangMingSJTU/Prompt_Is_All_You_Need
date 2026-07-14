@@ -40,7 +40,7 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).toContain('onTabChange(tab: SettingsTab): void');
     expect(settings).toContain("useState<ScanTarget>('spells')");
     expect(library).toContain('onClick={onOpenRecommendationDiscovery}');
-    expect(library).toContain("t('library.discover')");
+    expect(library).toContain("t('library.find')");
   });
 
   it('uses native directory picking and flexible scan results in local data settings', () => {
