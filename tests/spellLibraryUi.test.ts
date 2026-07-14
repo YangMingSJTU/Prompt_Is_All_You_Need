@@ -116,6 +116,9 @@ describe('spell library UI structure', () => {
     expect(component).toContain('SpellListSortHeader');
     expect(component).toContain('className="spell-library-list-header"');
     expect(component).toContain('hasLeadingCell');
+    expect(component).toContain(
+      'useState<SpellTableSortState>(DEFAULT_SPELL_TABLE_SORT_STATE)'
+    );
     expect(component).toContain('SpellEditorDialog');
     expect(component).not.toContain('spell-editor-pane');
     expect(component).toContain('spell-list-row');
@@ -308,6 +311,7 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('async function deleteSpell()');
     expect(styles).toContain('.spell-selection-toolbar');
     expect(styles).toContain('.spell-select-all');
+    expect(styles.match(/\.spell-select-all\s*\{[^}]+padding-left: 4px;[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles).not.toContain('.spell-bulk-toolbar');
     expect(styles).toContain('.spell-row-select');
     expect(preload).toContain('deleteSpells');
@@ -331,7 +335,8 @@ describe('spell library UI structure', () => {
     expect(component).toContain('candidate-row-select');
     expect(component).toContain('candidate-row-meta');
     expect(component).toContain("candidate.sourceCount} {t('metric.sources')}");
-    expect(component).toContain("{t('metric.score')} {candidate.score}");
+    expect(component).not.toContain('candidate.score');
+    expect(component).not.toContain("t('metric.score')");
     expect(component).not.toContain('openCandidateEditor');
     expect(component).toContain("t('library.saveSelected')");
     expect(component).toContain("t('library.selectedSaved')");
@@ -358,8 +363,8 @@ describe('spell library UI structure', () => {
     expect(libraryGrid).toContain('padding: 16px 14px 18px;');
     expect(listPane).not.toContain('padding: 16px 14px 18px;');
     expect(styles).not.toContain('.spell-editor-pane');
-    expect(editorDialog).toContain('width: min(840px, calc(100vw - 48px));');
-    expect(editorDialog).toContain('height: min(680px, calc(100vh - 48px));');
+    expect(editorDialog).toContain('width: min(760px, calc(100vw - 64px));');
+    expect(editorDialog).toContain('height: min(580px, calc(100vh - 64px));');
     expect(spellList).toContain('flex: 1 1 auto;');
     expect(spellList).toContain('min-height: 0;');
     expect(spellList).toContain('overflow: auto;');

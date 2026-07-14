@@ -24,14 +24,14 @@ export function generateCandidates(prompts: ExtractedPrompt[]): Candidate[] {
 
   return Array.from(groups.entries())
     .map(([hash, group]) => buildCandidate(hash, group))
-    .sort((left, right) => right.sourceCount - left.sourceCount || right.score - left.score || left.title.localeCompare(right.title));
+    .sort(
+      (left, right) =>
+        right.sourceCount - left.sourceCount || left.title.localeCompare(right.title)
+    );
 }
 
 function buildCandidate(hash: string, group: CandidateGroup): Candidate {
   const now = new Date().toISOString();
-  const sourceTools = new Set(group.prompts.map((prompt) => prompt.sourceTool));
-  const sourceFiles = new Set(group.prompts.map((prompt) => prompt.sourceFile));
-  const score = Math.min(1, group.prompts.length * 0.12 + sourceTools.size * 0.08 + sourceFiles.size * 0.05 + 0.35);
 
   return {
     id: randomUUID(),
@@ -41,7 +41,6 @@ function buildCandidate(hash: string, group: CandidateGroup): Candidate {
     template: group.body,
     candidateType: 'spell',
     sourceCount: group.prompts.length,
-    score: Number(score.toFixed(2)),
     status: 'pending',
     examples: [group.body],
     createdAt: now,

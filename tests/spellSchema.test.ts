@@ -23,5 +23,24 @@ describe('spell schema', () => {
     expect(columns).not.toContain('slug');
     expect(columns).not.toContain('title');
     expect(columns).not.toContain('description');
+
+    const candidateColumns = db
+      .all<{ name: string }>('PRAGMA table_info(candidates)')
+      .map((column) => column.name);
+
+    expect(candidateColumns).toEqual([
+      'id',
+      'slug',
+      'title',
+      'description',
+      'template',
+      'candidate_type',
+      'source_count',
+      'status',
+      'examples',
+      'created_at',
+      'updated_at'
+    ]);
+    expect(candidateColumns).not.toContain('score');
   });
 });

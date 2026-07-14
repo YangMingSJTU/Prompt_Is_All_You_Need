@@ -51,7 +51,6 @@ describe('spell display text', () => {
       template: 'Review the current git diff.\n\nReturn prioritized findings.',
       candidateType: 'spell',
       sourceCount: 2,
-      score: 0.9,
       status: 'pending',
       examples: [],
       createdAt: '2026-07-07T00:00:00.000Z',

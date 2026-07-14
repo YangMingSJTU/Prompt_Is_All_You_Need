@@ -31,6 +31,7 @@ describe('candidate generator', () => {
     expect(candidates[0].template).not.toContain('Testing notes');
     expect(candidates[0].candidateType).toBe('spell');
     expect(candidates[0].sourceCount).toBe(1);
+    expect(candidates[0]).not.toHaveProperty('score');
   });
 
   it('deduplicates repeated raw prompt bodies without changing the candidate body', () => {
@@ -64,5 +65,6 @@ describe('candidate generator', () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0].template).toBe('review current changes for edge cases');
     expect(candidates[0].sourceCount).toBe(2);
+    expect(candidates[0]).not.toHaveProperty('score');
   });
 });

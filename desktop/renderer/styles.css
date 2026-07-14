@@ -1308,6 +1308,7 @@ p {
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
+  padding-left: 4px;
 }
 
 .spell-selection-toolbar .secondary-button {
@@ -1516,8 +1517,8 @@ p {
 }
 
 .spell-editor-dialog {
-  width: min(840px, calc(100vw - 48px));
-  height: min(680px, calc(100vh - 48px));
+  width: min(760px, calc(100vw - 64px));
+  height: min(580px, calc(100vh - 64px));
   max-width: none;
   max-height: none;
   overflow: hidden;

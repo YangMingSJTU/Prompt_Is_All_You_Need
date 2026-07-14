@@ -195,7 +195,8 @@ describe('i18n', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));
 
-    expect(zh('spell.editor.createTitle')).toBe('新建咒语');
+    expect(zh('spell.new')).toBe('创造');
+    expect(zh('spell.editor.createTitle')).toBe('创造咒语');
     expect(zh('spell.editor.editTitle')).toBe('编辑咒语');
     expect(zh('spell.editor.close')).toBe('关闭');
     expect(zh('spell.editor.unsaved')).toBe('有未保存的更改');

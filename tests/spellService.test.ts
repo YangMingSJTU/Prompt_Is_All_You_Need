@@ -316,7 +316,6 @@ describe('spell service', () => {
         template: ' Review   the current git diff. ',
         candidateType: 'spell',
         sourceCount: 3,
-        score: 0.9,
         status: 'pending',
         examples: [],
         createdAt: '2026-07-08T00:00:00.000Z',
@@ -330,7 +329,6 @@ describe('spell service', () => {
         template: 'Investigate failing tests and propose a fix.',
         candidateType: 'spell',
         sourceCount: 2,
-        score: 0.8,
         status: 'pending',
         examples: [],
         createdAt: '2026-07-08T00:00:00.000Z',
@@ -347,6 +345,11 @@ describe('spell service', () => {
     expect(spells.filter((spell) => spell.body.includes('Review the current git diff')).length).toBe(1);
     expect(candidates.find((candidate) => candidate.id === 'candidate-duplicate')?.status).toBe('saved');
     expect(candidates.find((candidate) => candidate.id === 'candidate-new')?.status).toBe('saved');
+    expect(candidates.map((candidate) => candidate.id)).toEqual([
+      'candidate-duplicate',
+      'candidate-new'
+    ]);
+    expect(candidates.every((candidate) => !('score' in candidate))).toBe(true);
   });
 
   it('promotes candidate spells without trimming or wrapping the raw body', async () => {
@@ -362,7 +365,6 @@ describe('spell service', () => {
         template: rawBody,
         candidateType: 'spell',
         sourceCount: 1,
-        score: 0.5,
         status: 'pending',
         examples: [rawBody],
         createdAt: '2026-07-08T00:00:00.000Z',
@@ -389,7 +391,6 @@ describe('spell service', () => {
         template: 'Review the current git diff. Focus on correctness bugs.',
         candidateType: 'spell',
         sourceCount: 1,
-        score: 0.5,
         status: 'pending',
         examples: [],
         createdAt: '2026-07-08T00:00:00.000Z',
@@ -406,7 +407,6 @@ describe('spell service', () => {
         template: '这是我的中文提示词，不要加工。',
         candidateType: 'spell',
         sourceCount: 1,
-        score: 0.5,
         status: 'pending',
         examples: ['这是我的中文提示词，不要加工。'],
         createdAt: '2026-07-08T00:00:00.000Z',

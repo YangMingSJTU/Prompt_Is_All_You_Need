@@ -85,7 +85,6 @@ export interface Candidate {
   template: string;
   candidateType: CandidateType;
   sourceCount: number;
-  score: number;
   status: CandidateStatus;
   examples: string[];
   createdAt: string;

@@ -784,9 +784,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                       <span>
                         {candidate.sourceCount} {t('metric.sources')}
                       </span>
-                      <span>
-                        {t('metric.score')} {candidate.score}
-                      </span>
                     </div>
                   </article>
                 ))}

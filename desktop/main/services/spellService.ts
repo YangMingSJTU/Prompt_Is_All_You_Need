@@ -37,7 +37,6 @@ interface CandidateRow extends Record<string, unknown> {
   template: string;
   candidate_type: string;
   source_count: number;
-  score: number;
   status: string;
   examples: string;
   created_at: string;
@@ -266,8 +265,8 @@ export function createSpellService(db: AppDatabase) {
             : candidate.status;
         db.run(
           `INSERT OR REPLACE INTO candidates
-            (id, slug, title, description, template, candidate_type, source_count, score, status, examples, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, slug, title, description, template, candidate_type, source_count, status, examples, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             existing?.id ?? candidate.id,
             candidate.slug,
@@ -276,7 +275,6 @@ export function createSpellService(db: AppDatabase) {
             candidate.template,
             candidate.candidateType,
             candidate.sourceCount,
-            candidate.score,
             status,
             JSON.stringify(candidate.examples),
             existing?.created_at ?? candidate.createdAt,
@@ -295,7 +293,7 @@ export function createSpellService(db: AppDatabase) {
     async listCandidates(): Promise<Candidate[]> {
       return db
         .all<CandidateRow>(
-          "SELECT * FROM candidates WHERE status != 'ignored' ORDER BY score DESC, source_count DESC, updated_at DESC"
+          "SELECT * FROM candidates WHERE status != 'ignored' ORDER BY source_count DESC, title ASC"
         )
         .map(rowToCandidate);
     },
@@ -447,7 +445,6 @@ function rowToCandidate(row: CandidateRow): Candidate {
     template: row.template,
     candidateType: row.candidate_type as Candidate['candidateType'],
     sourceCount: row.source_count,
-    score: row.score,
     status: row.status as Candidate['status'],
     examples: JSON.parse(row.examples) as string[],
     createdAt: row.created_at,

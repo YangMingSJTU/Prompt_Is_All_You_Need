@@ -307,7 +307,11 @@ export function SettingsView({ onChanged, settings, onSettingsChanged, t }: Sett
                           <strong>{candidate.title}</strong>
                           <small>{candidate.template}</small>
                         </span>
-                        <em>{saved ? t('scanner.candidateSaved') : `${t('metric.score')} ${candidate.score}`}</em>
+                        <em>
+                          {saved
+                            ? t('scanner.candidateSaved')
+                            : `${candidate.sourceCount} ${t('metric.sources')}`}
+                        </em>
                       </label>
                     );
                   })}

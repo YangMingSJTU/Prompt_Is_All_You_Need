@@ -84,6 +84,10 @@ function createSchema(db: SqlJsDatabase): void {
     `);
   }
 
+  if (version > 0 && version < 8) {
+    db.exec('DROP TABLE IF EXISTS candidates;');
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS spells (
       id TEXT PRIMARY KEY,
@@ -105,7 +109,6 @@ function createSchema(db: SqlJsDatabase): void {
       template TEXT NOT NULL,
       candidate_type TEXT NOT NULL,
       source_count INTEGER NOT NULL,
-      score REAL NOT NULL,
       status TEXT NOT NULL,
       examples TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -155,7 +158,7 @@ function createSchema(db: SqlJsDatabase): void {
 
   ensureColumn(db, 'spells', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'spells', 'is_blocked', 'INTEGER NOT NULL DEFAULT 0');
-  db.exec('PRAGMA user_version = 7;');
+  db.exec('PRAGMA user_version = 8;');
 }
 
 function ensureColumn(

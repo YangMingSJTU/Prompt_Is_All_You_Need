@@ -68,7 +68,7 @@ describe('window layout constraints', () => {
     expect(skillActions).toContain('flex-wrap: wrap;');
     expect(scanSourceRow).toContain('grid-template-columns: 90px minmax(0, 1fr) auto auto;');
     expect(spellList).toContain('overflow: auto;');
-    expect(editorDialog).toContain('width: min(840px, calc(100vw - 48px));');
-    expect(editorDialog).toContain('height: min(680px, calc(100vh - 48px));');
+    expect(editorDialog).toContain('width: min(760px, calc(100vw - 64px));');
+    expect(editorDialog).toContain('height: min(580px, calc(100vh - 64px));');
   });
 });

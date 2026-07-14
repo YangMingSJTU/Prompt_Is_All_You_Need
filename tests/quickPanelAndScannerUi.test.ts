@@ -24,6 +24,9 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).toContain('promoteCandidates');
     expect(settings).toContain('selectAllCandidates');
     expect(settings).toContain('candidate-selection-list');
+    expect(settings).toContain("candidate.sourceCount} ${t('metric.sources')}");
+    expect(settings).not.toContain('candidate.score');
+    expect(settings).not.toContain("t('metric.score')");
     expect(settings).toContain('selectDirectory');
     expect(settings).toContain('chooseScanSourceDirectory');
     expect(settings).not.toContain('settings.scanSources\n                .filter');
