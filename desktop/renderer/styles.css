@@ -19,10 +19,60 @@
   --accent: #b68a2c;
   --accent-soft: #f7f0df;
   --radius: 8px;
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: rgba(113, 113, 122, 0.4);
+  --scrollbar-thumb-hover: rgba(82, 82, 91, 0.62);
+  --scrollbar-thumb-active: rgba(39, 39, 42, 0.78);
 }
 
 * {
   box-sizing: border-box;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-width: 36px;
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  border-width: 1px;
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  border-width: 1px;
+  background-color: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.quick-spell-preview,
+.spell-preview,
+.export-preview {
+  --scrollbar-thumb: rgba(228, 228, 231, 0.3);
+  --scrollbar-thumb-hover: rgba(244, 244, 245, 0.5);
+  --scrollbar-thumb-active: rgba(255, 255, 255, 0.68);
 }
 
 body {
@@ -1020,134 +1070,6 @@ p {
 .secondary-button:disabled {
   cursor: default;
   opacity: 0.55;
-}
-
-.sort-menu-root {
-  position: relative;
-  display: inline-flex;
-  min-width: 0;
-}
-
-.sort-menu-button {
-  display: inline-flex;
-  height: 32px;
-  min-width: 0;
-  max-width: 154px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  outline: 0;
-  padding: 0 10px;
-  transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
-}
-
-.sort-menu-button:hover,
-.sort-menu-button[aria-expanded="true"] {
-  background: var(--hover);
-}
-
-.sort-menu-button:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(209, 164, 58, 0.18);
-}
-
-.sort-menu-button span {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sort-menu-button small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.sort-menu-root.compact .sort-menu-button {
-  width: 32px;
-  padding: 0;
-}
-
-.sort-menu-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  display: grid;
-  width: max-content;
-  min-width: 164px;
-  gap: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: 0 14px 36px rgba(24, 24, 27, 0.14);
-  padding: 5px;
-}
-
-.sort-menu-option {
-  display: grid;
-  height: 30px;
-  grid-template-columns: minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 0 8px;
-  text-align: left;
-}
-
-.sort-menu-option:hover,
-.sort-menu-option.selected {
-  background: var(--hover);
-}
-
-.sort-menu-option svg {
-  color: var(--accent);
-}
-
-.sort-direction-group {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  margin-top: 5px;
-  border-top: 1px solid var(--border);
-  padding-top: 5px;
-}
-
-.sort-direction-button {
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.sort-direction-button:hover,
-.sort-direction-button.selected {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .spell-preview,
@@ -2502,49 +2424,13 @@ p {
 
 .floating-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
   width: 100vw;
   height: 100vh;
   border: 1px solid var(--border-strong);
   background: var(--surface);
   padding: 10px;
-}
-
-.floating-search-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  min-width: 0;
-}
-
-.floating-search {
-  display: flex;
-  height: 32px;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
-  padding: 0 10px;
-}
-
-.floating-search svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-  color: var(--muted);
-}
-
-.floating-search input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
 }
 
 .floating-results {
@@ -2561,13 +2447,21 @@ p {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+  height: 46px;
+  min-height: 46px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  padding: 7px 8px;
+  padding: 5px 8px;
   text-align: left;
+}
+
+.floating-row-identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
 }
 
 .floating-row-name {
@@ -2576,6 +2470,18 @@ p {
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-row-content {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2605,26 +2511,4 @@ p {
   place-items: center;
   color: var(--muted);
   font-size: 13px;
-}
-
-.floating-preview {
-  max-height: 112px;
-  min-height: 74px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: #101114;
-  color: #ffffff;
-  padding: 10px;
-}
-
-.floating-preview pre {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-family:
-    "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.55;
-  white-space: pre-wrap;
 }

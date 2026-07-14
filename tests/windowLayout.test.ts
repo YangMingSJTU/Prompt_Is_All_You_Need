@@ -71,4 +71,35 @@ describe('window layout constraints', () => {
     expect(editorDialog).toContain('width: min(760px, calc(100vw - 64px));');
     expect(editorDialog).toContain('height: min(580px, calc(100vh - 64px));');
   });
+
+  it('uses one polished scrollbar system across light and dark surfaces', () => {
+    const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const root = styles.match(/:root\s*\{[^}]+\}/s)?.[0] ?? '';
+    const scrollbar = styles.match(/\*::-webkit-scrollbar\s*\{[^}]+\}/s)?.[0] ?? '';
+    const thumb = styles.match(/\*::-webkit-scrollbar-thumb\s*\{[^}]+\}/s)?.[0] ?? '';
+    const thumbHover =
+      styles.match(/\*::-webkit-scrollbar-thumb:hover\s*\{[^}]+\}/s)?.[0] ?? '';
+    const thumbActive =
+      styles.match(/\*::-webkit-scrollbar-thumb:active\s*\{[^}]+\}/s)?.[0] ?? '';
+    const darkSurfaceScrollbars =
+      styles.match(
+        /\.quick-spell-preview,\s*\.spell-preview,\s*\.export-preview\s*\{[^}]+\}/s
+      )?.[0] ?? '';
+
+    expect(root).toContain('--scrollbar-size: 10px;');
+    expect(root).toContain('--scrollbar-thumb-hover:');
+    expect(scrollbar).toContain('width: var(--scrollbar-size);');
+    expect(scrollbar).toContain('height: var(--scrollbar-size);');
+    expect(thumb).toContain('min-width: 36px;');
+    expect(thumb).toContain('min-height: 36px;');
+    expect(thumb).toContain('border: 2px solid transparent;');
+    expect(thumb).toContain('border-radius: 999px;');
+    expect(thumb).toContain('background-clip: padding-box;');
+    expect(thumbHover).toContain('border-width: 1px;');
+    expect(thumbHover).toContain('background-color: var(--scrollbar-thumb-hover);');
+    expect(thumbActive).toContain('background-color: var(--scrollbar-thumb-active);');
+    expect(styles).toContain('*::-webkit-scrollbar-button');
+    expect(styles).toContain('*::-webkit-scrollbar-corner');
+    expect(darkSurfaceScrollbars).toContain('--scrollbar-thumb: rgba(228, 228, 231, 0.3);');
+  });
 });

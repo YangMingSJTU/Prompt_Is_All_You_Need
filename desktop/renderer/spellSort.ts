@@ -1,9 +1,7 @@
 import type { Spell } from '../shared/types';
-import type { I18nKey } from './i18n';
 
-export type SpellSortMode = 'usage' | 'created' | 'updated' | 'name';
 export type SpellSortDirection = 'asc' | 'desc';
-export type SpellTableSortMode = Exclude<SpellSortMode, 'created'>;
+export type SpellTableSortMode = 'usage' | 'updated' | 'name';
 export type SpellTableSortState =
   | { mode: null; direction: null }
   | { mode: SpellTableSortMode; direction: SpellSortDirection };
@@ -13,16 +11,8 @@ export const DEFAULT_SPELL_TABLE_SORT_STATE: SpellTableSortState = {
   direction: null
 };
 
-export const SPELL_SORT_OPTIONS: Array<{ value: SpellSortMode; labelKey: I18nKey }> = [
-  { value: 'usage', labelKey: 'floating.sort.usage' },
-  { value: 'created', labelKey: 'floating.sort.created' },
-  { value: 'updated', labelKey: 'floating.sort.updated' },
-  { value: 'name', labelKey: 'floating.sort.name' }
-];
-
-export const DEFAULT_SORT_DIRECTIONS: Record<SpellSortMode, SpellSortDirection> = {
+export const DEFAULT_SORT_DIRECTIONS: Record<SpellTableSortMode, SpellSortDirection> = {
   usage: 'desc',
-  created: 'desc',
   updated: 'desc',
   name: 'asc'
 };
@@ -57,7 +47,7 @@ export function sortSpellsByTableState(
 
 export function sortSpells(
   spells: Spell[],
-  sortMode: SpellSortMode,
+  sortMode: SpellTableSortMode,
   sortDirection: SpellSortDirection,
   getName: (spell: Spell) => string
 ): Spell[] {
@@ -71,14 +61,11 @@ export function sortSpells(
 function comparePrimary(
   left: Spell,
   right: Spell,
-  sortMode: SpellSortMode,
+  sortMode: SpellTableSortMode,
   getName: (spell: Spell) => string
 ): number {
   if (sortMode === 'usage') {
     return left.copyCount - right.copyCount;
-  }
-  if (sortMode === 'created') {
-    return compareDateAsc(left.createdAt, right.createdAt);
   }
   if (sortMode === 'updated') {
     return compareDateAsc(left.updatedAt, right.updatedAt);

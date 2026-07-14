@@ -20,7 +20,8 @@ describe('spell library UI structure', () => {
     expect(component).toContain('SpellSearchFilter');
     expect(searchFilter).toContain('<Funnel size={16} />');
     expect(component).toContain('searchScope');
-    expect(component).toContain('matchesSpellSearch');
+    expect(component).toContain('filterSpells');
+    expect(component).toContain('getSpellFilterTags');
     expect(component).toContain('sortSpellsByTableState');
     expect(component).toContain('SpellListSortHeader');
     expect(component).toContain('SpellIdentity');
@@ -158,7 +159,8 @@ describe('spell library UI structure', () => {
 
     expect(component).toContain('spell-library-toolbar');
     expect(component).toContain('SpellSearchFilter');
-    expect(component).toContain('matchesSpellSearch');
+    expect(component).toContain('filterSpells');
+    expect(component).toContain('getSpellFilterTags');
     expect(component).toContain('searchScope');
     expect(component).not.toContain('SpellSortMenu');
     expect(component).toContain('sortSpellsByTableState');
@@ -260,6 +262,7 @@ describe('spell library UI structure', () => {
     const component = readFileSync('desktop/renderer/components/LibraryView.tsx', 'utf8');
     const panel = readFileSync('desktop/renderer/components/SpellPanel.tsx', 'utf8');
     const filter = readFileSync('desktop/renderer/components/SpellSearchFilter.tsx', 'utf8');
+    const searchLogic = readFileSync('desktop/renderer/spellSearch.ts', 'utf8');
     const preload = readFileSync('desktop/main/preload.ts', 'utf8');
     const globals = readFileSync('desktop/renderer/global.d.ts', 'utf8');
     const main = readFileSync('desktop/main/index.ts', 'utf8');
@@ -276,7 +279,8 @@ describe('spell library UI structure', () => {
     expect(component).not.toContain('isBlocked');
     expect(panel).toContain('aria-pressed={spell.isFavorite}');
     expect(panel).toContain('statusFilter');
-    expect(filter).toContain("export type SpellStatusFilter = 'active' | 'favorite'");
+    expect(searchLogic).toContain("export type SpellStatusFilter = 'active' | 'favorite'");
+    expect(filter).toContain("import type { SearchScope, SpellStatusFilter } from '../spellSearch'");
     expect(filter).toContain("onStatusChange('active')");
     expect(filter).not.toContain('blocked');
     expect(filter).not.toContain('showBlockedStatus');

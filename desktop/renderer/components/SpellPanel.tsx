@@ -21,7 +21,12 @@ import {
   getSpellDisplayName,
   getSpellDisplayText
 } from '../spellDisplay';
-import { matchesSpellSearch, type SearchScope } from '../spellSearch';
+import {
+  filterSpells,
+  getSpellFilterTags,
+  type SearchScope,
+  type SpellStatusFilter
+} from '../spellSearch';
 import { calculateSplitRatio, clampSplitRatio, type SplitPaneConstraints } from '../splitPane';
 import {
   DEFAULT_SPELL_TABLE_SORT_STATE,
@@ -32,7 +37,7 @@ import {
 } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellIdentity, SpellListSortHeader } from './SpellListPrimitives';
-import { SpellSearchFilter, type SpellStatusFilter } from './SpellSearchFilter';
+import { SpellSearchFilter } from './SpellSearchFilter';
 
 interface SpellPanelProps {
   spells: Spell[];
@@ -53,17 +58,7 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const resizingRef = useRef(false);
   const { showToast } = useFeedbackToast();
 
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    for (const spell of spells.filter(
-      (item) => statusFilter !== 'favorite' || item.isFavorite
-    )) {
-      for (const tag of spell.tags) {
-        tags.add(tag);
-      }
-    }
-    return [...tags].sort((a, b) => a.localeCompare(b));
-  }, [spells, statusFilter]);
+  const allTags = useMemo(() => getSpellFilterTags(spells, statusFilter), [spells, statusFilter]);
 
   useEffect(() => {
     const availableTags = new Set(allTags);
@@ -71,14 +66,11 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   }, [allTags]);
 
   const filtered = useMemo(() => {
-    const filteredSpells = spells.filter((spell) => {
-      const matchesStatus = statusFilter !== 'favorite' || spell.isFavorite;
-      const name = getSpellDisplayName(spell, t('spell.untitled'));
-      const matchesQuery = matchesSpellSearch({ name, body: spell.body }, query, searchScope);
-      const matchesTags =
-        selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
-      return matchesStatus && matchesQuery && matchesTags;
-    });
+    const filteredSpells = filterSpells(
+      spells,
+      { query, searchScope, selectedTags, statusFilter },
+      (spell) => getSpellDisplayName(spell, t('spell.untitled'))
+    );
     return sortSpellsByTableState(filteredSpells, sortState, (spell) =>
       getSpellDisplayName(spell, t('spell.untitled'))
     );

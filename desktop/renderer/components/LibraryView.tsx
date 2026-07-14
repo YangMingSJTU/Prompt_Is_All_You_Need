@@ -23,7 +23,12 @@ import {
   getCandidateDisplayText,
   getSpellDisplayName
 } from '../spellDisplay';
-import { matchesSpellSearch, type SearchScope } from '../spellSearch';
+import {
+  filterSpells,
+  getSpellFilterTags,
+  type SearchScope,
+  type SpellStatusFilter
+} from '../spellSearch';
 import { calculateSplitRatio, clampSplitRatio, type SplitPaneConstraints } from '../splitPane';
 import {
   DEFAULT_SPELL_TABLE_SORT_STATE,
@@ -35,7 +40,7 @@ import {
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellEditorDialog, type SpellEditorDraft } from './SpellEditorDialog';
 import { SpellIdentity, SpellListSortHeader } from './SpellListPrimitives';
-import { SpellSearchFilter, type SpellStatusFilter } from './SpellSearchFilter';
+import { SpellSearchFilter } from './SpellSearchFilter';
 
 interface LibraryViewProps {
   spells: Spell[];
@@ -70,19 +75,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const selectAllCandidatesCheckboxRef = useRef<HTMLInputElement>(null);
   const { showToast } = useFeedbackToast();
 
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    for (const spell of spells) {
-      const matchesStatus = statusFilter !== 'favorite' || spell.isFavorite;
-      if (!matchesStatus) {
-        continue;
-      }
-      for (const tag of spell.tags) {
-        tags.add(tag);
-      }
-    }
-    return [...tags].sort((a, b) => a.localeCompare(b));
-  }, [spells, statusFilter]);
+  const allTags = useMemo(() => getSpellFilterTags(spells, statusFilter), [spells, statusFilter]);
 
   const pendingCandidates = useMemo(
     () => candidates.filter((candidate) => candidate.status === 'pending'),
@@ -108,17 +101,11 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   }, [allTags]);
 
   const filteredSpells = useMemo(() => {
-    const filtered = spells.filter((spell) => {
-      const matchesStatus = statusFilter !== 'favorite' || spell.isFavorite;
-      const matchesQuery = matchesSpellSearch(
-        { name: getSpellDisplayName(spell, t('spell.untitled')), body: spell.body },
-        query,
-        searchScope
-      );
-      const matchesTags =
-        selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
-      return matchesStatus && matchesQuery && matchesTags;
-    });
+    const filtered = filterSpells(
+      spells,
+      { query, searchScope, selectedTags, statusFilter },
+      (spell) => getSpellDisplayName(spell, t('spell.untitled'))
+    );
     return sortSpellsByTableState(filtered, sortState, (spell) =>
       getSpellDisplayName(spell, t('spell.untitled'))
     );

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('scanner placement and floating quick panel UI', () => {
@@ -65,9 +65,13 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(fillSettingsCardBlock).toContain('flex: 1');
   });
 
-  it('uses a smaller floating panel that lists spell names and previews the selected body', () => {
+  it('reuses shared filters and shows spell content as compact row summaries', () => {
     const main = readFileSync('desktop/main/index.ts', 'utf8');
     const component = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
+    const searchFilter = readFileSync(
+      'desktop/renderer/components/SpellSearchFilter.tsx',
+      'utf8'
+    );
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
 
     expect(main).toContain('width: 420');
@@ -78,52 +82,48 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(main).toContain('maxHeight: 360');
 
     expect(component).toContain('listSpells()');
-    expect(component).toContain('sorted.slice(0, 5)');
+    expect(component).not.toContain('searchSpells(');
+    expect(component).toContain('filtered.slice(0, 5)');
+    expect(component).toContain('filterSpells');
+    expect(component).toContain('getSpellFilterTags');
+    expect(component).toContain('SpellSearchFilter');
+    expect(component).toContain('searchScope={searchScope}');
+    expect(component).toContain('statusFilter={statusFilter}');
+    expect(component).toContain('onInputKeyDown={(event) => void handleKeyDown(event)}');
     expect(component).toContain('deriveSpellName');
     expect(component).toContain('getFloatingSpellName');
     expect(component).toContain('floating-row-name');
-    expect(component).toContain('floating-preview');
-    expect(component).toContain('getSpellDisplayText(selected)');
-    expect(component).not.toContain('<span className="spell-result-text">{getSpellDisplayText(spell)}</span>');
+    expect(component).toContain('floating-row-content');
+    expect(component).toContain('getFloatingSpellSummary(spell)');
+    expect(component).not.toContain('floating-preview');
+    expect(searchFilter).toContain('inputRef?: Ref<HTMLInputElement>');
+    expect(searchFilter).toContain('onInputKeyDown?: KeyboardEventHandler<HTMLInputElement>');
+    expect(searchFilter).toContain('ref={inputRef}');
+    expect(searchFilter).toContain('onKeyDown={onInputKeyDown}');
 
-    expect(styles).toContain('.floating-preview');
+    expect(styles).toContain('.floating-row-identity');
     expect(styles).toContain('.floating-row-name');
-    expect(styles.match(/\.floating-preview\s*\{[^}]+max-height: 112px;[^}]+overflow: auto;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles).toContain('.floating-row-content');
+    expect(styles.match(/\.floating-row\s*\{[^}]+height: 46px;[^}]+min-height: 46px;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles.match(/\.floating-row-content\s*\{[^}]+text-overflow: ellipsis;[^}]+white-space: nowrap;[^}]+\}/s)?.[0]).toBeTruthy();
+    expect(styles).not.toContain('.floating-preview');
   });
 
-  it('provides a compact sort control for quick panel spell ordering', () => {
+  it('removes dedicated floating-panel sorting and its unused resources', () => {
     const component = readFileSync('desktop/renderer/components/FloatingPanel.tsx', 'utf8');
-    const sortMenu = readFileSync('desktop/renderer/components/SpellSortMenu.tsx', 'utf8');
+    const sortLogic = readFileSync('desktop/renderer/spellSort.ts', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
     const i18n = readFileSync('desktop/renderer/i18n.ts', 'utf8');
 
-    expect(component).toContain('SpellSortMenu');
-    expect(component).toContain('sortSpells');
-    expect(component).toContain('variant="icon"');
-    expect(component).not.toContain('<select');
-    expect(component).not.toContain('className="floating-sort"');
-
-    expect(sortMenu).toContain('ArrowUpDown');
-    expect(sortMenu).toContain('role="menu"');
-    expect(sortMenu).toContain('role="menuitemradio"');
-    expect(sortMenu).toContain('sort-direction-group');
-    expect(sortMenu).toContain('onDirectionChange');
-    expect(sortMenu).toContain('aria-checked');
-    expect(sortMenu).toContain('Check');
-
-    expect(styles).toContain('.floating-search-row');
-    expect(styles).toContain('.sort-menu-root');
-    expect(styles).toContain('.sort-menu-button');
-    expect(styles).toContain('.sort-menu-popover');
-    expect(styles).toContain('.sort-menu-option');
-    expect(styles).not.toContain('.floating-sort {');
-
-    expect(i18n).toContain("'floating.sort.usage': '施法次数'");
-    expect(i18n).toContain("'floating.sort.created': '创建时间'");
-    expect(i18n).toContain("'floating.sort.updated': '更新时间'");
-    expect(i18n).toContain("'floating.sort.name': '名称'");
-    expect(i18n).toContain("'floating.sort.direction.asc': '正序'");
-    expect(i18n).toContain("'floating.sort.direction.desc': '倒序'");
-    expect(i18n).not.toContain('nameLength');
+    expect(component).not.toContain('SpellSortMenu');
+    expect(component).not.toContain('sortSpells');
+    expect(existsSync('desktop/renderer/components/SpellSortMenu.tsx')).toBe(false);
+    expect(styles).not.toContain('.sort-menu-');
+    expect(styles).not.toContain('.sort-direction-');
+    expect(styles).not.toContain('.floating-search-row');
+    expect(styles).not.toContain('.floating-search {');
+    expect(i18n).not.toContain('floating.sort.');
+    expect(sortLogic).not.toContain('SPELL_SORT_OPTIONS');
+    expect(sortLogic).not.toContain("'created'");
   });
 });

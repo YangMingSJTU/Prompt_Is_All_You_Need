@@ -1,18 +1,26 @@
 import { Check, Funnel, FunnelX, Search } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEventHandler,
+  type Ref
+} from 'react';
 import type { I18nKey, TFunction } from '../i18n';
-import type { SearchScope } from '../spellSearch';
-
-export type SpellStatusFilter = 'active' | 'favorite';
+import type { SearchScope, SpellStatusFilter } from '../spellSearch';
 
 interface SpellSearchFilterProps {
   autoFocus?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
   query: string;
   searchScope: SearchScope;
   selectedTags: string[];
   statusFilter: SpellStatusFilter;
   tags: string[];
   onClearTags(): void;
+  onInputKeyDown?: KeyboardEventHandler<HTMLInputElement>;
   onQueryChange(value: string): void;
   onScopeChange(value: SearchScope): void;
   onStatusChange(value: SpellStatusFilter): void;
@@ -41,12 +49,14 @@ const STATUS_FILTER_OPTIONS: Array<{ value: SpellStatusFilter; labelKey: I18nKey
 
 export function SpellSearchFilter({
   autoFocus = false,
+  inputRef,
   query,
   searchScope,
   selectedTags,
   statusFilter,
   tags,
   onClearTags,
+  onInputKeyDown,
   onQueryChange,
   onScopeChange,
   onStatusChange,
@@ -93,9 +103,11 @@ export function SpellSearchFilter({
 
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', closeFilterMenu);
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', closeFilterMenu);
     };
   }, [open]);
 
@@ -113,7 +125,9 @@ export function SpellSearchFilter({
         <input
           autoFocus={autoFocus}
           onChange={(event) => onQueryChange(event.target.value)}
+          onKeyDown={onInputKeyDown}
           placeholder={searchPlaceholder}
+          ref={inputRef}
           value={query}
         />
       </label>

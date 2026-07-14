@@ -13,7 +13,7 @@ describe('i18n', () => {
     expect(t('analytics.usage')).toBe('施法概览');
     expect(t('analytics.topCopied')).toBe('常用咒语');
     expect(t('spell.resizePanels')).toBe('拖动调整分栏宽度');
-    expect(t('floating.placeholder')).toBe('输入关键词搜索咒语');
+    expect(t('spell.placeholder.titleContent')).toBe('搜索标题或内容');
   });
 
   it('uses English for English local language', () => {
@@ -25,7 +25,7 @@ describe('i18n', () => {
     expect(t('nav.analytics')).toBe('Analytics');
     expect(t('analytics.usage')).toBe('Usage');
     expect(t('analytics.topCopied')).toBe('Top copied spells');
-    expect(t('floating.placeholder')).toBe('Search spells');
+    expect(t('spell.placeholder.titleContent')).toBe('Search title or content');
   });
 
   it('falls back to Chinese for unsupported languages', () => {
@@ -65,13 +65,13 @@ describe('i18n', () => {
     const visibleCopy = [
       zh('app.brand'),
       zh('nav.library'),
-      zh('floating.placeholder'),
+      zh('spell.placeholder.titleContent'),
       zh('library.title'),
       zh('library.candidates'),
       zh('analytics.empty'),
       en('app.brand'),
       en('nav.library'),
-      en('floating.placeholder'),
+      en('spell.placeholder.titleContent'),
       en('library.title'),
       en('library.candidates'),
       en('analytics.empty')

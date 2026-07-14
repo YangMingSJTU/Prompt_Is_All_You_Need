@@ -78,7 +78,7 @@ describe('spell sorting', () => {
     expect(spells.map((item) => item.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('sorts by created updated and name with explicit direction', () => {
+  it('sorts by updated time and name with explicit direction', () => {
     const spells = [
       spell({
         id: 'long',
@@ -100,16 +100,6 @@ describe('spell sorting', () => {
       })
     ];
 
-    expect(sortSpells(spells, 'created', 'desc', (item) => item.name).map((item) => item.id)).toEqual([
-      'beta',
-      'alpha',
-      'long'
-    ]);
-    expect(sortSpells(spells, 'created', 'asc', (item) => item.name).map((item) => item.id)).toEqual([
-      'long',
-      'alpha',
-      'beta'
-    ]);
     expect(sortSpells(spells, 'updated', 'desc', (item) => item.name).map((item) => item.id)).toEqual([
       'long',
       'alpha',
