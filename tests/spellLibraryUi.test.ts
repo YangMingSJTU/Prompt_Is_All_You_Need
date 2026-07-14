@@ -325,6 +325,7 @@ describe('spell library UI structure', () => {
     const candidateRow = styles.match(/\.candidate-row\s*\{[^}]+\}/s)?.[0] ?? '';
     const candidateRowSelect = styles.match(/\.candidate-row-select\s*\{[^}]+\}/s)?.[0] ?? '';
     const candidateContent = styles.match(/\.candidate-row-content\s*\{[^}]+\}/s)?.[0] ?? '';
+    const candidateMeta = styles.match(/\.candidate-row-meta\s*\{[^}]+\}/s)?.[0] ?? '';
 
     expect(component).toContain('selectedCandidateIds');
     expect(component).toContain('toggleCandidateSelection');
@@ -336,7 +337,8 @@ describe('spell library UI structure', () => {
     expect(component).toContain('candidate-row-select');
     expect(component).toContain('candidate-row-meta');
     expect(component).toContain('candidate-row-actions');
-    expect(component).toContain("t('library.saveWithDetails')");
+    expect(component).toContain("aria-label={t('spell.save')}");
+    expect(component).toContain("title={t('spell.save')}");
     expect(component).toContain('onClick={() => openCandidateEditor(candidate)}');
     expect(component).toContain("candidate.sourceCount} {t('metric.sources')}");
     expect(component).not.toContain('candidate.score');
@@ -349,13 +351,16 @@ describe('spell library UI structure', () => {
     expect(candidateList).toContain('--candidate-row-min-height: 64px;');
     expect(candidateList).toContain('--candidate-row-max-height: 144px;');
     expect(candidateList).toContain('grid-auto-rows: max-content;');
-    expect(candidateRow).toContain('grid-template-columns: 24px minmax(0, 1fr) auto 32px;');
+    expect(candidateRow).toContain('grid-template-columns: 24px minmax(0, 1fr) 72px 28px;');
     expect(candidateRow).toContain('min-height: var(--candidate-row-min-height);');
     expect(candidateRow).toContain('max-height: var(--candidate-row-max-height);');
     expect(candidateRowSelect).toContain('align-self: start;');
-    expect(candidateRowSelect).toContain('height: 20px;');
+    expect(candidateRowSelect).toContain('height: 28px;');
     expect(candidateContent).toContain('max-height: calc(var(--candidate-row-max-height) - 20px);');
     expect(candidateContent).toContain('overflow-y: auto;');
+    expect(candidateContent).toContain('padding-top: 4px;');
+    expect(candidateMeta).toContain('height: 28px;');
+    expect(candidateMeta).toContain('align-items: center;');
   });
 
   it('keeps the spell list clear of the window bottom and constrains the editor dialog', () => {

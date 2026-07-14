@@ -162,14 +162,12 @@ describe('i18n', () => {
     expect(zh('library.candidates')).toBe('推荐咒语');
     expect(zh('library.save')).toBe('快捷保存');
     expect(zh('library.saveSelected')).toBe('快捷保存选中');
-    expect(zh('library.saveWithDetails')).toBe('普通保存');
     expect(zh('library.selectedSaved')).toBe('选中推荐咒语已快捷保存');
     expect(zh('scanner.noCandidates')).toBe('没有推荐咒语');
     expect(zh('metric.candidates')).toBe('推荐');
     expect(en('library.candidates')).toBe('Recommended Spells');
     expect(en('library.save')).toBe('Quick save');
     expect(en('library.saveSelected')).toBe('Quick save selected');
-    expect(en('library.saveWithDetails')).toBe('Save with details');
     expect(en('library.selectedSaved')).toBe('Selected recommendations quick-saved');
     expect(en('scanner.noCandidates')).toBe('No recommended spells');
     expect(en('metric.candidates')).toBe('Recommendations');

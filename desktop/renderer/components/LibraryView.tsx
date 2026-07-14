@@ -805,11 +805,11 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                     </div>
                     <div className="candidate-row-actions">
                       <button
-                        aria-label={t('library.saveWithDetails')}
+                        aria-label={t('spell.save')}
                         className="icon-button candidate-save-button"
                         disabled={isSavingCandidates}
                         onClick={() => openCandidateEditor(candidate)}
-                        title={t('library.saveWithDetails')}
+                        title={t('spell.save')}
                         type="button"
                       >
                         <Save size={15} />
