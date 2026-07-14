@@ -43,6 +43,7 @@ export function SpellEditorDialog({
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const isDirty = !draftsEqual(draft, initialDraft);
+  const hasRequiredBody = draft.body.trim().length > 0;
 
   useEffect(() => {
     if (dialogRef.current && !dialogRef.current.open) {
@@ -111,7 +112,7 @@ export function SpellEditorDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!draft.body.trim() || isSaving) {
+    if (!hasRequiredBody || isSaving) {
       return;
     }
     setIsSaving(true);
@@ -185,9 +186,13 @@ export function SpellEditorDialog({
               </div>
             </div>
             <label className="field-row fill">
-              <span>{t('spell.body')}</span>
+              <span className="required-field-label">
+                <span aria-hidden="true" className="required-marker">*</span>
+                {t('spell.body')}
+              </span>
               <textarea
                 onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
+                required
                 value={draft.body}
               />
             </label>
@@ -228,7 +233,7 @@ export function SpellEditorDialog({
                 <button className="secondary-button" disabled={isSaving} onClick={requestClose} type="button">
                   {t('spell.cancel')}
                 </button>
-                <button className="primary-button" disabled={!draft.body.trim() || isSaving} type="submit">
+                <button className="primary-button" disabled={!hasRequiredBody || isSaving} type="submit">
                   <Save size={16} />
                   {mode === 'create' ? t('spell.create') : t('spell.save')}
                 </button>

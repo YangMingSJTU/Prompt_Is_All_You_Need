@@ -12,6 +12,7 @@ import type {
   Spell,
   SpellCreateInput,
   SpellDeleteResult,
+  SpellStatePatch,
   SpellUpdatePatch,
   SourceFileSummary,
   UsageAnalytics
@@ -26,10 +27,10 @@ declare global {
       copySpell(spellId: string): Promise<Spell>;
       createSpell(input: SpellCreateInput): Promise<Spell>;
       updateSpell(spellId: string, patch: SpellUpdatePatch): Promise<Spell>;
+      updateSpellState(spellId: string, patch: SpellStatePatch): Promise<Spell>;
       deleteSpell(spellId: string): Promise<void>;
       deleteSpells(spellIds: string[]): Promise<SpellDeleteResult>;
       listCandidates(): Promise<Candidate[]>;
-      promoteCandidate(candidateId: string): Promise<Spell>;
       promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult>;
       runScan(request: ScanRunRequest): Promise<{
         id: string;

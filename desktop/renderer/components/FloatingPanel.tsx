@@ -1,4 +1,4 @@
-import { Clipboard, Search } from 'lucide-react';
+import { Clipboard, Heart, Search } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
@@ -44,7 +44,12 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   }, []);
 
   const visibleSpells = useMemo(() => {
-    const sorted = sortSpells(spells, sortMode, sortDirection, (spell) => getFloatingSpellName(spell, t));
+    const sorted = sortSpells(
+      spells.filter((spell) => !spell.isBlocked),
+      sortMode,
+      sortDirection,
+      (spell) => getFloatingSpellName(spell, t)
+    );
     return query.trim() ? sorted : sorted.slice(0, 5);
   }, [query, sortMode, sortDirection, spells, t]);
   const selected = useMemo(() => visibleSpells[selectedIndex] ?? null, [visibleSpells, selectedIndex]);
@@ -119,7 +124,10 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
             <span className="floating-row-name" title={getFloatingSpellName(spell, t)}>
               {getFloatingSpellName(spell, t)}
             </span>
-            <Clipboard size={15} />
+            <span className="floating-row-actions">
+              {spell.isFavorite ? <Heart className="floating-row-favorite" fill="currentColor" size={14} /> : null}
+              <Clipboard size={15} />
+            </span>
           </button>
         ))}
         {visibleSpells.length === 0 ? <div className="floating-empty">{t('floating.noResult')}</div> : null}

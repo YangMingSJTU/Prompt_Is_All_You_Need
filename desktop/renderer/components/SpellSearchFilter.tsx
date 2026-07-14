@@ -3,15 +3,20 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { I18nKey, TFunction } from '../i18n';
 import type { SearchScope } from '../spellSearch';
 
+export type SpellStatusFilter = 'active' | 'favorite' | 'blocked';
+
 interface SpellSearchFilterProps {
   autoFocus?: boolean;
   query: string;
   searchScope: SearchScope;
   selectedTags: string[];
+  showBlockedStatus?: boolean;
+  statusFilter: SpellStatusFilter;
   tags: string[];
   onClearTags(): void;
   onQueryChange(value: string): void;
   onScopeChange(value: SearchScope): void;
+  onStatusChange(value: SpellStatusFilter): void;
   onToggleTag(tag: string): void;
   t: TFunction;
 }
@@ -30,15 +35,24 @@ const SEARCH_SCOPE_OPTIONS: Array<{
   { value: 'content', labelKey: 'spell.searchScope.content', placeholderKey: 'spell.placeholder.content' }
 ];
 
+const STATUS_FILTER_OPTIONS: Array<{ value: SpellStatusFilter; labelKey: I18nKey }> = [
+  { value: 'active', labelKey: 'spell.filter.status.active' },
+  { value: 'favorite', labelKey: 'spell.filter.status.favorite' },
+  { value: 'blocked', labelKey: 'spell.filter.status.blocked' }
+];
+
 export function SpellSearchFilter({
   autoFocus = false,
   query,
   searchScope,
   selectedTags,
+  showBlockedStatus = false,
+  statusFilter,
   tags,
   onClearTags,
   onQueryChange,
   onScopeChange,
+  onStatusChange,
   onToggleTag,
   t
 }: SpellSearchFilterProps) {
@@ -46,7 +60,8 @@ export function SpellSearchFilter({
   const [traitFilterQuery, setTraitFilterQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const popoverId = useId();
-  const hasActiveFilters = searchScope !== 'title-content' || selectedTags.length > 0;
+  const hasActiveFilters =
+    searchScope !== 'title-content' || selectedTags.length > 0 || statusFilter !== 'active';
   const searchPlaceholder = t(getSearchScopeOption(searchScope).placeholderKey);
 
   const visibleTags = useMemo(() => {
@@ -89,6 +104,7 @@ export function SpellSearchFilter({
 
   function resetFilters(): void {
     onScopeChange('title-content');
+    onStatusChange('active');
     onClearTags();
     setTraitFilterQuery('');
   }
@@ -124,6 +140,34 @@ export function SpellSearchFilter({
             id={popoverId}
             role="dialog"
           >
+            <section className="spell-filter-section">
+              <div className="spell-filter-heading">{t('spell.filter.status')}</div>
+              <div
+                aria-label={t('spell.filter.status')}
+                className="spell-filter-scope-options"
+                role="radiogroup"
+              >
+                {STATUS_FILTER_OPTIONS.filter(
+                  (option) => showBlockedStatus || option.value !== 'blocked'
+                ).map((option) => (
+                  <button
+                    aria-checked={statusFilter === option.value}
+                    className={
+                      statusFilter === option.value
+                        ? 'spell-filter-scope-option selected'
+                        : 'spell-filter-scope-option'
+                    }
+                    key={option.value}
+                    onClick={() => onStatusChange(option.value)}
+                    role="radio"
+                    type="button"
+                  >
+                    <span>{t(option.labelKey)}</span>
+                    {statusFilter === option.value ? <Check size={14} /> : null}
+                  </button>
+                ))}
+              </div>
+            </section>
             <section className="spell-filter-section">
               <div className="spell-filter-heading">{t('spell.filter.searchScope')}</div>
               <div

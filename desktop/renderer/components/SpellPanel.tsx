@@ -1,6 +1,7 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, Clipboard } from 'lucide-react';
+import { Clipboard, Heart } from 'lucide-react';
 import {
   useMemo,
+  useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -14,17 +15,24 @@ import {
 } from '../../shared/layout';
 import type { Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
-import { deriveSpellName, getSpellDisplayText } from '../spellDisplay';
+import {
+  formatSpellUpdatedAt,
+  formatSpellUpdatedAtTitle,
+  getSpellDisplayName,
+  getSpellDisplayText
+} from '../spellDisplay';
 import { matchesSpellSearch, type SearchScope } from '../spellSearch';
 import { calculateSplitRatio, clampSplitRatio, type SplitPaneConstraints } from '../splitPane';
 import {
-  DEFAULT_SORT_DIRECTIONS,
-  sortSpells,
-  type SpellSortDirection,
-  type SpellSortMode
+  DEFAULT_SPELL_TABLE_SORT_STATE,
+  getNextSpellTableSortState,
+  sortSpellsByTableState,
+  type SpellTableSortMode,
+  type SpellTableSortState
 } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
-import { SpellSearchFilter } from './SpellSearchFilter';
+import { SpellIdentity, SpellListSortHeader } from './SpellListPrimitives';
+import { SpellSearchFilter, type SpellStatusFilter } from './SpellSearchFilter';
 
 interface SpellPanelProps {
   spells: Spell[];
@@ -36,9 +44,9 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
-  const [sortMode, setSortMode] = useState<SpellSortMode | null>(null);
-  const [sortDirection, setSortDirection] = useState<SpellSortDirection | null>(null);
+  const [sortState, setSortState] = useState<SpellTableSortState>(DEFAULT_SPELL_TABLE_SORT_STATE);
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
+  const [statusFilter, setStatusFilter] = useState<SpellStatusFilter>('active');
   const [splitRatio, setSplitRatio] = useState(60);
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
@@ -47,32 +55,47 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
-    for (const spell of spells) {
+    for (const spell of spells.filter(
+      (item) => !item.isBlocked && (statusFilter !== 'favorite' || item.isFavorite)
+    )) {
       for (const tag of spell.tags) {
         tags.add(tag);
       }
     }
     return [...tags].sort((a, b) => a.localeCompare(b));
-  }, [spells]);
+  }, [spells, statusFilter]);
+
+  useEffect(() => {
+    const availableTags = new Set(allTags);
+    setSelectedTags((current) => current.filter((tag) => availableTags.has(tag)));
+  }, [allTags]);
 
   const filtered = useMemo(() => {
     const filteredSpells = spells.filter((spell) => {
-      const name = getSpellName(spell, t);
+      const matchesStatus =
+        !spell.isBlocked && (statusFilter !== 'favorite' || spell.isFavorite);
+      const name = getSpellDisplayName(spell, t('spell.untitled'));
       const matchesQuery = matchesSpellSearch({ name, body: spell.body }, query, searchScope);
       const matchesTags =
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
-      return matchesQuery && matchesTags;
+      return matchesStatus && matchesQuery && matchesTags;
     });
-    if (!sortMode || !sortDirection) {
-      return filteredSpells;
-    }
-    return sortSpells(filteredSpells, sortMode, sortDirection, (spell) => getSpellName(spell, t));
-  }, [spells, query, searchScope, selectedTags, sortMode, sortDirection, t]);
+    return sortSpellsByTableState(filteredSpells, sortState, (spell) =>
+      getSpellDisplayName(spell, t('spell.untitled'))
+    );
+  }, [spells, query, searchScope, selectedTags, sortState, statusFilter, t]);
 
   const selected = filtered.find((spell) => spell.id === selectedId) ?? filtered[0] ?? null;
   async function copySelected(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
     showToast(t('status.copied'));
+    await onChanged();
+  }
+
+  async function toggleFavorite(spell: Spell): Promise<void> {
+    const nextFavorite = !spell.isFavorite;
+    await window.spellbook.updateSpellState(spell.id, { isFavorite: nextFavorite });
+    showToast(t(nextFavorite ? 'spell.favorited' : 'spell.unfavorited'));
     await onChanged();
   }
 
@@ -90,19 +113,8 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
     setSelectedId(spellId);
   }
 
-  function toggleSort(nextMode: SpellSortMode): void {
-    const defaultDirection = DEFAULT_SORT_DIRECTIONS[nextMode];
-    if (sortMode !== nextMode) {
-      setSortMode(nextMode);
-      setSortDirection(defaultDirection);
-      return;
-    }
-    if (sortDirection === defaultDirection) {
-      setSortDirection(defaultDirection === 'asc' ? 'desc' : 'asc');
-      return;
-    }
-    setSortMode(null);
-    setSortDirection(null);
+  function toggleSort(nextMode: SpellTableSortMode): void {
+    setSortState((current) => getNextSpellTableSortState(current, nextMode));
   }
 
   function getSplitConstraints(): SplitPaneConstraints | null {
@@ -185,40 +197,24 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
             query={query}
             searchScope={searchScope}
             selectedTags={selectedTags}
+            statusFilter={statusFilter}
             tags={allTags}
             onClearTags={() => setSelectedTags([])}
             onQueryChange={setQuery}
             onScopeChange={setSearchScope}
+            onStatusChange={setStatusFilter}
             onToggleTag={toggleFilterTag}
             t={t}
           />
         </div>
         <div className="result-list">
           {filtered.length ? (
-            <div className="result-list-header">
-              <SortHeaderButton
-                label={t('spell.name')}
-                mode="name"
-                sortDirection={sortDirection}
-                sortMode={sortMode}
-                onSort={toggleSort}
-              />
-              <SortHeaderButton
-                label={t('spell.updatedAt')}
-                mode="updated"
-                sortDirection={sortDirection}
-                sortMode={sortMode}
-                onSort={toggleSort}
-              />
-              <SortHeaderButton
-                label={t('spell.usageCount')}
-                mode="usage"
-                sortDirection={sortDirection}
-                sortMode={sortMode}
-                onSort={toggleSort}
-              />
-              <span />
-            </div>
+            <SpellListSortHeader
+              className="result-list-header"
+              onSort={toggleSort}
+              sortState={sortState}
+              t={t}
+            />
           ) : null}
           {filtered.map((spell) => (
             <div
@@ -230,18 +226,33 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
               tabIndex={0}
             >
               <div className="spell-result-main">
-                <div className="spell-result-title-row">
-                  <span className="spell-result-name" title={getSpellName(spell, t)}>
-                    {getSpellName(spell, t)}
-                  </span>
-                  {renderSpellTraits(spell)}
-                </div>
+                <SpellIdentity
+                  name={getSpellDisplayName(spell, t('spell.untitled'))}
+                  tags={spell.tags}
+                />
               </div>
-              <span className="spell-result-updated" title={formatUpdatedAtTitle(spell.updatedAt)}>
-                {formatUpdatedAt(spell.updatedAt)}
+              <span className="spell-list-updated" title={formatSpellUpdatedAtTitle(spell.updatedAt)}>
+                {formatSpellUpdatedAt(spell.updatedAt)}
               </span>
-              <span className="spell-result-usage">{spell.copyCount}</span>
+              <span className="spell-list-usage">{spell.copyCount}</span>
               <div className="spell-result-actions">
+                <button
+                  aria-label={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                  aria-pressed={spell.isFavorite}
+                  className={
+                    spell.isFavorite
+                      ? 'icon-button spell-favorite-button active'
+                      : 'icon-button spell-favorite-button'
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void toggleFavorite(spell);
+                  }}
+                  title={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                  type="button"
+                >
+                  <Heart fill={spell.isFavorite ? 'currentColor' : 'none'} size={15} />
+                </button>
                 <button
                   aria-label={t('spell.copy')}
                   className="icon-button spell-result-copy"
@@ -263,6 +274,8 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
       <div
         aria-label={t('spell.resizePanels')}
         aria-orientation="vertical"
+        aria-valuemax={100}
+        aria-valuemin={0}
         aria-valuenow={Math.round(splitRatio)}
         className="quick-spell-resizer"
         onKeyDown={resizeWithKeyboard}
@@ -278,6 +291,20 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
         {selected ? (
           <>
             <div className="quick-spell-detail-heading">
+              <button
+                aria-label={t(selected.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                aria-pressed={selected.isFavorite}
+                className={
+                  selected.isFavorite
+                    ? 'secondary-button spell-favorite-button active'
+                    : 'secondary-button spell-favorite-button'
+                }
+                onClick={() => void toggleFavorite(selected)}
+                title={t(selected.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                type="button"
+              >
+                <Heart fill={selected.isFavorite ? 'currentColor' : 'none'} size={16} />
+              </button>
               <button
                 className="secondary-button"
                 onClick={() => void copySelected(selected)}
@@ -295,71 +322,4 @@ export function SpellPanel({ spells, onChanged, t }: SpellPanelProps) {
       </aside>
     </section>
   );
-}
-
-function SortHeaderButton({
-  label,
-  mode,
-  sortMode,
-  sortDirection,
-  onSort
-}: {
-  label: string;
-  mode: SpellSortMode;
-  sortMode: SpellSortMode | null;
-  sortDirection: SpellSortDirection | null;
-  onSort(mode: SpellSortMode): void;
-}) {
-  const active = sortMode === mode && sortDirection !== null;
-  const isDefaultDirection = sortDirection === DEFAULT_SORT_DIRECTIONS[mode];
-  const Icon = active ? (isDefaultDirection ? ArrowDown : ArrowUp) : ArrowUpDown;
-
-  return (
-    <button
-      aria-pressed={active}
-      className={active ? 'result-sort-header active' : 'result-sort-header'}
-      onClick={() => onSort(mode)}
-      title={label}
-      type="button"
-    >
-      <span>{label}</span>
-      <Icon size={13} />
-    </button>
-  );
-}
-
-function renderSpellTraits(spell: Spell) {
-  if (!spell.tags.length) {
-    return null;
-  }
-
-  return (
-    <div className="spell-result-traits">
-      {spell.tags.map((tag) => (
-        <span className="spell-result-trait" key={tag} title={tag}>
-          {tag}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function formatUpdatedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '-';
-  }
-  return date.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
-}
-
-function formatUpdatedAtTitle(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
-}
-
-function getSpellName(spell: Spell, t: TFunction): string {
-  return spell.name || deriveSpellName(spell.body, t('spell.untitled'));
 }

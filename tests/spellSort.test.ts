@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { Spell } from '../desktop/shared/types';
-import { sortSpells } from '../desktop/renderer/spellSort';
+import {
+  DEFAULT_SPELL_TABLE_SORT_STATE,
+  getNextSpellTableSortState,
+  sortSpells,
+  sortSpellsByTableState
+} from '../desktop/renderer/spellSort';
 
 const baseSpell: Omit<Spell, 'id' | 'name' | 'body' | 'createdAt' | 'updatedAt' | 'copyCount'> = {
   tags: [],
-  source: 'manual'
+  source: 'manual',
+  isFavorite: false,
+  isBlocked: false
 };
 
 function spell(input: Partial<Spell> & Pick<Spell, 'id' | 'name'>): Spell {
@@ -19,6 +26,39 @@ function spell(input: Partial<Spell> & Pick<Spell, 'id' | 'name'>): Spell {
 }
 
 describe('spell sorting', () => {
+  it('cycles table sorting through default reverse and neutral states', () => {
+    const nameAscending = getNextSpellTableSortState(DEFAULT_SPELL_TABLE_SORT_STATE, 'name');
+    expect(nameAscending).toEqual({ mode: 'name', direction: 'asc' });
+
+    const nameDescending = getNextSpellTableSortState(nameAscending, 'name');
+    expect(nameDescending).toEqual({ mode: 'name', direction: 'desc' });
+    expect(getNextSpellTableSortState(nameDescending, 'name')).toEqual(
+      DEFAULT_SPELL_TABLE_SORT_STATE
+    );
+
+    expect(getNextSpellTableSortState(nameDescending, 'updated')).toEqual({
+      mode: 'updated',
+      direction: 'desc'
+    });
+    expect(getNextSpellTableSortState(nameDescending, 'usage')).toEqual({
+      mode: 'usage',
+      direction: 'desc'
+    });
+  });
+
+  it('preserves incoming service order while table sorting is neutral', () => {
+    const spells = [spell({ id: 'b', name: 'Beta' }), spell({ id: 'a', name: 'Alpha' })];
+
+    expect(sortSpellsByTableState(spells, DEFAULT_SPELL_TABLE_SORT_STATE, (item) => item.name)).toBe(
+      spells
+    );
+    expect(
+      sortSpellsByTableState(spells, { mode: 'name', direction: 'asc' }, (item) => item.name).map(
+        (item) => item.id
+      )
+    ).toEqual(['a', 'b']);
+  });
+
   it('sorts by copy count in both directions without mutating input', () => {
     const spells = [
       spell({ id: 'a', name: 'Alpha', copyCount: 1, updatedAt: '2026-01-01T00:00:00.000Z' }),

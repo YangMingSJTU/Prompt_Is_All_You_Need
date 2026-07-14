@@ -10,7 +10,15 @@ import {
   MAIN_WINDOW_MIN_HEIGHT,
   MAIN_WINDOW_MIN_WIDTH
 } from '../shared/layout';
-import type { ScanProvider, ScanRunRequest, ScanSourceConfig, SkillPlatform, SpellCreateInput, SpellUpdatePatch } from '../shared/types';
+import type {
+  ScanProvider,
+  ScanRunRequest,
+  ScanSourceConfig,
+  SkillPlatform,
+  SpellCreateInput,
+  SpellStatePatch,
+  SpellUpdatePatch
+} from '../shared/types';
 import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
 import {
   DEFAULT_APP_SETTINGS,
@@ -136,12 +144,12 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('spells:update', (_event, spellId: string, patch: SpellUpdatePatch) =>
     spellService.updateSpell(spellId, patch)
   );
+  ipcMain.handle('spells:updateState', (_event, spellId: string, patch: SpellStatePatch) =>
+    spellService.updateSpellState(spellId, patch)
+  );
   ipcMain.handle('spells:delete', (_event, spellId: string) => spellService.deleteSpell(spellId));
   ipcMain.handle('spells:deleteBatch', (_event, spellIds: string[]) => spellService.deleteSpells(spellIds));
   ipcMain.handle('candidates:list', () => spellService.listCandidates());
-  ipcMain.handle('candidates:promote', (_event, candidateId: string) =>
-    spellService.promoteCandidate(candidateId)
-  );
   ipcMain.handle('candidates:promoteBatch', (_event, candidateIds: string[]) =>
     spellService.promoteCandidates(candidateIds)
   );

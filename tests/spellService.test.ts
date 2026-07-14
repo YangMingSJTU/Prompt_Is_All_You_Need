@@ -154,9 +154,13 @@ describe('spell service', () => {
     expect(spell.tags).toEqual(['one', 'two', 'three']);
   });
 
-  it('rejects creating a spell with an empty body', async () => {
+  it('requires only a nonblank body when creating a spell', async () => {
     const db = await createTestDatabase();
     const service = createSpellService(db);
+
+    const created = await service.createSpell({ body: 'Only content is required.' });
+    expect(created.name).toBe('');
+    expect(created.tags).toEqual([]);
 
     await expect(
       service.createSpell({
@@ -165,7 +169,39 @@ describe('spell service', () => {
         tags: []
       })
     ).rejects.toThrow('Spell body cannot be empty');
-    expect(await service.listSpells()).toEqual([]);
+    expect(await service.listSpells()).toEqual([created]);
+  });
+
+  it('persists favorite and blacklist state while keeping blocked spells out of active use', async () => {
+    const db = await createTestDatabase();
+    const service = createSpellService(db);
+    const created = await service.createSpell({
+      name: 'Stateful spell',
+      body: 'Keep this spell stateful.',
+      tags: ['state']
+    });
+
+    expect(created.isFavorite).toBe(false);
+    expect(created.isBlocked).toBe(false);
+
+    const favorited = await service.updateSpellState(created.id, { isFavorite: true });
+    expect(favorited.isFavorite).toBe(true);
+    expect(favorited.isBlocked).toBe(false);
+
+    const blocked = await service.updateSpellState(created.id, { isBlocked: true });
+    expect(blocked.isFavorite).toBe(false);
+    expect(blocked.isBlocked).toBe(true);
+    expect((await service.listSpells())[0]).toMatchObject({ isFavorite: false, isBlocked: true });
+    expect(await service.searchSpells('stateful')).toEqual([]);
+    expect(await service.listPopularSpells()).toEqual([]);
+    await expect(service.copySpell(created.id)).rejects.toThrow('Blocked spell cannot be copied');
+
+    const restored = await service.updateSpellState(created.id, {
+      isBlocked: false,
+      isFavorite: true
+    });
+    expect(restored).toMatchObject({ isFavorite: true, isBlocked: false });
+    expect(await service.searchSpells('stateful')).toHaveLength(1);
   });
 
   it('updates spell name body and tags without changing copy semantics', async () => {

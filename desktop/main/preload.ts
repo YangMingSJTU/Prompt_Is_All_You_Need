@@ -5,6 +5,7 @@ import type {
   SkillPlatform,
   SpellCreateInput,
   SpellDeleteResult,
+  SpellStatePatch,
   SpellUpdatePatch
 } from '../shared/types';
 
@@ -15,11 +16,12 @@ contextBridge.exposeInMainWorld('spellbook', {
   copySpell: (spellId: string) => ipcRenderer.invoke('spells:copy', spellId),
   createSpell: (input: SpellCreateInput) => ipcRenderer.invoke('spells:create', input),
   updateSpell: (spellId: string, patch: SpellUpdatePatch) => ipcRenderer.invoke('spells:update', spellId, patch),
+  updateSpellState: (spellId: string, patch: SpellStatePatch) =>
+    ipcRenderer.invoke('spells:updateState', spellId, patch),
   deleteSpell: (spellId: string) => ipcRenderer.invoke('spells:delete', spellId),
   deleteSpells: (spellIds: string[]): Promise<SpellDeleteResult> =>
     ipcRenderer.invoke('spells:deleteBatch', spellIds),
   listCandidates: () => ipcRenderer.invoke('candidates:list'),
-  promoteCandidate: (candidateId: string) => ipcRenderer.invoke('candidates:promote', candidateId),
   promoteCandidates: (candidateIds: string[]) => ipcRenderer.invoke('candidates:promoteBatch', candidateIds),
   runScan: (request: ScanRunRequest) => ipcRenderer.invoke('scanner:run', request),
   getAnalytics: () => ipcRenderer.invoke('analytics:get'),

@@ -6,6 +6,7 @@ import {
   type Spell,
   type SpellCreateInput,
   type SpellDeleteResult,
+  type SpellStatePatch,
   type SpellUpdatePatch,
   type UsageAnalytics
 } from '../../shared/types';
@@ -17,6 +18,8 @@ interface SpellRow extends Record<string, unknown> {
   body: string;
   tags: string;
   source: string;
+  is_favorite: number;
+  is_blocked: number;
   created_at: string;
   updated_at: string;
   copy_count?: number;
@@ -41,7 +44,9 @@ interface CandidateRow extends Record<string, unknown> {
   updated_at: string;
 }
 
-const STARTER_SPELLS: Array<Omit<Spell, 'id' | 'createdAt' | 'updatedAt' | 'copyCount'>> = [
+const STARTER_SPELLS: Array<
+  Omit<Spell, 'id' | 'isFavorite' | 'isBlocked' | 'createdAt' | 'updatedAt' | 'copyCount'>
+> = [
   {
     name: 'Review current diff',
     body: [
@@ -98,9 +103,10 @@ export function createSpellService(db: AppDatabase) {
           `SELECT spells.*, COUNT(usage_events.id) AS copy_count
            FROM spells
            LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
-           WHERE lower(name) LIKE ?
-              OR lower(body) LIKE ?
-              OR lower(tags) LIKE ?
+           WHERE spells.is_blocked = 0
+             AND (lower(name) LIKE ?
+               OR lower(body) LIKE ?
+               OR lower(tags) LIKE ?)
            GROUP BY spells.id
            ORDER BY updated_at DESC, body ASC`,
           [normalized, normalized, normalized]
@@ -126,6 +132,7 @@ export function createSpellService(db: AppDatabase) {
           `SELECT spells.*, COUNT(usage_events.id) AS copy_count
            FROM spells
            LEFT JOIN usage_events ON usage_events.spell_id = spells.id AND usage_events.action = 'copy'
+           WHERE spells.is_blocked = 0
            GROUP BY spells.id
            ORDER BY copy_count DESC, spells.updated_at DESC, spells.body ASC
            LIMIT ?`,
@@ -138,6 +145,9 @@ export function createSpellService(db: AppDatabase) {
       const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
       if (!row) {
         throw new Error(`Spell not found: ${spellId}`);
+      }
+      if (Boolean(row.is_blocked)) {
+        throw new Error(`Blocked spell cannot be copied: ${spellId}`);
       }
       db.run(
         'INSERT INTO usage_events (id, spell_id, action, created_at) VALUES (?, ?, ?, ?)',
@@ -193,6 +203,28 @@ export function createSpellService(db: AppDatabase) {
          WHERE id = ?`,
         [name, body, JSON.stringify(tags), now, spellId]
       );
+      await db.save();
+      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+      if (!row) {
+        throw new Error(`Updated spell not found: ${spellId}`);
+      }
+      return rowToSpell(row);
+    },
+
+    async updateSpellState(spellId: string, patch: SpellStatePatch): Promise<Spell> {
+      const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+      if (!current) {
+        throw new Error(`Spell not found: ${spellId}`);
+      }
+      const isBlocked = patch.isBlocked ?? Boolean(current.is_blocked);
+      const isFavorite = isBlocked
+        ? false
+        : patch.isFavorite ?? Boolean(current.is_favorite);
+      db.run('UPDATE spells SET is_favorite = ?, is_blocked = ? WHERE id = ?', [
+        Number(isFavorite),
+        Number(isBlocked),
+        spellId
+      ]);
       await db.save();
       const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
       if (!row) {
@@ -268,22 +300,6 @@ export function createSpellService(db: AppDatabase) {
         .map(rowToCandidate);
     },
 
-    async promoteCandidate(candidateId: string): Promise<Spell> {
-      const result = await this.promoteCandidates([candidateId]);
-      if (result.created[0]) {
-        return result.created[0];
-      }
-      const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
-      if (!candidate || result.skipped.some((item) => item.reason === 'missing')) {
-        throw new Error(`Candidate not found: ${candidateId}`);
-      }
-      const existing = findSpellByBody(db, candidate.template);
-      if (!existing) {
-        throw new Error(`Promoted spell not found: ${candidateId}`);
-      }
-      return existing;
-    },
-
     async promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult> {
       const now = new Date().toISOString();
       const result: CandidatePromotionResult = { created: [], skipped: [] };
@@ -334,7 +350,7 @@ export function createSpellService(db: AppDatabase) {
         `SELECT spells.id AS id, spells.body AS body, COUNT(usage_events.id) AS copyCount
          FROM usage_events
          JOIN spells ON spells.id = usage_events.spell_id
-         WHERE usage_events.action = 'copy'
+         WHERE usage_events.action = 'copy' AND spells.is_blocked = 0
          GROUP BY spells.id, spells.body
          ORDER BY copyCount DESC, spells.body ASC
          LIMIT 5`
@@ -358,6 +374,8 @@ function rowToSpell(row: SpellRow): Spell {
     body: row.body,
     tags: parseTags(row.tags),
     source: row.source,
+    isFavorite: Boolean(row.is_favorite),
+    isBlocked: Boolean(row.is_blocked),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     copyCount: Number(row.copy_count ?? 0)

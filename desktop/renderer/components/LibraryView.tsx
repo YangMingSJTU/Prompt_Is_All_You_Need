@@ -1,27 +1,41 @@
-import { Clipboard, Plus, Trash2 } from 'lucide-react';
+import { Ban, Clipboard, Heart, MoreHorizontal, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
-  type FocusEvent as ReactFocusEvent
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent
 } from 'react';
 import {
-  SPELL_LIBRARY_COLUMN_GAP,
-  SPELL_LIBRARY_MAX_CANDIDATE_WIDTH,
   SPELL_LIBRARY_MIN_CANDIDATE_WIDTH,
-  SPELL_LIBRARY_MIN_LIST_WIDTH
+  SPELL_LIBRARY_MIN_LIST_WIDTH,
+  SPELL_LIBRARY_SPLITTER_WIDTH
 } from '../../shared/layout';
 import type { Candidate, Spell } from '../../shared/types';
 import type { TFunction } from '../i18n';
-import { deriveSpellName, getCandidateDisplayText, getSpellDisplayText } from '../spellDisplay';
+import {
+  deriveSpellName,
+  formatSpellUpdatedAt,
+  formatSpellUpdatedAtTitle,
+  getCandidateDisplayText,
+  getSpellDisplayName
+} from '../spellDisplay';
 import { matchesSpellSearch, type SearchScope } from '../spellSearch';
-import { sortSpells, type SpellSortDirection, type SpellSortMode } from '../spellSort';
+import { calculateSplitRatio, clampSplitRatio, type SplitPaneConstraints } from '../splitPane';
+import {
+  DEFAULT_SPELL_TABLE_SORT_STATE,
+  getNextSpellTableSortState,
+  sortSpellsByTableState,
+  type SpellTableSortMode,
+  type SpellTableSortState
+} from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
 import { SpellEditorDialog, type SpellEditorDraft } from './SpellEditorDialog';
-import { SpellSearchFilter } from './SpellSearchFilter';
-import { SpellSortMenu } from './SpellSortMenu';
+import { SpellIdentity, SpellListSortHeader } from './SpellListPrimitives';
+import { SpellSearchFilter, type SpellStatusFilter } from './SpellSearchFilter';
 
 interface LibraryViewProps {
   spells: Spell[];
@@ -31,14 +45,7 @@ interface LibraryViewProps {
   t: TFunction;
 }
 
-type EditorState =
-  | { mode: 'create' }
-  | { mode: 'edit'; spellId: string };
-
-const SPELL_LIBRARY_SPLIT_STYLE = {
-  columnGap: SPELL_LIBRARY_COLUMN_GAP,
-  gridTemplateColumns: `minmax(${SPELL_LIBRARY_MIN_LIST_WIDTH}px, 1fr) clamp(${SPELL_LIBRARY_MIN_CANDIDATE_WIDTH}px, 28vw, ${SPELL_LIBRARY_MAX_CANDIDATE_WIDTH}px)`
-} as CSSProperties;
+type EditorState = { mode: 'create' } | { mode: 'edit'; spellId: string };
 
 export function LibraryView({ spells, candidates, createRequestId = 0, onChanged, t }: LibraryViewProps) {
   const [query, setQuery] = useState('');
@@ -46,37 +53,82 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   const [selectedId, setSelectedId] = useState<string | null>(spells[0]?.id ?? null);
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
-  const [sortMode, setSortMode] = useState<SpellSortMode>('updated');
-  const [sortDirection, setSortDirection] = useState<SpellSortDirection>('desc');
+  const [sortState, setSortState] = useState<SpellTableSortState>(DEFAULT_SPELL_TABLE_SORT_STATE);
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
+  const [statusFilter, setStatusFilter] = useState<SpellStatusFilter>('active');
   const [selectedSpellIds, setSelectedSpellIds] = useState<string[]>([]);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+  const [isSavingCandidates, setIsSavingCandidates] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(60);
+  const [isResizing, setIsResizing] = useState(false);
+  const [openSpellMenuId, setOpenSpellMenuId] = useState<string | null>(null);
   const bulkDeleteActionRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const resizingRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+  const selectAllCandidatesCheckboxRef = useRef<HTMLInputElement>(null);
+  const spellMenuRef = useRef<HTMLDivElement>(null);
   const { showToast } = useFeedbackToast();
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     for (const spell of spells) {
+      const matchesStatus =
+        statusFilter === 'blocked'
+          ? spell.isBlocked
+          : !spell.isBlocked && (statusFilter !== 'favorite' || spell.isFavorite);
+      if (!matchesStatus) {
+        continue;
+      }
       for (const tag of spell.tags) {
         tags.add(tag);
       }
     }
     return [...tags].sort((a, b) => a.localeCompare(b));
-  }, [spells]);
+  }, [spells, statusFilter]);
+
+  const pendingCandidates = useMemo(
+    () => candidates.filter((candidate) => candidate.status === 'pending'),
+    [candidates]
+  );
+  const pendingCandidateIds = useMemo(
+    () => pendingCandidates.map((candidate) => candidate.id),
+    [pendingCandidates]
+  );
+  const selectedPendingCandidateIds = useMemo(() => {
+    const selectedIds = new Set(selectedCandidateIds);
+    return pendingCandidateIds.filter((candidateId) => selectedIds.has(candidateId));
+  }, [pendingCandidateIds, selectedCandidateIds]);
+  const selectedPendingCandidateCount = selectedPendingCandidateIds.length;
+  const allPendingCandidatesSelected =
+    pendingCandidateIds.length > 0 && selectedPendingCandidateCount === pendingCandidateIds.length;
+  const somePendingCandidatesSelected =
+    selectedPendingCandidateCount > 0 && !allPendingCandidatesSelected;
+
+  useEffect(() => {
+    const availableTags = new Set(allTags);
+    setSelectedTags((current) => current.filter((tag) => availableTags.has(tag)));
+  }, [allTags]);
 
   const filteredSpells = useMemo(() => {
     const filtered = spells.filter((spell) => {
+      const matchesStatus =
+        statusFilter === 'blocked'
+          ? spell.isBlocked
+          : !spell.isBlocked && (statusFilter !== 'favorite' || spell.isFavorite);
       const matchesQuery = matchesSpellSearch(
-        { name: getSpellName(spell, t), body: spell.body },
+        { name: getSpellDisplayName(spell, t('spell.untitled')), body: spell.body },
         query,
         searchScope
       );
       const matchesTags =
         selectedTags.length === 0 || selectedTags.every((tag) => spell.tags.includes(tag));
-      return matchesQuery && matchesTags;
+      return matchesStatus && matchesQuery && matchesTags;
     });
-    return sortSpells(filtered, sortMode, sortDirection, (spell) => getSpellName(spell, t));
-  }, [query, searchScope, selectedTags, sortMode, sortDirection, spells, t]);
+    return sortSpellsByTableState(filtered, sortState, (spell) =>
+      getSpellDisplayName(spell, t('spell.untitled'))
+    );
+  }, [query, searchScope, selectedTags, sortState, spells, statusFilter, t]);
   const filteredSpellIds = useMemo(() => filteredSpells.map((spell) => spell.id), [filteredSpells]);
   const selectedVisibleSpellCount = useMemo(() => {
     const selectedIds = new Set(selectedSpellIds);
@@ -112,6 +164,20 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
       selectAllCheckboxRef.current.indeterminate = someFilteredSpellsSelected;
     }
   }, [someFilteredSpellsSelected]);
+
+  useEffect(() => {
+    const pendingIds = new Set(pendingCandidateIds);
+    setSelectedCandidateIds((current) => {
+      const next = current.filter((candidateId) => pendingIds.has(candidateId));
+      return next.length === current.length ? current : next;
+    });
+  }, [pendingCandidateIds]);
+
+  useEffect(() => {
+    if (selectAllCandidatesCheckboxRef.current) {
+      selectAllCandidatesCheckboxRef.current.indeterminate = somePendingCandidatesSelected;
+    }
+  }, [somePendingCandidatesSelected]);
 
   useEffect(() => {
     if (selectedVisibleSpellCount === 0) {
@@ -152,14 +218,46 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
   }, [confirmingBulkDelete]);
 
   useEffect(() => {
-    if (spells.length === 0) {
+    if (!openSpellMenuId) {
+      return;
+    }
+
+    function closeSpellMenu(event?: Event): void {
+      if (
+        event?.type === 'pointerdown' &&
+        event.target instanceof Node &&
+        spellMenuRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setOpenSpellMenuId(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        closeSpellMenu();
+      }
+    }
+
+    document.addEventListener('pointerdown', closeSpellMenu, true);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', closeSpellMenu);
+    return () => {
+      document.removeEventListener('pointerdown', closeSpellMenu, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', closeSpellMenu);
+    };
+  }, [openSpellMenuId]);
+
+  useEffect(() => {
+    if (filteredSpells.length === 0) {
       setSelectedId(null);
       return;
     }
-    if (!selectedId || !spells.some((spell) => spell.id === selectedId)) {
-      setSelectedId(spells[0].id);
+    if (!selectedId || !filteredSpells.some((spell) => spell.id === selectedId)) {
+      setSelectedId(filteredSpells[0].id);
     }
-  }, [selectedId, spells]);
+  }, [filteredSpells, selectedId]);
 
   useEffect(() => {
     if (editorState?.mode === 'edit' && !editingSpell) {
@@ -174,13 +272,6 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     openNewSpellEditor();
   }, [createRequestId]);
 
-  async function promote(candidate: Candidate): Promise<void> {
-    const spell = await window.spellbook.promoteCandidate(candidate.id);
-    setSelectedId(spell.id);
-    showToast(t('library.saved'));
-    await onChanged();
-  }
-
   async function copy(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
     showToast(t('status.copied'));
@@ -189,11 +280,12 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
 
   async function saveEditorDraft(draft: SpellEditorDraft): Promise<void> {
     if (editorState?.mode === 'create') {
-      const spell = await window.spellbook.createSpell({
+      const input = {
         name: draft.name.trim() || deriveSpellName(draft.body, t('spell.untitled')),
         body: draft.body,
         tags: draft.tags
-      });
+      };
+      const spell = await window.spellbook.createSpell(input);
       setSelectedId(spell.id);
       setEditorState(null);
       showToast(t('spell.created'));
@@ -211,6 +303,35 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setSelectedId(editingSpell.id);
     setEditorState(null);
     showToast(t('spell.saved'));
+    await onChanged();
+  }
+
+  async function toggleFavorite(spell: Spell): Promise<void> {
+    const nextFavorite = !spell.isFavorite;
+    await window.spellbook.updateSpellState(spell.id, { isFavorite: nextFavorite });
+    showToast(t(nextFavorite ? 'spell.favorited' : 'spell.unfavorited'));
+    await onChanged();
+  }
+
+  async function blockSpell(spell: Spell): Promise<void> {
+    const wasFavorite = spell.isFavorite;
+    setOpenSpellMenuId(null);
+    await window.spellbook.updateSpellState(spell.id, { isBlocked: true });
+    await onChanged();
+    showToast(t('spell.blocked'), {
+      actionLabel: t('spell.undo'),
+      onAction: () => {
+        void restoreSpell(spell.id, wasFavorite);
+      }
+    });
+  }
+
+  async function restoreSpell(spellId: string, isFavorite = false): Promise<void> {
+    await window.spellbook.updateSpellState(spellId, {
+      isBlocked: false,
+      isFavorite
+    });
+    showToast(t('spell.unblocked'));
     await onChanged();
   }
 
@@ -235,14 +356,34 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     await onChanged();
   }
 
+  async function saveSelectedCandidates(): Promise<void> {
+    if (selectedPendingCandidateIds.length === 0 || isSavingCandidates) {
+      return;
+    }
+    setIsSavingCandidates(true);
+    try {
+      const result = await window.spellbook.promoteCandidates(selectedPendingCandidateIds);
+      setSelectedCandidateIds([]);
+      if (result.created[0]) {
+        setSelectedId(result.created[0].id);
+      }
+      showToast(t('library.selectedSaved'));
+      await onChanged();
+    } finally {
+      setIsSavingCandidates(false);
+    }
+  }
+
   function openNewSpellEditor(): void {
     setConfirmingBulkDelete(false);
+    setOpenSpellMenuId(null);
     setEditorState((current) => current ?? { mode: 'create' });
   }
 
   function openSpellEditor(spell: Spell): void {
     setSelectedId(spell.id);
     setConfirmingBulkDelete(false);
+    setOpenSpellMenuId(null);
     setEditorState({ mode: 'edit', spellId: spell.id });
   }
 
@@ -260,10 +401,26 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setConfirmingBulkDelete(false);
   }
 
+  function toggleCandidateSelection(candidateId: string): void {
+    setSelectedCandidateIds((current) =>
+      current.includes(candidateId)
+        ? current.filter((item) => item !== candidateId)
+        : [...current, candidateId]
+    );
+  }
+
+  function togglePendingCandidateSelection(): void {
+    setSelectedCandidateIds(allPendingCandidatesSelected ? [] : pendingCandidateIds);
+  }
+
   function toggleFilterTag(tag: string): void {
     setSelectedTags((current) =>
       current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]
     );
+  }
+
+  function toggleSort(nextMode: SpellTableSortMode): void {
+    setSortState((current) => getNextSpellTableSortState(current, nextMode));
   }
 
   function handleBulkDeleteBlur(event: ReactFocusEvent<HTMLDivElement>): void {
@@ -273,29 +430,104 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
     setConfirmingBulkDelete(false);
   }
 
+  function getSplitConstraints(): SplitPaneConstraints | null {
+    const content = contentRef.current;
+    if (!content) {
+      return null;
+    }
+    return {
+      containerWidth: content.getBoundingClientRect().width,
+      dividerWidth: SPELL_LIBRARY_SPLITTER_WIDTH,
+      minStartWidth: SPELL_LIBRARY_MIN_LIST_WIDTH,
+      minEndWidth: SPELL_LIBRARY_MIN_CANDIDATE_WIDTH
+    };
+  }
+
+  function updateSplitFromPointer(clientX: number): void {
+    const content = contentRef.current;
+    const constraints = getSplitConstraints();
+    if (!content || !constraints) {
+      return;
+    }
+    setSplitRatio(calculateSplitRatio(clientX, content.getBoundingClientRect().left, constraints));
+  }
+
+  function startResizing(event: ReactPointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    resizingRef.current = true;
+    setIsResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateSplitFromPointer(event.clientX);
+  }
+
+  function resizeWithPointer(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (resizingRef.current) {
+      updateSplitFromPointer(event.clientX);
+    }
+  }
+
+  function stopResizing(event: ReactPointerEvent<HTMLDivElement>): void {
+    resizingRef.current = false;
+    setIsResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function resizeWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    const constraints = getSplitConstraints();
+    if (!constraints) {
+      return;
+    }
+    event.preventDefault();
+    setSplitRatio((current) => {
+      if (event.key === 'Home') {
+        return clampSplitRatio(0, constraints);
+      }
+      if (event.key === 'End') {
+        return clampSplitRatio(100, constraints);
+      }
+      return clampSplitRatio(current + (event.key === 'ArrowLeft' ? -2 : 2), constraints);
+    });
+  }
+
+  const splitStyle = pendingCandidates.length
+    ? ({
+        gridTemplateColumns: `minmax(${SPELL_LIBRARY_MIN_LIST_WIDTH}px, ${splitRatio}fr) ${SPELL_LIBRARY_SPLITTER_WIDTH}px minmax(${SPELL_LIBRARY_MIN_CANDIDATE_WIDTH}px, ${100 - splitRatio}fr)`
+      } satisfies CSSProperties)
+    : undefined;
+
   return (
     <section className="spell-library-grid">
-      <div className="spell-list-pane">
-        <div className="spell-library-toolbar">
-          <SpellSearchFilter
-            query={query}
-            searchScope={searchScope}
-            selectedTags={selectedTags}
-            tags={allTags}
-            onClearTags={() => setSelectedTags([])}
-            onQueryChange={setQuery}
-            onScopeChange={setSearchScope}
-            onToggleTag={toggleFilterTag}
-            t={t}
-          />
-          <div className="spell-library-actions">
-            <SpellSortMenu
+      <div
+        className={[
+          'spell-library-content',
+          pendingCandidates.length ? 'has-candidates' : '',
+          isResizing ? 'resizing' : ''
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        ref={contentRef}
+        style={splitStyle}
+      >
+        <div className="spell-list-pane">
+          <div className="spell-library-toolbar">
+            <SpellSearchFilter
+              query={query}
+              searchScope={searchScope}
+              selectedTags={selectedTags}
+              showBlockedStatus
+              statusFilter={statusFilter}
+              tags={allTags}
+              onClearTags={() => setSelectedTags([])}
+              onQueryChange={setQuery}
+              onScopeChange={setSearchScope}
+              onStatusChange={setStatusFilter}
+              onToggleTag={toggleFilterTag}
               t={t}
-              value={sortMode}
-              direction={sortDirection}
-              onChange={setSortMode}
-              onDirectionChange={setSortDirection}
-              variant="button"
             />
             <button
               aria-label={t('spell.new')}
@@ -308,12 +540,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
               <span>{t('spell.new')}</span>
             </button>
           </div>
-        </div>
-        <div
-          className={candidates.length ? 'spell-library-content has-candidates' : 'spell-library-content'}
-          style={candidates.length ? SPELL_LIBRARY_SPLIT_STYLE : undefined}
-        >
-          <div className="spell-list">
+          <div className="spell-list" id="spell-library-list">
             {filteredSpells.length ? (
               <div className="spell-selection-toolbar">
                 <label
@@ -366,12 +593,22 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                 </div>
               </div>
             ) : null}
+            {filteredSpells.length ? (
+              <SpellListSortHeader
+                className="spell-library-list-header"
+                hasLeadingCell
+                onSort={toggleSort}
+                sortState={sortState}
+                t={t}
+              />
+            ) : null}
             {filteredSpells.map((spell) => (
               <article
                 className={[
                   'spell-list-row',
                   selectedSpell?.id === spell.id ? 'selected' : '',
-                  selectedSpellIds.includes(spell.id) ? 'bulk-selected' : ''
+                  selectedSpellIds.includes(spell.id) ? 'bulk-selected' : '',
+                  spell.isBlocked ? 'blocked' : ''
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -379,7 +616,7 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
               >
                 <label className="spell-row-select" title={t('spell.select')}>
                   <input
-                    aria-label={`${t('spell.select')} ${getSpellName(spell, t)}`}
+                    aria-label={`${t('spell.select')} ${getSpellDisplayName(spell, t('spell.untitled'))}`}
                     checked={selectedSpellIds.includes(spell.id)}
                     onChange={() => toggleSpellSelection(spell.id)}
                     type="checkbox"
@@ -390,59 +627,173 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
                   onClick={() => openSpellEditor(spell)}
                   type="button"
                 >
-                  <div className="spell-row-title" title={getSpellName(spell, t)}>
-                    {getSpellName(spell, t)}
-                  </div>
-                  <p className="spell-preview-line" title={getSpellDisplayText(spell)}>
-                    {formatPreview(spell.body)}
-                  </p>
-                  {spell.tags.length ? (
-                    <div className="tag-strip compact">
-                      {spell.tags.map((tag) => (
-                        <span key={tag} title={tag}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
+                  <SpellIdentity
+                    name={getSpellDisplayName(spell, t('spell.untitled'))}
+                    tags={spell.tags}
+                  />
                 </button>
-                <button
-                  aria-label={t('spell.copy')}
-                  className="icon-button"
-                  onClick={() => void copy(spell)}
-                  title={t('spell.copy')}
-                  type="button"
-                >
-                  <Clipboard size={15} />
-                </button>
+                <span className="spell-list-updated" title={formatSpellUpdatedAtTitle(spell.updatedAt)}>
+                  {formatSpellUpdatedAt(spell.updatedAt)}
+                </span>
+                <span className="spell-list-usage">{spell.copyCount}</span>
+                <div className="spell-row-actions">
+                  {spell.isBlocked ? (
+                    <button
+                      aria-label={t('spell.unblock')}
+                      className="icon-button"
+                      onClick={() => void restoreSpell(spell.id)}
+                      title={t('spell.unblock')}
+                      type="button"
+                    >
+                      <RotateCcw size={15} />
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        aria-label={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                        aria-pressed={spell.isFavorite}
+                        className={
+                          spell.isFavorite
+                            ? 'icon-button spell-favorite-button active'
+                            : 'icon-button spell-favorite-button'
+                        }
+                        onClick={() => void toggleFavorite(spell)}
+                        title={t(spell.isFavorite ? 'spell.unfavorite' : 'spell.favorite')}
+                        type="button"
+                      >
+                        <Heart fill={spell.isFavorite ? 'currentColor' : 'none'} size={15} />
+                      </button>
+                      <button
+                        aria-label={t('spell.copy')}
+                        className="icon-button"
+                        onClick={() => void copy(spell)}
+                        title={t('spell.copy')}
+                        type="button"
+                      >
+                        <Clipboard size={15} />
+                      </button>
+                      <div
+                        className="spell-row-menu-root"
+                        ref={openSpellMenuId === spell.id ? spellMenuRef : undefined}
+                      >
+                        <button
+                          aria-expanded={openSpellMenuId === spell.id}
+                          aria-haspopup="menu"
+                          aria-label={t('spell.moreActions')}
+                          className="icon-button"
+                          onClick={() =>
+                            setOpenSpellMenuId((current) => (current === spell.id ? null : spell.id))
+                          }
+                          title={t('spell.moreActions')}
+                          type="button"
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                        {openSpellMenuId === spell.id ? (
+                          <div className="spell-row-menu" role="menu">
+                            <button onClick={() => void blockSpell(spell)} role="menuitem" type="button">
+                              <Ban size={14} />
+                              <span>{t('spell.block')}</span>
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
+                </div>
               </article>
             ))}
             {filteredSpells.length === 0 ? <div className="empty-state">{t('spell.empty')}</div> : null}
           </div>
-          {candidates.length ? (
-            <div className="candidate-dock">
+        </div>
+        {pendingCandidates.length ? (
+          <>
+            <div
+              aria-controls="spell-library-list"
+              aria-label={t('spell.resizePanels')}
+              aria-orientation="vertical"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={Math.round(splitRatio)}
+              className="spell-library-resizer"
+              onKeyDown={resizeWithKeyboard}
+              onLostPointerCapture={stopResizing}
+              onPointerDown={startResizing}
+              onPointerMove={resizeWithPointer}
+              onPointerUp={stopResizing}
+              role="separator"
+              tabIndex={0}
+              title={t('spell.resizePanels')}
+            />
+            <div aria-label={t('library.candidates')} className="candidate-dock">
               <div className="candidate-dock-header">
                 <h3>{t('library.candidates')}</h3>
               </div>
-              <div className="candidate-list compact">
-                {candidates.map((candidate) => (
-                  <article className="candidate-row" key={candidate.id}>
-                    <div>
+              <div aria-busy={isSavingCandidates} className="candidate-list compact">
+                <div className="spell-selection-toolbar candidate-selection-toolbar">
+                  <label
+                    className="spell-select-all candidate-select-all"
+                    title={
+                      allPendingCandidatesSelected ? t('spell.clearSelection') : t('spell.selectAll')
+                    }
+                  >
+                    <input
+                      aria-label={
+                        allPendingCandidatesSelected ? t('spell.clearSelection') : t('spell.selectAll')
+                      }
+                      checked={allPendingCandidatesSelected}
+                      onChange={togglePendingCandidateSelection}
+                      ref={selectAllCandidatesCheckboxRef}
+                      type="checkbox"
+                    />
+                    <span>{t('spell.selectAll')}</span>
+                  </label>
+                  <button
+                    aria-label={t('library.saveSelected')}
+                    className="primary-button candidate-batch-save"
+                    disabled={selectedPendingCandidateCount === 0 || isSavingCandidates}
+                    onClick={() => void saveSelectedCandidates()}
+                    title={t('library.saveSelected')}
+                    type="button"
+                  >
+                    <Save size={15} />
+                    {t('library.save')}
+                  </button>
+                </div>
+                {pendingCandidates.map((candidate) => (
+                  <article
+                    className={
+                      selectedCandidateIds.includes(candidate.id)
+                        ? 'candidate-row bulk-selected'
+                        : 'candidate-row'
+                    }
+                    key={candidate.id}
+                  >
+                    <label className="spell-row-select candidate-row-select" title={t('spell.select')}>
+                      <input
+                        aria-label={`${t('spell.select')} ${candidate.title}`}
+                        checked={selectedCandidateIds.includes(candidate.id)}
+                        onChange={() => toggleCandidateSelection(candidate.id)}
+                        type="checkbox"
+                      />
+                    </label>
+                    <div className="candidate-row-content">
                       <pre className="spell-text-block compact">{getCandidateDisplayText(candidate)}</pre>
-                      <small>
-                        {candidate.sourceCount} {t('metric.sources')} · {t('metric.score')} {candidate.score}
-                      </small>
                     </div>
-                    <button className="primary-button" onClick={() => void promote(candidate)} type="button">
-                      <Plus size={16} />
-                      {t('library.save')}
-                    </button>
+                    <div className="candidate-row-meta">
+                      <span>
+                        {candidate.sourceCount} {t('metric.sources')}
+                      </span>
+                      <span>
+                        {t('metric.score')} {candidate.score}
+                      </span>
+                    </div>
                   </article>
                 ))}
               </div>
             </div>
-          ) : null}
-        </div>
+          </>
+        ) : null}
       </div>
       {editorState && (editorState.mode === 'create' || editingSpell) ? (
         <SpellEditorDialog
@@ -457,12 +808,4 @@ export function LibraryView({ spells, candidates, createRequestId = 0, onChanged
       ) : null}
     </section>
   );
-}
-
-function getSpellName(spell: Spell, t: TFunction): string {
-  return spell.name || deriveSpellName(spell.body, t('spell.untitled'));
-}
-
-function formatPreview(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
 }

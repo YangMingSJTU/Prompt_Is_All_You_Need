@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Candidate, Spell } from '../desktop/shared/types';
-import { deriveSpellName, getCandidateDisplayText, getSpellDisplayText } from '../desktop/renderer/spellDisplay';
+import {
+  deriveSpellName,
+  formatSpellUpdatedAt,
+  formatSpellUpdatedAtTitle,
+  getCandidateDisplayText,
+  getSpellDisplayName,
+  getSpellDisplayText
+} from '../desktop/renderer/spellDisplay';
 
 describe('spell display text', () => {
   it('uses the raw spell body as the library display text', () => {
@@ -10,6 +17,8 @@ describe('spell display text', () => {
       body: '# Role\n\nAct as a concise reviewer.',
       tags: ['review'],
       source: 'manual',
+      isFavorite: false,
+      isBlocked: false,
       createdAt: '2026-07-07T00:00:00.000Z',
       updatedAt: '2026-07-07T00:00:00.000Z',
       copyCount: 0
@@ -24,6 +33,13 @@ describe('spell display text', () => {
     expect(deriveSpellName('abcdefghijklmnopqrstuvwxyz1234567890', 'Untitled spell')).toBe(
       'abcdefghijklmnopqrstuvwxyz12...'
     );
+  });
+
+  it('uses the saved name before deriving a fallback and safely formats invalid dates', () => {
+    expect(getSpellDisplayName({ name: 'Saved name', body: 'Body' }, 'Untitled')).toBe('Saved name');
+    expect(getSpellDisplayName({ name: '', body: 'Derived name' }, 'Untitled')).toBe('Derived name');
+    expect(formatSpellUpdatedAt('invalid')).toBe('-');
+    expect(formatSpellUpdatedAtTitle('invalid')).toBe('invalid');
   });
 
   it('uses the raw candidate template as the candidate spell display text', () => {

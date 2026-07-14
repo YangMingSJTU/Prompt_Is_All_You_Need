@@ -33,6 +33,8 @@ export interface Spell {
   body: string;
   tags: string[];
   source: string;
+  isFavorite: boolean;
+  isBlocked: boolean;
   createdAt: string;
   updatedAt: string;
   copyCount: number;
@@ -44,6 +46,11 @@ export interface SpellUpdatePatch {
   name?: string;
   body?: string;
   tags?: string[];
+}
+
+export interface SpellStatePatch {
+  isFavorite?: boolean;
+  isBlocked?: boolean;
 }
 
 export interface SpellCreateInput {

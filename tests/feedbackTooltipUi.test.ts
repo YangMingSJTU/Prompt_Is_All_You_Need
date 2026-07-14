@@ -26,6 +26,15 @@ describe('click feedback toast UI', () => {
     expect(toast).toContain('useFeedbackToast');
     expect(toast).toContain('FeedbackToastViewport');
     expect(toast).toContain('aria-live="polite"');
+    expect(toast).toContain('actionLabel?: string');
+    expect(toast).toContain('onAction?: () => void');
+    expect(toast).toContain('options.onAction ? 5000 : 1600');
+    expect(styles).toContain('.feedback-toast button');
+    expect(
+      styles.match(
+        /\.feedback-toast button\s*\{[^}]+-webkit-app-region: no-drag;[^}]+pointer-events: auto;[^}]+\}/s
+      )?.[0]
+    ).toBeTruthy();
     expect(app).toContain('FeedbackToastProvider');
     expect(styles.match(/\.feedback-toast-viewport\s*\{[^}]+position: fixed;[^}]+top: 16px;[^}]+left: 50%;[^}]+transform: translateX\(-50%\);[^}]+\}/s)?.[0]).toBeTruthy();
     expect(styles).not.toContain('.feedback-target');

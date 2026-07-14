@@ -155,6 +155,42 @@ describe('i18n', () => {
     expect(en('spell.bulkDeleted')).toBe('Selected spells deleted');
   });
 
+  it('uses recommendation copy for candidate batch saving in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('library.candidates')).toBe('推荐咒语');
+    expect(zh('library.saveSelected')).toBe('保存选中');
+    expect(zh('library.selectedSaved')).toBe('选中推荐咒语已保存');
+    expect(zh('scanner.noCandidates')).toBe('没有推荐咒语');
+    expect(zh('metric.candidates')).toBe('推荐');
+    expect(en('library.candidates')).toBe('Recommended Spells');
+    expect(en('library.saveSelected')).toBe('Save selected');
+    expect(en('library.selectedSaved')).toBe('Selected recommendations saved');
+    expect(en('scanner.noCandidates')).toBe('No recommended spells');
+    expect(en('metric.candidates')).toBe('Recommendations');
+  });
+
+  it('provides favorite blacklist and status filter copy in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('spell.filter.status.active')).toBe('可用咒语');
+    expect(zh('spell.filter.status.favorite')).toBe('仅收藏');
+    expect(zh('spell.filter.status.blocked')).toBe('黑名单');
+    expect(zh('spell.favorite')).toBe('收藏');
+    expect(zh('spell.block')).toBe('加入黑名单');
+    expect(zh('spell.unblock')).toBe('移出黑名单');
+    expect(zh('spell.undo')).toBe('撤销');
+    expect(en('spell.filter.status.active')).toBe('Available');
+    expect(en('spell.filter.status.favorite')).toBe('Favorites only');
+    expect(en('spell.filter.status.blocked')).toBe('Blacklist');
+    expect(en('spell.favorite')).toBe('Favorite');
+    expect(en('spell.block')).toBe('Add to blacklist');
+    expect(en('spell.unblock')).toBe('Remove from blacklist');
+    expect(en('spell.undo')).toBe('Undo');
+  });
+
   it('provides shared spell editor dialog copy in both languages', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));

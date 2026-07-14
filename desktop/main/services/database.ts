@@ -91,6 +91,8 @@ function createSchema(db: SqlJsDatabase): void {
       body TEXT NOT NULL,
       tags TEXT NOT NULL,
       source TEXT NOT NULL,
+      is_favorite INTEGER NOT NULL DEFAULT 0,
+      is_blocked INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -149,8 +151,23 @@ function createSchema(db: SqlJsDatabase): void {
       updated_at TEXT NOT NULL
     );
 
-    PRAGMA user_version = 6;
   `);
+
+  ensureColumn(db, 'spells', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'spells', 'is_blocked', 'INTEGER NOT NULL DEFAULT 0');
+  db.exec('PRAGMA user_version = 7;');
+}
+
+function ensureColumn(
+  db: SqlJsDatabase,
+  tableName: 'spells',
+  columnName: 'is_favorite' | 'is_blocked',
+  definition: string
+): void {
+  const columns = db.exec(`PRAGMA table_info(${tableName});`)[0]?.values ?? [];
+  if (!columns.some((column) => column[1] === columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition};`);
+  }
 }
 
 function getUserVersion(db: SqlJsDatabase): number {
