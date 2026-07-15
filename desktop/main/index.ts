@@ -45,7 +45,13 @@ import {
 import { createSettingsService, defaultScanSources, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
-import { getAppIconPath, getTrayIconPath } from './services/appAssets';
+import {
+  getAppIconPath,
+  getSqlWasmPath,
+  getTrayIconPath,
+  resolveAppRoot
+} from './services/appAssets';
+import { runAppStartup } from './services/appStartup';
 import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
@@ -60,6 +66,14 @@ let mainWindowExpandedWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 let mainWindowRecommendationDelta = SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA;
 let restoreMainWindowMaximized = false;
 
+function getRuntimeAppRoot(): string {
+  return resolveAppRoot({
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  });
+}
+
 async function createWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
@@ -70,7 +84,7 @@ async function createWindow(): Promise<void> {
     minHeight: MAIN_WINDOW_MIN_HEIGHT,
     useContentSize: true,
     title: appName,
-    icon: getAppIconPath(),
+    icon: getAppIconPath(getRuntimeAppRoot()),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#0f1115',
@@ -105,7 +119,7 @@ async function createFloatingWindow(): Promise<void> {
     maxWidth: FLOATING_WINDOW_MAX_WIDTH,
     maxHeight: FLOATING_WINDOW_MAX_HEIGHT,
     title: appName,
-    icon: getAppIconPath(),
+    icon: getAppIconPath(getRuntimeAppRoot()),
     show: false,
     frame: false,
     resizable: true,
@@ -146,7 +160,10 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 async function bootstrap(): Promise<void> {
   const spellbookPaths = createSpellbookPaths();
   databasePath = spellbookPaths.databasePath;
-  const db = await openAppDatabase(databasePath);
+  const db = await openAppDatabase(
+    databasePath,
+    getSqlWasmPath(getRuntimeAppRoot())
+  );
   const spellService = createSpellService(db);
   const skillService = createSkillService(db, {
     roots: defaultSkillRoots(),
@@ -317,7 +334,9 @@ function registerDesktopControls(): void {
     registerQuickPanelShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut);
   }
 
-  const trayIcon = nativeImage.createFromPath(getTrayIconPath()).resize({ width: 16, height: 16 });
+  const trayIcon = nativeImage
+    .createFromPath(getTrayIconPath(getRuntimeAppRoot()))
+    .resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
   tray.setToolTip(getCurrentAppName());
   tray.setContextMenu(
@@ -484,13 +503,25 @@ function setMainWindowRecommendationPanelOpen(
   });
 }
 
-app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
-  await bootstrap();
-  await createWindow();
-  await createFloatingWindow();
-  registerDesktopControls();
-});
+void app.whenReady().then(() =>
+  runAppStartup({
+    async initialize() {
+      Menu.setApplicationMenu(null);
+      await bootstrap();
+    },
+    async createWindows() {
+      await createWindow();
+      await createFloatingWindow();
+      registerDesktopControls();
+    },
+    showFailure(feedback) {
+      dialog.showErrorBox(feedback.title, feedback.message);
+    },
+    quit() {
+      app.quit();
+    }
+  })
+);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

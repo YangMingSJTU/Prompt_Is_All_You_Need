@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
 
 export interface AppDatabase {
@@ -10,15 +11,18 @@ export interface AppDatabase {
   save(): Promise<void>;
 }
 
-let sqlModulePromise: Promise<SqlJsStatic> | null = null;
+const sqlModulePromises = new Map<string, Promise<SqlJsStatic>>();
 
 export async function createTestDatabase(): Promise<AppDatabase> {
   const SQL = await getSqlModule();
   return wrapDatabase(new SQL.Database(), null);
 }
 
-export async function openAppDatabase(filePath: string): Promise<AppDatabase> {
-  const SQL = await getSqlModule();
+export async function openAppDatabase(
+  filePath: string,
+  sqlWasmPath?: string
+): Promise<AppDatabase> {
+  const SQL = await getSqlModule(sqlWasmPath);
   let db: SqlJsDatabase;
   try {
     const bytes = await readFile(filePath);
@@ -29,11 +33,17 @@ export async function openAppDatabase(filePath: string): Promise<AppDatabase> {
   return wrapDatabase(db, filePath);
 }
 
-async function getSqlModule(): Promise<SqlJsStatic> {
-  sqlModulePromise ??= initSqlJs({
-    locateFile: (file) => join(process.cwd(), 'node_modules', 'sql.js', 'dist', file)
-  });
-  return sqlModulePromise;
+async function getSqlModule(sqlWasmPath = resolveInstalledSqlWasmPath()): Promise<SqlJsStatic> {
+  let modulePromise = sqlModulePromises.get(sqlWasmPath);
+  if (!modulePromise) {
+    modulePromise = initSqlJs({ locateFile: () => sqlWasmPath });
+    sqlModulePromises.set(sqlWasmPath, modulePromise);
+  }
+  return modulePromise;
+}
+
+function resolveInstalledSqlWasmPath(): string {
+  return fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
 }
 
 function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
