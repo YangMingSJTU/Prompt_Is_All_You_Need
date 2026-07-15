@@ -8,7 +8,7 @@ import {
   getSqlWasmPath,
   resolveAppRoot
 } from '../desktop/main/services/appAssets';
-import { runAppStartup } from '../desktop/main/services/appStartup';
+import { runAppPreflight, runAppStartup } from '../desktop/main/services/appStartup';
 import { openAppDatabase } from '../desktop/main/services/database';
 
 const originalCwd = process.cwd();
@@ -92,5 +92,68 @@ describe('app startup', () => {
         message: expect.stringContaining('sql-wasm.wasm is missing')
       })
     ]);
+  });
+
+  it('shows a visible error and exits when pre-ready storage preparation fails', () => {
+    const sequence: string[] = [];
+
+    const result = runAppPreflight({
+      prepare() {
+        throw new Error('EPERM: user profile is not writable');
+      },
+      showFailure(feedback) {
+        sequence.push(`feedback:${feedback.title}:${feedback.message}`);
+      },
+      exit(code) {
+        sequence.push(`exit:${code}`);
+      }
+    });
+
+    expect(result).toBe('failed');
+    expect(sequence).toHaveLength(2);
+    expect(sequence[0]).toContain('Spellbook failed to start');
+    expect(sequence[0]).toContain('EPERM: user profile is not writable');
+    expect(sequence[1]).toBe('exit:1');
+  });
+
+  it('starts on the next launch after a missing wasm resource is restored', async () => {
+    const feedback: Array<{ title: string; message: string }> = [];
+    let quitCalls = 0;
+    let windowsCreated = 0;
+    let wasmAvailable = false;
+
+    const operations = {
+      async initialize() {
+        if (!wasmAvailable) {
+          throw new Error('ENOENT: sql-wasm.wasm is missing');
+        }
+      },
+      async createWindows() {
+        windowsCreated += 1;
+      },
+      showFailure(value: { title: string; message: string }) {
+        feedback.push(value);
+      },
+      quit() {
+        quitCalls += 1;
+      }
+    };
+
+    expect(await runAppStartup(operations)).toBe('failed');
+    expect(windowsCreated).toBe(0);
+    expect(quitCalls).toBe(1);
+    expect(feedback[0]).toEqual(
+      expect.objectContaining({
+        title: 'Spellbook failed to start',
+        message: expect.stringContaining('sql-wasm.wasm')
+      })
+    );
+
+    wasmAvailable = true;
+
+    expect(await runAppStartup(operations)).toBe('started');
+    expect(windowsCreated).toBe(1);
+    expect(quitCalls).toBe(1);
+    expect(feedback).toHaveLength(1);
   });
 });

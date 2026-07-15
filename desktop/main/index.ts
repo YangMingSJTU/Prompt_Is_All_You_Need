@@ -51,7 +51,8 @@ import {
   getTrayIconPath,
   resolveAppRoot
 } from './services/appAssets';
-import { runAppStartup } from './services/appStartup';
+import { runAppPreflight, runAppStartup } from './services/appStartup';
+import { configureElectronStorage } from './services/electronStorage';
 import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
@@ -65,6 +66,7 @@ let mainWindowCompact = false;
 let mainWindowExpandedWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 let mainWindowRecommendationDelta = SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA;
 let restoreMainWindowMaximized = false;
+const spellbookPaths = createSpellbookPaths();
 
 function getRuntimeAppRoot(): string {
   return resolveAppRoot({
@@ -158,7 +160,6 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 }
 
 async function bootstrap(): Promise<void> {
-  const spellbookPaths = createSpellbookPaths();
   databasePath = spellbookPaths.databasePath;
   const db = await openAppDatabase(
     databasePath,
@@ -503,25 +504,41 @@ function setMainWindowRecommendationPanelOpen(
   });
 }
 
-void app.whenReady().then(() =>
-  runAppStartup({
-    async initialize() {
-      Menu.setApplicationMenu(null);
-      await bootstrap();
-    },
-    async createWindows() {
-      await createWindow();
-      await createFloatingWindow();
-      registerDesktopControls();
-    },
-    showFailure(feedback) {
-      dialog.showErrorBox(feedback.title, feedback.message);
-    },
-    quit() {
-      app.quit();
+const preflightResult = runAppPreflight({
+  prepare() {
+    if (process.platform === 'win32') {
+      configureElectronStorage(app, spellbookPaths);
     }
-  })
-);
+  },
+  showFailure(feedback) {
+    dialog.showErrorBox(feedback.title, feedback.message);
+  },
+  exit(code) {
+    app.exit(code);
+  }
+});
+
+if (preflightResult === 'ready') {
+  void app.whenReady().then(() =>
+    runAppStartup({
+      async initialize() {
+        Menu.setApplicationMenu(null);
+        await bootstrap();
+      },
+      async createWindows() {
+        await createWindow();
+        await createFloatingWindow();
+        registerDesktopControls();
+      },
+      showFailure(feedback) {
+        dialog.showErrorBox(feedback.title, feedback.message);
+      },
+      quit() {
+        app.quit();
+      }
+    })
+  );
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

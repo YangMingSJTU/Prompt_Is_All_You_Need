@@ -9,5 +9,11 @@ describe('spellbook paths', () => {
     expect(paths.homeDirectory).toBe(join('C:\\Users\\Ada', '.spellbook'));
     expect(paths.databasePath).toBe(join('C:\\Users\\Ada', '.spellbook', 'index.sqlite'));
     expect(paths.packageDirectory).toBe(join('C:\\Users\\Ada', '.spellbook', 'packages'));
+    expect(paths.electronUserDataDirectory).toBe(
+      join('C:\\Users\\Ada', '.spellbook', 'electron')
+    );
+    expect(paths.electronSessionDataDirectory).toBe(
+      join('C:\\Users\\Ada', '.spellbook', 'electron', 'session')
+    );
   });
 });
