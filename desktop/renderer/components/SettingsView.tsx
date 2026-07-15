@@ -208,7 +208,6 @@ export function SettingsView({
 
         {activeTab === 'localData' ? (
           <SettingsSection title={t('settings.localData')} icon={Database} fill>
-            <InfoRow label={t('settings.databasePath')} value={info?.databasePath ?? t('settings.loading')} />
             <SettingRow label={t('settings.scanTarget')}>
               <div className="settings-segmented">
                 {SCAN_TARGET_OPTIONS.map((option) => (
@@ -495,7 +494,6 @@ function SettingsSection({
     </div>
   );
 }
-
 function SettingRow({
   label,
   description,
@@ -512,15 +510,6 @@ function SettingRow({
         {description ? <span>{description}</span> : null}
       </div>
       <div className="setting-control">{children}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="settings-info-row">
-      <span>{label}</span>
-      <code title={value}>{value}</code>
     </div>
   );
 }

@@ -33,6 +33,8 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).not.toContain('settings.scanSources\n                .filter');
     expect(settings).not.toContain('sourceFiles');
     expect(settings).not.toContain('source-table');
+    expect(settings).not.toContain('settings.databasePath');
+    expect(settings).not.toContain('function InfoRow');
 
     expect(app).toContain("onOpenRecommendationDiscovery={() => openSettings('localData')}");
     expect(app).toContain('activeTab={settingsTab}');

@@ -104,6 +104,9 @@ export function LibraryView({
   const [isResizing, setIsResizing] = useState(false);
   const [recommendationIntroPhase, setRecommendationIntroPhase] =
     useState<RecommendationIntroPhase>(getInitialRecommendationIntroPhase);
+  const [recommendationArtworkSeed] = useState(
+    () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
   const bulkDeleteActionRef = useRef<HTMLDivElement>(null);
   const candidateDockRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -835,7 +838,10 @@ export function LibraryView({
                     <div
                       className={`candidate-memory-reveal phase-${recommendationIntroPhase}`}
                     >
-                      <RecommendationBookScene phase={recommendationIntroPhase} />
+                      <RecommendationBookScene
+                        artworkSeed={recommendationArtworkSeed}
+                        phase={recommendationIntroPhase}
+                      />
                       {recommendationIntroPhase === 'message' ? (
                         <strong
                           aria-label={t('library.emptyRecommendationsTitle')}

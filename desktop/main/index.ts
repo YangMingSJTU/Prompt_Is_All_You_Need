@@ -204,7 +204,6 @@ async function bootstrap(): Promise<void> {
     return settingsService.getSettings();
   });
   ipcMain.handle('settings:info', () => ({
-    databasePath,
     defaultScanSources: defaultScanSources(),
     historyRoots: defaultHistoryRoots(),
     skillRoots: skillService.getSkillRoots()

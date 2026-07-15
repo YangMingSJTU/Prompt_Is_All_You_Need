@@ -35,7 +35,6 @@ export interface ShortcutKeyInput {
 }
 
 export interface SettingsInfo {
-  databasePath: string;
   defaultScanSources: ScanSourceConfig[];
   historyRoots: Array<{ sourceTool: 'claude' | 'codex'; path: string }>;
   skillRoots: Array<{ platform: SkillPlatform; path: string }>;

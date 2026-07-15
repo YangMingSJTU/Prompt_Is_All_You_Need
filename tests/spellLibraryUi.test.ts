@@ -101,6 +101,7 @@ describe('spell library UI structure', () => {
       'desktop/renderer/components/RecommendationBookScene.tsx',
       'utf8'
     );
+    const bookArtwork = readFileSync('desktop/renderer/bookPageArtwork.ts', 'utf8');
     const bookMotion = readFileSync('desktop/renderer/bookMotion.ts', 'utf8');
     const packageJson = readFileSync('package.json', 'utf8');
     const listPaneLayout =
@@ -150,7 +151,8 @@ describe('spell library UI structure', () => {
     expect(
       component.match(/candidate-memory-reveal phase-\$\{recommendationIntroPhase\}[\s\S]*?candidate-empty-action/)?.[0]
     ).toBeTruthy();
-    expect(component).toContain('<RecommendationBookScene phase={recommendationIntroPhase} />');
+    expect(component).toContain('artworkSeed={recommendationArtworkSeed}');
+    expect(component).toContain('phase={recommendationIntroPhase}');
     expect(component).toContain('candidate-memory-phrase-character');
     expect(component).toContain("'--character-index': index");
     expect(component).not.toContain('candidate-memory-vault');
@@ -167,33 +169,51 @@ describe('spell library UI structure', () => {
     expect(bookScene).toContain('new ResizeObserver');
     expect(bookScene).toContain('window.requestAnimationFrame');
     expect(bookScene).toContain("canvas.dataset.rendered = 'true'");
+    expect(bookScene).toContain('canvas.dataset.artworkSpread = String(currentArtworkIndex)');
     expect(bookScene).toContain('canvas.dataset.pageTurn = pageTurn.toFixed(3)');
     expect(bookScene).toContain('setPageCurl');
+    expect(bookScene).toContain('setTurningPageShape');
     expect(bookScene).toContain('getCoverOpenProgress');
     expect(bookScene).toContain('getPageTurnProgress');
-    expect(bookScene).toContain('Lumos');
-    expect(bookScene).toContain('Alohomora');
-    expect(bookScene).toContain('Wingardium Leviosa');
-    expect(bookScene).toContain('Expelliarmus');
-    expect(bookScene).toContain('Protego');
-    expect(bookScene).toContain('Expecto Patronum');
-    expect(bookScene).toContain('Accio');
-    expect(bookScene).toContain('Revelio');
-    expect(bookScene).toContain('Riddikulus');
-    expect(bookScene).toContain('Muffliato');
-    expect(bookScene).toContain('Stupefy');
-    expect(bookScene).toContain('Incendio');
-    expect(bookScene).toContain('Petrificus Totalus');
-    expect(bookScene).toContain('Nox');
-    expect(bookScene).toContain('getSpellFadeOpacity');
-    expect(bookScene).toContain('const openBookContentElapsed = 0');
+    expect(bookScene).toContain('getPageTurnVertex');
+    expect(bookScene).toContain('nextLeftSurface');
+    expect(bookScene).toContain('nextRightSurface');
+    expect(bookScene).toContain('THREE.FrontSide');
+    expect(bookScene).toContain('THREE.BackSide');
+    expect(bookScene).toContain('turningPageFront.castShadow = false');
+    expect(bookScene).toContain('turningPageBack.castShadow = false');
+    expect(bookScene).not.toContain('blankPageMaterial');
+    expect(bookScene).not.toContain('turningPagePivot.rotation.y = -Math.PI * pageTurn');
+    expect(bookScene).toContain('createBookArtworkDeck');
+    expect(bookScene).toContain('drawBookPageArtwork');
+    expect(bookScene).toContain('PAGE_TEXTURE_SCALE = 2');
+    expect(bookScene).toContain('texture.anisotropy = 8');
+    expect(bookScene).toContain('getBookSpreadIndex');
+    expect(bookScene).not.toContain('getSpellFadeOpacity');
+    expect(bookArtwork).toContain('const TEXT_PAGE_SLOTS');
+    expect(bookArtwork).toContain('const DIAGRAM_PAGE_SLOTS');
+    expect(bookArtwork).not.toContain('PAGE_TEMPLATES');
+    expect(bookArtwork).toContain('function drawSigil');
+    expect(bookArtwork).not.toContain('sigil.opacity');
+    expect(bookArtwork).toContain('function strokePolygon');
+    expect(bookArtwork).toContain('function drawChapterHeader');
+    expect(bookArtwork).toContain('function drawTextPage');
+    expect(bookArtwork).toContain('function drawDiagramPage');
+    expect(bookArtwork).not.toContain('function drawConstellation');
+    expect(bookArtwork).not.toContain('function drawMarginalia');
+    expect(bookArtwork).toContain('export function createBookArtworkDeck');
+    expect(bookArtwork).toContain('export function drawBookPageArtwork');
+    expect(bookArtwork).toContain('Lumos');
+    expect(bookArtwork).toContain('Expecto Patronum');
+    expect(bookArtwork).toContain('Wingardium Leviosa');
     expect(bookScene).not.toContain('OPEN_BOOK_CONTENT_OFFSET');
     expect(bookScene).toContain('contentIsAnimating');
     expect(bookScene).not.toContain('drawInkPath');
     expect(bookScene).not.toContain('drawFootprints');
     expect(bookScene).not.toContain('context.clip()');
     expect(bookMotion).toContain('export const BOOK_PAGE_COUNT = 6');
-    expect(bookMotion).toContain('export const BOOK_CONTENT_CYCLE_MS = 7800');
+    expect(bookMotion).toContain('export const BOOK_CONTENT_CYCLE_MS = 6500');
+    expect(bookMotion).not.toContain('getSpellFadeOpacity');
     expect(packageJson).toContain('"three"');
     expect(component).not.toContain('candidate-memory-ai-seal');
     expect(component).not.toContain('candidate-memory-model-map');

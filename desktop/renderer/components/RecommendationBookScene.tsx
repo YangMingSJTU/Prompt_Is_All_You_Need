@@ -2,19 +2,27 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {
-  BOOK_CONTENT_CYCLE_MS,
   BOOK_OPENING_DURATION_MS,
   BOOK_PAGE_COUNT,
   getBookSettleProgress,
   getCoverOpenProgress,
   getPageOpenProgress,
+  getBookSpreadIndex,
   getPageTurnProgress,
-  getSpellFadeOpacity
+  getPageTurnVertex
 } from '../bookMotion';
+import {
+  BOOK_PAGE_TEXTURE_HEIGHT,
+  BOOK_PAGE_TEXTURE_WIDTH,
+  createBookArtworkDeck,
+  drawBookPageArtwork,
+  type BookPageArtwork
+} from '../bookPageArtwork';
 
 type RecommendationBookPhase = 'opening' | 'message' | 'ready';
 
 interface RecommendationBookSceneProps {
+  artworkSeed: string;
   phase: RecommendationBookPhase;
 }
 
@@ -24,72 +32,22 @@ interface PageSurface {
   texture: THREE.CanvasTexture;
 }
 
-interface SpellInscription {
-  fontSize: number;
-  rotation: number;
-  start: number;
-  text: string;
-  x: number;
-  y: number;
-}
-
 const PAGE_WIDTH = 1.34;
+const PAGE_TEXTURE_SCALE = 2;
 const PAGE_HEIGHT = 1.92;
-const PAGE_TEXTURE_WIDTH = 512;
-const PAGE_TEXTURE_HEIGHT = 720;
-
-const LEFT_INSCRIPTIONS: SpellInscription[] = [
-  { text: 'Lumos', x: 70, y: 104, fontSize: 34, rotation: -0.03, start: 0.2 },
-  { text: 'Alohomora', x: 188, y: 188, fontSize: 28, rotation: 0.025, start: 0.25 },
-  {
-    text: 'Wingardium Leviosa',
-    x: 52,
-    y: 280,
-    fontSize: 23,
-    rotation: -0.015,
-    start: 0.3
-  },
-  { text: 'Accio', x: 276, y: 365, fontSize: 32, rotation: 0.035, start: 0.36 },
-  { text: 'Revelio', x: 78, y: 452, fontSize: 29, rotation: -0.03, start: 0.42 },
-  { text: 'Riddikulus', x: 188, y: 546, fontSize: 26, rotation: 0.02, start: 0.48 },
-  { text: 'Muffliato', x: 72, y: 638, fontSize: 27, rotation: -0.02, start: 0.55 }
-];
-
-const RIGHT_INSCRIPTIONS: SpellInscription[] = [
-  { text: 'Expelliarmus', x: 66, y: 108, fontSize: 27, rotation: 0.025, start: 0.22 },
-  { text: 'Protego', x: 258, y: 198, fontSize: 33, rotation: -0.035, start: 0.27 },
-  {
-    text: 'Expecto Patronum',
-    x: 62,
-    y: 292,
-    fontSize: 23,
-    rotation: 0.018,
-    start: 0.32
-  },
-  { text: 'Stupefy', x: 212, y: 382, fontSize: 29, rotation: -0.025, start: 0.38 },
-  { text: 'Incendio', x: 76, y: 472, fontSize: 28, rotation: 0.02, start: 0.44 },
-  {
-    text: 'Petrificus Totalus',
-    x: 148,
-    y: 562,
-    fontSize: 22,
-    rotation: -0.015,
-    start: 0.5
-  },
-  { text: 'Nox', x: 328, y: 642, fontSize: 31, rotation: 0.025, start: 0.55 }
-];
 
 function createPageSurface(mirrored: boolean): PageSurface {
   const canvas = document.createElement('canvas');
-  canvas.width = PAGE_TEXTURE_WIDTH;
-  canvas.height = PAGE_TEXTURE_HEIGHT;
+  canvas.width = BOOK_PAGE_TEXTURE_WIDTH * PAGE_TEXTURE_SCALE;
+  canvas.height = BOOK_PAGE_TEXTURE_HEIGHT * PAGE_TEXTURE_SCALE;
   const context = canvas.getContext('2d');
   if (!context) {
     throw new Error('Canvas 2D context is unavailable');
   }
+  context.setTransform(PAGE_TEXTURE_SCALE, 0, 0, PAGE_TEXTURE_SCALE, 0, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
+  texture.anisotropy = 8;
   if (mirrored) {
     texture.wrapS = THREE.RepeatWrapping;
     texture.repeat.x = -1;
@@ -98,89 +56,11 @@ function createPageSurface(mirrored: boolean): PageSurface {
   return { canvas, context, texture };
 }
 
-function drawParchment(surface: PageSurface, spineOnRight: boolean): void {
-  const { canvas, context } = surface;
-  const background = context.createLinearGradient(0, 0, canvas.width, 0);
-  if (spineOnRight) {
-    background.addColorStop(0, '#f0e4c6');
-    background.addColorStop(0.82, '#ead8ad');
-    background.addColorStop(1, '#bda171');
-  } else {
-    background.addColorStop(0, '#bda171');
-    background.addColorStop(0.18, '#ead8ad');
-    background.addColorStop(1, '#f0e4c6');
-  }
-  context.fillStyle = background;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  context.fillStyle = 'rgba(91, 58, 27, 0.055)';
-  for (let index = 0; index < 58; index += 1) {
-    const x = (index * 83 + 29) % canvas.width;
-    const y = (index * 47 + 17) % canvas.height;
-    const width = 10 + ((index * 13) % 34);
-    context.fillRect(x, y, width, 1);
-  }
-
-  context.strokeStyle = 'rgba(91, 58, 27, 0.16)';
-  context.lineWidth = 2;
-  context.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
-}
-
-function drawInscription(
-  context: CanvasRenderingContext2D,
-  inscription: SpellInscription,
-  contentElapsedMs: number
-): void {
-  const opacity = getSpellFadeOpacity(contentElapsedMs, inscription.start, 0.12);
-  if (opacity <= 0) {
-    return;
-  }
-  context.save();
-  context.translate(inscription.x, inscription.y);
-  context.rotate(inscription.rotation);
-  context.font = `italic 600 ${inscription.fontSize}px 'Palatino Linotype', 'Book Antiqua', Georgia, serif`;
-  context.textBaseline = 'alphabetic';
-  const width = context.measureText(inscription.text).width;
-  context.shadowColor = `rgba(130, 85, 35, ${0.22 * opacity})`;
-  context.shadowBlur = 3;
-  context.fillStyle = `rgba(68, 37, 22, ${0.9 * opacity})`;
-  context.fillText(inscription.text, 0, 0);
-
-  context.shadowBlur = 0;
-  const flourishWidth = Math.min(106, Math.max(54, width * 0.42));
-  context.strokeStyle = `rgba(151, 105, 44, ${0.42 * opacity})`;
-  context.lineWidth = 1.4;
-  context.beginPath();
-  context.moveTo(2, 14);
-  context.bezierCurveTo(
-    flourishWidth * 0.3,
-    8,
-    flourishWidth * 0.66,
-    20,
-    flourishWidth,
-    12
-  );
-  context.stroke();
-
-  context.save();
-  context.translate(flourishWidth + 9, 12);
-  context.rotate(Math.PI / 4);
-  context.fillStyle = `rgba(164, 117, 48, ${0.52 * opacity})`;
-  context.fillRect(-3, -3, 6, 6);
-  context.restore();
-  context.restore();
-}
-
 function updatePageSurface(
   surface: PageSurface,
-  inscriptions: SpellInscription[],
-  contentElapsedMs: number,
-  mirrored: boolean
+  artwork: BookPageArtwork
 ): void {
-  drawParchment(surface, mirrored);
-  inscriptions.forEach((inscription) =>
-    drawInscription(surface.context, inscription, contentElapsedMs)
-  );
+  drawBookPageArtwork(surface.context, artwork);
   surface.texture.needsUpdate = true;
 }
 
@@ -323,23 +203,70 @@ function createArcaneCircle(
 }
 
 function createPageGeometry(): THREE.PlaneGeometry {
-  const geometry = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 24, 2);
+  const geometry = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 36, 10);
   geometry.translate(PAGE_WIDTH / 2, 0, 0);
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  position.setUsage(THREE.DynamicDrawUsage);
+  geometry.userData.basePositions = Float32Array.from(
+    position.array as ArrayLike<number>
+  );
   return geometry;
+}
+
+function getBasePagePositions(geometry: THREE.PlaneGeometry): Float32Array {
+  const basePositions = geometry.userData.basePositions;
+  if (!(basePositions instanceof Float32Array)) {
+    throw new Error('Page geometry is missing its base positions');
+  }
+  return basePositions;
 }
 
 function setPageCurl(geometry: THREE.PlaneGeometry, amount: number): void {
   const position = geometry.attributes.position;
+  const basePositions = getBasePagePositions(geometry);
   for (let index = 0; index < position.count; index += 1) {
-    const x = position.getX(index);
+    const x = basePositions[index * 3];
+    const y = basePositions[index * 3 + 1];
+    const z = basePositions[index * 3 + 2];
     const normalized = Math.min(1, Math.max(0, x / PAGE_WIDTH));
-    position.setZ(index, Math.sin(Math.PI * normalized) * amount);
+    position.setXYZ(index, x, y, z + Math.sin(Math.PI * normalized) * amount);
   }
   position.needsUpdate = true;
   geometry.computeVertexNormals();
 }
 
-export function RecommendationBookScene({ phase }: RecommendationBookSceneProps) {
+function setTurningPageShape(geometry: THREE.PlaneGeometry, progress: number): void {
+  const position = geometry.attributes.position;
+  const basePositions = getBasePagePositions(geometry);
+  for (let index = 0; index < position.count; index += 1) {
+    const baseX = basePositions[index * 3];
+    const baseY = basePositions[index * 3 + 1];
+    const normalizedX = baseX / PAGE_WIDTH;
+    const normalizedY = baseY / PAGE_HEIGHT + 0.5;
+    const vertex = getPageTurnVertex(normalizedX, normalizedY, progress);
+    position.setXYZ(
+      index,
+      vertex.xRatio * PAGE_WIDTH,
+      baseY + vertex.yOffsetRatio * PAGE_WIDTH,
+      vertex.zRatio * PAGE_WIDTH
+    );
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+}
+
+function setMaterialMap(
+  material: THREE.MeshStandardMaterial,
+  texture: THREE.Texture
+): void {
+  if (material.map === texture) {
+    return;
+  }
+  material.map = texture;
+  material.needsUpdate = true;
+}
+
+export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBookSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const phaseRef = useRef<RecommendationBookPhase>(phase);
   const openingStartedAtRef = useRef(0);
@@ -417,9 +344,14 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
     const sparkTexture = createSparkTexture();
     const leftSurface = createPageSurface(true);
     const rightSurface = createPageSurface(false);
-    const openBookContentElapsed = 0;
-    updatePageSurface(leftSurface, LEFT_INSCRIPTIONS, openBookContentElapsed, true);
-    updatePageSurface(rightSurface, RIGHT_INSCRIPTIONS, openBookContentElapsed, false);
+    const nextLeftSurface = createPageSurface(true);
+    const nextRightSurface = createPageSurface(false);
+    const artworkDeck = createBookArtworkDeck(artworkSeed);
+    const firstNextArtwork = artworkDeck[1 % artworkDeck.length];
+    updatePageSurface(leftSurface, artworkDeck[0].left);
+    updatePageSurface(rightSurface, artworkDeck[0].right);
+    updatePageSurface(nextLeftSurface, firstNextArtwork.left);
+    updatePageSurface(nextRightSurface, firstNextArtwork.right);
 
     const coverMaterial = new THREE.MeshPhysicalMaterial({
       clearcoat: 0.18,
@@ -433,23 +365,35 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
       metalness: 0,
       roughness: 0.9
     });
-    const blankPageMaterial = new THREE.MeshStandardMaterial({
-      color: 0xeadbb7,
+    const pageFrontMaterial = new THREE.MeshStandardMaterial({
+      map: rightSurface.texture,
       metalness: 0,
-      roughness: 0.92,
-      side: THREE.DoubleSide
+      roughness: 0.88,
+      side: THREE.FrontSide
     });
-    const leftPageMaterial = new THREE.MeshStandardMaterial({
+    const pageBackMaterial = new THREE.MeshStandardMaterial({
       map: leftSurface.texture,
       metalness: 0,
       roughness: 0.88,
-      side: THREE.DoubleSide
+      side: THREE.BackSide
     });
     const rightPageMaterial = new THREE.MeshStandardMaterial({
       map: rightSurface.texture,
       metalness: 0,
       roughness: 0.88,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide
+    });
+    const turningPageFrontMaterial = new THREE.MeshStandardMaterial({
+      map: rightSurface.texture,
+      metalness: 0,
+      roughness: 0.88,
+      side: THREE.FrontSide
+    });
+    const turningPageBackMaterial = new THREE.MeshStandardMaterial({
+      map: nextLeftSurface.texture,
+      metalness: 0,
+      roughness: 0.88,
+      side: THREE.BackSide
     });
     const goldMaterial = new THREE.MeshStandardMaterial({
       color: 0xb78b43,
@@ -508,23 +452,34 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
       const pivot = new THREE.Group();
       pivot.position.z = 0.058 + index * 0.004;
       const geometry = createPageGeometry();
-      const material = index === 0 ? leftPageMaterial : blankPageMaterial;
-      const page = new THREE.Mesh(geometry, material);
-      page.castShadow = true;
-      page.receiveShadow = true;
-      pivot.add(page);
+      const pageFront = new THREE.Mesh(geometry, pageFrontMaterial);
+      const pageBack = new THREE.Mesh(geometry, pageBackMaterial);
+      pageFront.castShadow = true;
+      pageFront.receiveShadow = true;
+      pageBack.castShadow = false;
+      pageBack.receiveShadow = true;
+      pivot.add(pageFront, pageBack);
       root.add(pivot);
       pagePivots.push(pivot);
-      pageMeshes.push(page);
+      pageMeshes.push(pageFront);
     }
 
     const turningPagePivot = new THREE.Group();
     turningPagePivot.position.z = 0.082;
     const turningPageGeometry = createPageGeometry();
-    const turningPage = new THREE.Mesh(turningPageGeometry, rightPageMaterial);
-    turningPage.castShadow = true;
-    turningPage.receiveShadow = true;
-    turningPagePivot.add(turningPage);
+    const turningPageFront = new THREE.Mesh(
+      turningPageGeometry,
+      turningPageFrontMaterial
+    );
+    const turningPageBack = new THREE.Mesh(
+      turningPageGeometry,
+      turningPageBackMaterial
+    );
+    turningPageFront.castShadow = false;
+    turningPageFront.receiveShadow = true;
+    turningPageBack.castShadow = false;
+    turningPageBack.receiveShadow = true;
+    turningPagePivot.add(turningPageFront, turningPageBack);
     turningPagePivot.visible = false;
     root.add(turningPagePivot);
 
@@ -569,7 +524,7 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
     scene.add(sparkles);
 
     let animationFrame = 0;
-    let lastTextureUpdate = 0;
+    let currentArtworkIndex = 0;
     let openingGeometrySettled = false;
     const renderFrame = (now: number) => {
       const openingElapsed =
@@ -593,13 +548,11 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
       pagePivots.forEach((pivot, index) => {
         const progress = getPageOpenProgress(openingElapsed, index);
         const finalOffset = (BOOK_PAGE_COUNT - 1 - index) * 0.018;
-        pivot.rotation.y = (-Math.PI + finalOffset) * progress;
-        pivot.position.z = 0.058 + index * 0.004 + Math.sin(Math.PI * progress) * 0.055;
+        pivot.rotation.y = finalOffset * progress;
+        pivot.position.z =
+          0.058 + index * 0.004 + Math.sin(Math.PI * progress) * 0.018;
         if (!openingGeometrySettled) {
-          setPageCurl(
-            pageMeshes[index].geometry,
-            Math.sin(Math.PI * progress) * 0.11 + 0.012
-          );
+          setTurningPageShape(pageMeshes[index].geometry, progress);
         }
       });
       openingGeometrySettled = openingElapsed >= BOOK_OPENING_DURATION_MS;
@@ -608,18 +561,31 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
       const contentElapsed =
         contentIsAnimating && contentStartedAtRef.current !== null
           ? Math.max(0, now - contentStartedAtRef.current)
-          : openBookContentElapsed;
-      if (now - lastTextureUpdate >= 32) {
-        updatePageSurface(leftSurface, LEFT_INSCRIPTIONS, contentElapsed, true);
-        updatePageSurface(rightSurface, RIGHT_INSCRIPTIONS, contentElapsed, false);
-        lastTextureUpdate = now;
+          : 0;
+      const artworkIndex = getBookSpreadIndex(contentElapsed, artworkDeck.length);
+      if (artworkIndex !== currentArtworkIndex) {
+        const nextArtworkIndex = (artworkIndex + 1) % artworkDeck.length;
+        updatePageSurface(leftSurface, artworkDeck[artworkIndex].left);
+        updatePageSurface(rightSurface, artworkDeck[artworkIndex].right);
+        updatePageSurface(nextLeftSurface, artworkDeck[nextArtworkIndex].left);
+        updatePageSurface(nextRightSurface, artworkDeck[nextArtworkIndex].right);
+        currentArtworkIndex = artworkIndex;
       }
 
       const pageTurn = contentIsAnimating ? getPageTurnProgress(contentElapsed) : 0;
+      const isTurning = pageTurn > 0.001;
+      setMaterialMap(
+        rightPageMaterial,
+        isTurning ? nextRightSurface.texture : rightSurface.texture
+      );
+      setMaterialMap(
+        pageBackMaterial,
+        pageTurn > 0.82 ? nextLeftSurface.texture : leftSurface.texture
+      );
       turningPagePivot.visible = pageTurn > 0.001 && pageTurn < 0.999;
-      turningPagePivot.rotation.y = -Math.PI * pageTurn;
-      turningPagePivot.position.z = 0.082 + Math.sin(Math.PI * pageTurn) * 0.08;
-      setPageCurl(turningPageGeometry, Math.sin(Math.PI * pageTurn) * 0.2 + 0.012);
+      turningPagePivot.rotation.y = 0;
+      turningPagePivot.position.z = 0.082;
+      setTurningPageShape(turningPageGeometry, pageTurn);
 
       const sparkPosition = sparkGeometry.attributes.position;
       for (let index = 0; index < sparkBaseY.length; index += 1) {
@@ -639,6 +605,7 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
       renderer.render(scene, camera);
       canvas.dataset.rendered = 'true';
       canvas.dataset.phase = phaseRef.current;
+      canvas.dataset.artworkSpread = String(currentArtworkIndex);
       canvas.dataset.pageTurn = pageTurn.toFixed(3);
       animationFrame = window.requestAnimationFrame(renderFrame);
     };
@@ -685,9 +652,11 @@ export function RecommendationBookScene({ phase }: RecommendationBookSceneProps)
       sparkTexture.dispose();
       leftSurface.texture.dispose();
       rightSurface.texture.dispose();
+      nextLeftSurface.texture.dispose();
+      nextRightSurface.texture.dispose();
       renderer.dispose();
     };
-  }, []);
+  }, [artworkSeed]);
 
   return (
     <div aria-hidden="true" className="candidate-memory-three-stage">
