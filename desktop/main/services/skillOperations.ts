@@ -245,25 +245,42 @@ export async function installSkillContent(options: {
   }
 }
 
-async function createStagingDirectory(
+const STAGING_NAME_MAX_LENGTH = 12;
+const STAGING_ALPHABET = '0123456789abcdef';
+
+export function createStagingDirectoryName(
+  targetDirectoryName: string,
+  token: string
+): string {
+  const budget = Math.min(targetDirectoryName.length, STAGING_NAME_MAX_LENGTH);
+  const normalizedToken = token.toLowerCase().replace(/[^0-9a-f]/g, '');
+  if (budget < 1 || normalizedToken.length < 1) {
+    throw new Error('A target directory name and random token are required');
+  }
+  let candidate = normalizedToken.slice(0, budget);
+  if (candidate.toLowerCase() === targetDirectoryName.toLowerCase()) {
+    const finalIndex = candidate.length - 1;
+    const currentIndex = STAGING_ALPHABET.indexOf(candidate[finalIndex]);
+    const replacement =
+      STAGING_ALPHABET[(currentIndex + 1) % STAGING_ALPHABET.length];
+    candidate = `${candidate.slice(0, finalIndex)}${replacement}`;
+  }
+  return candidate;
+}
+
+export async function createStagingDirectory(
   targetRoot: string,
   targetDirectoryName: string,
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  createToken: () => string = randomUUID
 ): Promise<string> {
   for (let attempt = 0; attempt < 64; attempt += 1) {
     // Keep the temporary path component no longer than the final directory name.
     // Otherwise a final path that fits on Windows can fail only while staging.
-    const token = randomUUID().replaceAll('-', '');
-    const prefix =
-      targetDirectoryName.length >= 4
-        ? '.sb-'
-        : targetDirectoryName.length >= 2
-          ? '.'
-          : '';
-    const stagingName = `${prefix}${token}`.slice(0, targetDirectoryName.length);
-    if (!stagingName || stagingName === targetDirectoryName) {
-      continue;
-    }
+    const stagingName = createStagingDirectoryName(
+      targetDirectoryName,
+      createToken()
+    );
     const candidate = join(targetRoot, stagingName);
     try {
       await fs.mkdir(candidate);

@@ -9,7 +9,7 @@ import {
 } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { basename, join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../desktop/main/services/database';
 import {
@@ -20,9 +20,183 @@ import {
   nodeSkillFileSystem,
   type SkillFileSystem
 } from '../desktop/main/services/skillFileSystem';
-import { packageSkillContent } from '../desktop/main/services/skillOperations';
+import {
+  createStagingDirectory,
+  createStagingDirectoryName,
+  installSkillContent,
+  packageSkillContent,
+  type SkillContentSource
+} from '../desktop/main/services/skillOperations';
+import { isSafeDirectoryName } from '../desktop/main/services/skillPath';
 import { scanSkillRoot } from '../desktop/main/services/skillScanner';
 import { writeZipFile } from '../desktop/main/services/zipWriter';
+
+describe('skill staging', () => {
+  it('creates distinct safe random candidates within 1-5 character budgets', () => {
+    for (const targetName of ['a', 'ab', 'abc', 'test', '.sb-', 'abcde']) {
+      const first = createStagingDirectoryName(
+        targetName,
+        '11111111-1111-4111-8111-111111111111'
+      );
+      const second = createStagingDirectoryName(
+        targetName,
+        '22222222-2222-4222-8222-222222222222'
+      );
+
+      expect(first.length).toBeGreaterThanOrEqual(1);
+      expect(first.length).toBeLessThanOrEqual(targetName.length);
+      expect(first.toLowerCase()).not.toBe(targetName.toLowerCase());
+      expect(second.toLowerCase()).not.toBe(targetName.toLowerCase());
+      expect(first).not.toBe(second);
+      expect(isSafeDirectoryName(first)).toBe(true);
+      expect(isSafeDirectoryName(second)).toBe(true);
+    }
+    expect(createStagingDirectoryName('a', 'aaaaaaaa')).toBe('b');
+    expect(createStagingDirectoryName('abcd', 'abcdabcd')).toBe('abce');
+  });
+
+  it('uses a different candidate after the first exclusive mkdir returns EEXIST', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'spellbook-staging-collision-'));
+    const firstCandidate = createStagingDirectoryName('test', '11111111');
+    const secondCandidate = createStagingDirectoryName('test', '22222222');
+    await mkdir(join(root, firstCandidate));
+    const tokens = ['11111111', '22222222'];
+
+    try {
+      const stagingPath = await createStagingDirectory(
+        root,
+        'test',
+        nodeSkillFileSystem,
+        () => tokens.shift() ?? '33333333'
+      );
+
+      expect(basename(stagingPath)).toBe(secondCandidate);
+      expect(secondCandidate).not.toBe(firstCandidate);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not let an existing .sb- skill block a four-character install', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'spellbook-short-skill-'));
+    const markerPath = join(root, '.sb-', 'owner-marker.txt');
+    await mkdir(join(root, '.sb-'));
+    await writeFile(markerPath, 'keep me', 'utf8');
+
+    try {
+      const result = await installSkillContent({
+        source: memorySkillSource('test'),
+        platform: 'codex',
+        targetRoot: root,
+        fs: nodeSkillFileSystem
+      });
+
+      expect(result).toMatchObject({ ok: true, targetPath: join(root, 'test') });
+      expect(await readFile(markerPath, 'utf8')).toBe('keep me');
+      expect(await readFile(join(root, 'test', 'SKILL.md'), 'utf8')).toContain(
+        '# test'
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('installs the valid four-character .sb- target without reusing it for staging', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'spellbook-dot-short-skill-'));
+    try {
+      const result = await installSkillContent({
+        source: memorySkillSource('.sb-'),
+        platform: 'codex',
+        targetRoot: root,
+        fs: nodeSkillFileSystem
+      });
+
+      expect(result).toMatchObject({ ok: true, targetPath: join(root, '.sb-') });
+      expect(await readFile(join(root, '.sb-', 'SKILL.md'), 'utf8')).toContain(
+        '# .sb-'
+      );
+      expect(await readdir(root)).toEqual(['.sb-']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('isolates concurrent installs for two different four-character skills', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'spellbook-short-concurrent-'));
+    let releaseFirst!: () => void;
+    let firstReadStarted!: () => void;
+    const firstReadGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const firstReadStartedGate = new Promise<void>((resolve) => {
+      firstReadStarted = resolve;
+    });
+    const firstSource = memorySkillSource('test', async () => {
+      firstReadStarted();
+      await firstReadGate;
+      return Buffer.from('# test');
+    });
+
+    try {
+      const firstInstall = installSkillContent({
+        source: firstSource,
+        platform: 'codex',
+        targetRoot: root,
+        fs: nodeSkillFileSystem
+      });
+      await firstReadStartedGate;
+      const secondInstall = await installSkillContent({
+        source: memorySkillSource('demo'),
+        platform: 'codex',
+        targetRoot: root,
+        fs: nodeSkillFileSystem
+      });
+      releaseFirst();
+
+      expect(secondInstall).toMatchObject({ ok: true, targetPath: join(root, 'demo') });
+      await expect(firstInstall).resolves.toMatchObject({
+        ok: true,
+        targetPath: join(root, 'test')
+      });
+      expect((await readdir(root)).sort()).toEqual(['demo', 'test']);
+    } finally {
+      releaseFirst();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('cleans a failed short-name staging directory and preserves a target marker', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'spellbook-short-cleanup-'));
+    try {
+      const failed = await installSkillContent({
+        source: memorySkillSource('test', async () => {
+          throw Object.assign(new Error('source failed'), { code: 'EIO' });
+        }),
+        platform: 'codex',
+        targetRoot: root,
+        fs: nodeSkillFileSystem
+      });
+      expect(failed).toMatchObject({ ok: false, error: { code: 'source_unreadable' } });
+      expect(await readdir(root)).toEqual([]);
+
+      const markerPath = join(root, 'test', 'owner-marker.txt');
+      await mkdir(join(root, 'test'));
+      await writeFile(markerPath, 'keep me', 'utf8');
+      const conflict = await installSkillContent({
+        source: memorySkillSource('test'),
+        platform: 'codex',
+        targetRoot: root,
+        fs: nodeSkillFileSystem
+      });
+
+      expect(conflict).toMatchObject({ ok: false, error: { code: 'target_conflict' } });
+      expect(await readFile(markerPath, 'utf8')).toBe('keep me');
+      expect(await readdir(root)).toEqual(['test']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('skill service', () => {
   it('uses official user skill roots for Claude and Codex', () => {
@@ -676,6 +850,19 @@ function createPathLengthLimitedFileSystem(
       }
       return nodeSkillFileSystem.writeFile(path, data);
     }
+  };
+}
+
+function memorySkillSource(
+  directoryName: string,
+  readFile: (portablePath: string) => Promise<Buffer> = async () =>
+    Buffer.from(`# ${directoryName}`)
+): SkillContentSource {
+  return {
+    id: `memory:${directoryName}`,
+    directoryName,
+    files: ['SKILL.md'],
+    readFile
   };
 }
 
