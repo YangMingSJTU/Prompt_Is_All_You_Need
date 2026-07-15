@@ -425,3 +425,11 @@ export function resolveLocalePreference(preference: AppLanguage, systemLanguage:
 export function createTranslator(locale: Locale): TFunction {
   return (key) => resources[locale][key] ?? resources.zh[key];
 }
+
+export function translateForLocalePreference(
+  preference: AppLanguage,
+  systemLanguage: string | undefined | null,
+  key: I18nKey
+): string {
+  return createTranslator(resolveLocalePreference(preference, systemLanguage))(key);
+}

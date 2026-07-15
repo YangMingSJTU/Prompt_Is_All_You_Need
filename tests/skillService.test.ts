@@ -9,14 +9,17 @@ import {
 } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../desktop/main/services/database';
 import {
   createSkillService,
   defaultSkillRoots
 } from '../desktop/main/services/skillService';
-import { nodeSkillFileSystem } from '../desktop/main/services/skillFileSystem';
+import {
+  nodeSkillFileSystem,
+  type SkillFileSystem
+} from '../desktop/main/services/skillFileSystem';
 import { packageSkillContent } from '../desktop/main/services/skillOperations';
 import { scanSkillRoot } from '../desktop/main/services/skillScanner';
 import { writeZipFile } from '../desktop/main/services/zipWriter';
@@ -304,11 +307,7 @@ describe('skill service', () => {
     });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'commit_failed' } });
-    expect(
-      (await readdir(fixture.codexRoot)).filter((name) =>
-        name.startsWith('.spellbook-install-')
-      )
-    ).toEqual([]);
+    expect(await readdir(fixture.codexRoot)).toEqual([]);
     await expect(readdir(join(fixture.codexRoot, 'task-planner'))).rejects.toMatchObject({
       code: 'ENOENT'
     });
@@ -343,11 +342,7 @@ describe('skill service', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'target_conflict' } });
     expect(await readFile(markerPath, 'utf8')).toBe('keep me');
-    expect(
-      (await readdir(fixture.codexRoot)).filter((name) =>
-        name.startsWith('.spellbook-install-')
-      )
-    ).toEqual([]);
+    expect(await readdir(fixture.codexRoot)).toEqual(['task-planner']);
     await rm(fixture.root, { recursive: true, force: true });
   });
 
@@ -400,6 +395,51 @@ describe('skill service', () => {
     await expect(readdir(join(actualParent, 'skills', 'task-planner'))).rejects.toMatchObject({
       code: 'ENOENT'
     });
+    await rm(fixture.root, { recursive: true, force: true });
+  });
+
+  it('installs to a clean platform when the other platform target is a junction conflict', async () => {
+    const fixture = await createEmptyRoots();
+    const junctionTarget = join(fixture.root, 'external-task-planner');
+    const markerPath = join(junctionTarget, 'owner-marker.txt');
+    await mkdir(junctionTarget, { recursive: true });
+    await writeFile(markerPath, 'keep me', 'utf8');
+    await symlink(
+      junctionTarget,
+      join(fixture.claudeRoot, 'task-planner'),
+      process.platform === 'win32' ? 'junction' : 'dir'
+    );
+    const maxCodexPathLength = Math.max(
+      join(fixture.codexRoot, 'task-planner', 'SKILL.md').length,
+      join(fixture.codexRoot, 'task-planner', 'references', 'example.md').length
+    );
+    const service = createSkillService(await createTestDatabase(), {
+      roots: fixture.roots,
+      packageDirectory: fixture.packageRoot,
+      fs: createPathLengthLimitedFileSystem(
+        fixture.codexRoot,
+        maxCodexPathLength
+      )
+    });
+
+    const result = await service.installSkill({
+      skillId: 'bundled:task-planner',
+      platform: 'codex'
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      platform: 'codex',
+      item: {
+        installation: {
+          claude: { state: 'conflict' },
+          codex: { state: 'installed' }
+        }
+      }
+    });
+    expect(await readFile(markerPath, 'utf8')).toBe('keep me');
+    expect(await readFile(join(fixture.codexRoot, 'task-planner', 'SKILL.md'), 'utf8'))
+      .toContain('# Task Planner');
     await rm(fixture.root, { recursive: true, force: true });
   });
 
@@ -547,7 +587,97 @@ describe('skill service', () => {
     expect(largeSkill?.files.at(-1)).toBe('SKILL.md');
     await rm(fixture.root, { recursive: true, force: true });
   });
+
+  it('installs a 1,001-file skill with deep paths without lengthening final paths', async () => {
+    const fixture = await createEmptyRoots();
+    const directoryName = 'beta-long';
+    const firstSegment = `references-${'a'.repeat(70)}`;
+    const secondSegment = `nested-${'b'.repeat(70)}`;
+    const sourceRoot = join(fixture.codexRoot, directoryName);
+    const deepSourceRoot = join(sourceRoot, firstSegment, secondSegment);
+    await mkdir(deepSourceRoot, { recursive: true });
+    await writeFile(
+      join(sourceRoot, 'SKILL.md'),
+      ['---', 'name: Beta Long', 'description: Long path fixture', '---'].join('\n'),
+      'utf8'
+    );
+    const fileNames = Array.from(
+      { length: 1000 },
+      (_, index) => `qa-file-${String(index + 1).padStart(4, '0')}-${'c'.repeat(48)}.md`
+    );
+    await Promise.all(
+      fileNames.map((fileName, index) =>
+        writeFile(join(deepSourceRoot, fileName), `fixture ${index}`, 'utf8')
+      )
+    );
+    const deepestFinalPath = join(
+      fixture.claudeRoot,
+      directoryName,
+      firstSegment,
+      secondSegment,
+      fileNames.at(-1)!
+    );
+    const service = createSkillService(await createTestDatabase(), {
+      roots: fixture.roots,
+      packageDirectory: fixture.packageRoot,
+      fs: createPathLengthLimitedFileSystem(
+        fixture.claudeRoot,
+        deepestFinalPath.length
+      )
+    });
+    const scan = await service.scanSkills();
+    const localSkill = scan.library.items.find((item) => item.name === 'Beta Long');
+    expect(localSkill).toMatchObject({ source: 'local', fileCount: 1001 });
+
+    const result = await service.installSkill({
+      skillId: localSkill!.id,
+      platform: 'claude'
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      platform: 'claude',
+      item: { installation: { claude: { state: 'installed' } } }
+    });
+    expect(
+      await readFile(
+        join(
+          fixture.claudeRoot,
+          directoryName,
+          firstSegment,
+          secondSegment,
+          fileNames.at(-1)!
+        ),
+        'utf8'
+      )
+    ).toBe('fixture 999');
+    expect((await readdir(join(fixture.claudeRoot, directoryName))).sort()).toEqual(
+      ['SKILL.md', firstSegment].sort()
+    );
+    await rm(fixture.root, { recursive: true, force: true });
+  });
 });
+
+function createPathLengthLimitedFileSystem(
+  targetRoot: string,
+  maximumPathLength: number
+): SkillFileSystem {
+  return {
+    ...nodeSkillFileSystem,
+    async writeFile(path, data) {
+      if (
+        (path === targetRoot || path.startsWith(`${targetRoot}${sep}`)) &&
+        path.length > maximumPathLength
+      ) {
+        throw Object.assign(new Error('path too long'), {
+          code: 'ENAMETOOLONG',
+          path
+        });
+      }
+      return nodeSkillFileSystem.writeFile(path, data);
+    }
+  };
+}
 
 async function createSkillFixture() {
   const fixture = await createEmptyRoots();

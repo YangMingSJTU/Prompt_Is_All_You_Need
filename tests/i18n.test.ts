@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { createTranslator, detectLocale, resolveLocalePreference } from '../desktop/renderer/i18n';
+import {
+  createTranslator,
+  detectLocale,
+  resolveLocalePreference,
+  translateForLocalePreference
+} from '../desktop/renderer/i18n';
 
 describe('i18n', () => {
+  it('uses the saved language for feedback shown immediately after switching', () => {
+    expect(translateForLocalePreference('en', 'zh-CN', 'settings.saved')).toBe(
+      'Settings saved'
+    );
+    expect(translateForLocalePreference('zh', 'en-US', 'settings.saved')).toBe(
+      '设置已保存'
+    );
+  });
+
   it('uses Chinese for zh local language', () => {
     const t = createTranslator(detectLocale('zh-CN'));
 

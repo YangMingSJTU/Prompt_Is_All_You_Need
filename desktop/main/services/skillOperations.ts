@@ -131,10 +131,14 @@ export async function installSkillContent(options: {
     };
   }
 
-  const stagingPath = join(targetRoot, `.spellbook-install-${randomUUID()}`);
+  let stagingPath: string | null = null;
   let targetReserved = false;
   try {
-    await fs.mkdir(stagingPath);
+    stagingPath = await createStagingDirectory(
+      targetRoot,
+      source.directoryName,
+      fs
+    );
     let writtenCount = 0;
     for (const portablePath of source.files) {
       const stagingFile = resolveInside(stagingPath, portablePath);
@@ -225,7 +229,9 @@ export async function installSkillContent(options: {
     targetReserved = false;
     return { ok: true, targetPath };
   } catch (error) {
-    await fs.rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
+    if (stagingPath) {
+      await fs.rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
+    }
     if (targetReserved) {
       await fs.rmdir(targetPath).catch(() => undefined);
     }
@@ -234,9 +240,44 @@ export async function installSkillContent(options: {
       error:
         error instanceof InstallFailure
           ? error.operationError
-          : mapTargetWriteError(error, stagingPath, 'copy_failed')
+          : mapTargetWriteError(error, stagingPath ?? targetRoot, 'copy_failed')
     };
   }
+}
+
+async function createStagingDirectory(
+  targetRoot: string,
+  targetDirectoryName: string,
+  fs: SkillFileSystem
+): Promise<string> {
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    // Keep the temporary path component no longer than the final directory name.
+    // Otherwise a final path that fits on Windows can fail only while staging.
+    const token = randomUUID().replaceAll('-', '');
+    const prefix =
+      targetDirectoryName.length >= 4
+        ? '.sb-'
+        : targetDirectoryName.length >= 2
+          ? '.'
+          : '';
+    const stagingName = `${prefix}${token}`.slice(0, targetDirectoryName.length);
+    if (!stagingName || stagingName === targetDirectoryName) {
+      continue;
+    }
+    const candidate = join(targetRoot, stagingName);
+    try {
+      await fs.mkdir(candidate);
+      return candidate;
+    } catch (error) {
+      if (nodeErrorCode(error) !== 'EEXIST') {
+        throw error;
+      }
+    }
+  }
+  throw Object.assign(new Error('Unable to reserve a staging directory'), {
+    code: 'EEXIST',
+    path: targetRoot
+  });
 }
 
 export async function packageSkillContent(options: {

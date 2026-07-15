@@ -11,7 +11,10 @@ import {
   type SettingsInfo
 } from '../../shared/settings';
 import type { Candidate, ScanProvider, ScanSourceConfig } from '../../shared/types';
-import type { TFunction } from '../i18n';
+import {
+  translateForLocalePreference,
+  type TFunction
+} from '../i18n';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
@@ -91,7 +94,12 @@ export function SettingsView({
     try {
       const result = await window.spellbook.updateSettings(patch);
       onSettingsChanged(result.settings);
-      showToast(result.warning ?? t('settings.saved'), {
+      const savedMessage = translateForLocalePreference(
+        result.settings.language,
+        globalThis.navigator?.language,
+        'settings.saved'
+      );
+      showToast(result.warning ?? savedMessage, {
         variant: result.warning ? 'warning' : 'success'
       });
     } finally {
