@@ -488,6 +488,57 @@ describe('skill service', () => {
     await rm(fixture.root, { recursive: true, force: true });
   });
 
+  it.runIf(process.platform === 'win32')(
+    'retries a transient Windows rename permission failure before atomically committing',
+    async () => {
+      const fixture = await createEmptyRoots();
+      const targetPath = join(fixture.codexRoot, 'task-planner');
+      let commitAttempts = 0;
+      let targetReservationAttempts = 0;
+      const service = createSkillService(await createTestDatabase(), {
+        roots: fixture.roots,
+        packageDirectory: fixture.packageRoot,
+        fs: {
+          ...nodeSkillFileSystem,
+          async mkdir(path, options) {
+            if (path === targetPath) {
+              targetReservationAttempts += 1;
+            }
+            return nodeSkillFileSystem.mkdir(path, options);
+          },
+          async rename(oldPath, newPath) {
+            if (newPath === targetPath) {
+              commitAttempts += 1;
+              if (commitAttempts === 1) {
+                throw Object.assign(new Error('transient Windows directory access'), {
+                  code: 'EPERM',
+                  syscall: 'rename',
+                  path: oldPath,
+                  dest: newPath
+                });
+              }
+            }
+            return nodeSkillFileSystem.rename(oldPath, newPath);
+          }
+        }
+      });
+
+      const result = await service.installSkill({
+        skillId: 'bundled:task-planner',
+        platform: 'codex'
+      });
+
+      expect(result).toMatchObject({ ok: true, targetPath });
+      expect(commitAttempts).toBe(2);
+      expect(targetReservationAttempts).toBe(0);
+      expect(await readFile(join(targetPath, 'SKILL.md'), 'utf8')).toContain(
+        '# Task Planner'
+      );
+      expect(await readdir(fixture.codexRoot)).toEqual(['task-planner']);
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  );
+
   it('preserves a concurrently created target and reports a conflict', async () => {
     const fixture = await createEmptyRoots();
     const targetPath = join(fixture.codexRoot, 'task-planner');
@@ -499,12 +550,20 @@ describe('skill service', () => {
       fs: {
         ...nodeSkillFileSystem,
         async mkdir(path, options) {
-          if (path === targetPath && !injected) {
+          if (process.platform !== 'win32' && path === targetPath && !injected) {
             injected = true;
             await nodeSkillFileSystem.mkdir(path);
             await nodeSkillFileSystem.writeFile(markerPath, Buffer.from('keep me'));
           }
           return nodeSkillFileSystem.mkdir(path, options);
+        },
+        async rename(oldPath, newPath) {
+          if (process.platform === 'win32' && newPath === targetPath && !injected) {
+            injected = true;
+            await nodeSkillFileSystem.mkdir(targetPath);
+            await nodeSkillFileSystem.writeFile(markerPath, Buffer.from('keep me'));
+          }
+          return nodeSkillFileSystem.rename(oldPath, newPath);
         }
       }
     });
@@ -762,7 +821,7 @@ describe('skill service', () => {
     await rm(fixture.root, { recursive: true, force: true });
   });
 
-  it('installs a 1,001-file skill with deep paths without lengthening final paths', async () => {
+  it('writes and atomically commits a 1,001-file deep skill on the host filesystem', async () => {
     const fixture = await createEmptyRoots();
     const directoryName = 'beta-long';
     const firstSegment = `references-${'a'.repeat(70)}`;
@@ -794,10 +853,7 @@ describe('skill service', () => {
     const service = createSkillService(await createTestDatabase(), {
       roots: fixture.roots,
       packageDirectory: fixture.packageRoot,
-      fs: createPathLengthLimitedFileSystem(
-        fixture.claudeRoot,
-        deepestFinalPath.length
-      )
+      fs: nodeSkillFileSystem
     });
     const scan = await service.scanSkills();
     const localSkill = scan.library.items.find((item) => item.name === 'Beta Long');
@@ -828,6 +884,18 @@ describe('skill service', () => {
     expect((await readdir(join(fixture.claudeRoot, directoryName))).sort()).toEqual(
       ['SKILL.md', firstSegment].sort()
     );
+    expect(await readdir(fixture.claudeRoot)).toEqual([directoryName]);
+    const installedScan = await scanSkillRoot(
+      { platform: 'claude', path: fixture.claudeRoot },
+      nodeSkillFileSystem
+    );
+    expect(installedScan.status).toBe('success');
+    if (installedScan.status !== 'success') {
+      throw new Error('Expected installed target scan to succeed');
+    }
+    expect(installedScan.skills).toHaveLength(1);
+    expect(installedScan.skills[0]).toMatchObject({ directoryName });
+    expect(installedScan.skills[0].files).toHaveLength(1001);
     await rm(fixture.root, { recursive: true, force: true });
   });
 });

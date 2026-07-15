@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type {
   SkillInstallation,
   SkillOperationError,
@@ -174,30 +175,17 @@ export async function installSkillContent(options: {
     }
 
     await assertSafeTargetRoot(targetRoot, fs);
-    try {
-      await fs.mkdir(targetPath);
-      targetReserved = true;
-    } catch (error) {
-      const code = nodeErrorCode(error);
-      if (code === 'EEXIST' || code === 'ENOTEMPTY' || code === 'EISDIR') {
-        throw new InstallFailure({
-          code: 'target_conflict',
-          path: targetPath,
-          retryable: true
-        });
-      }
-      throw new InstallFailure(mapTargetWriteError(error, targetPath, 'commit_failed'));
-    }
-
-    // POSIX rename replaces an empty directory, so keeping our exclusive reservation in
-    // place closes the no-replace race. Windows rename already refuses an existing target;
-    // remove only our empty reservation there, then rely on that native no-replace behavior.
-    if (process.platform === 'win32') {
+    // POSIX rename replaces an empty directory, so an exclusive reservation closes the
+    // no-replace race there. Windows directory rename already refuses an existing target.
+    // Do not create and immediately remove a Windows reservation: the deleted directory can
+    // remain pending briefly and make the following rename fail with EACCES/EPERM.
+    if (process.platform !== 'win32') {
       try {
-        await fs.rmdir(targetPath);
-        targetReserved = false;
+        await fs.mkdir(targetPath);
+        targetReserved = true;
       } catch (error) {
-        if (nodeErrorCode(error) === 'ENOTEMPTY' || nodeErrorCode(error) === 'EEXIST') {
+        const code = nodeErrorCode(error);
+        if (code === 'EEXIST' || code === 'ENOTEMPTY' || code === 'EISDIR') {
           throw new InstallFailure({
             code: 'target_conflict',
             path: targetPath,
@@ -207,25 +195,7 @@ export async function installSkillContent(options: {
         throw new InstallFailure(mapTargetWriteError(error, targetPath, 'commit_failed'));
       }
     }
-    try {
-      await fs.rename(stagingPath, targetPath);
-    } catch (error) {
-      const code = nodeErrorCode(error);
-      if (
-        code === 'EEXIST' ||
-        code === 'ENOTEMPTY' ||
-        (process.platform === 'win32' &&
-          (code === 'EACCES' || code === 'EPERM') &&
-          (await inspectExistingTarget(targetPath, fs)) !== null)
-      ) {
-        throw new InstallFailure({
-          code: 'target_conflict',
-          path: targetPath,
-          retryable: true
-        });
-      }
-      throw new InstallFailure(mapTargetWriteError(error, targetPath, 'commit_failed'));
-    }
+    await commitStagingDirectory(stagingPath, targetPath, fs);
     targetReserved = false;
     return { ok: true, targetPath };
   } catch (error) {
@@ -242,6 +212,42 @@ export async function installSkillContent(options: {
           ? error.operationError
           : mapTargetWriteError(error, stagingPath ?? targetRoot, 'copy_failed')
     };
+  }
+}
+
+const WINDOWS_COMMIT_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800];
+
+async function commitStagingDirectory(
+  stagingPath: string,
+  targetPath: string,
+  fs: SkillFileSystem
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await fs.rename(stagingPath, targetPath);
+      return;
+    } catch (error) {
+      const code = nodeErrorCode(error);
+      if (code === 'EEXIST' || code === 'ENOTEMPTY' || code === 'EISDIR') {
+        throw new InstallFailure({
+          code: 'target_conflict',
+          path: targetPath,
+          retryable: true
+        });
+      }
+      if (process.platform === 'win32' && (code === 'EACCES' || code === 'EPERM')) {
+        const existing = await inspectExistingTarget(targetPath, fs);
+        if (existing) {
+          throw new InstallFailure(existing.error);
+        }
+        const retryDelay = WINDOWS_COMMIT_RETRY_DELAYS_MS[attempt];
+        if (retryDelay !== undefined) {
+          await delay(retryDelay);
+          continue;
+        }
+      }
+      throw new InstallFailure(mapTargetWriteError(error, targetPath, 'commit_failed'));
+    }
   }
 }
 
