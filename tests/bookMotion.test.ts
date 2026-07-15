@@ -2,24 +2,21 @@ import { describe, expect, it } from 'vitest';
 import {
   BOOK_CONTENT_CYCLE_MS,
   BOOK_OPENING_DURATION_MS,
-  BOOK_PAGE_COUNT,
   getBookSettleProgress,
   getBookSpreadIndex,
-  getCoverOpenProgress,
-  getPageOpenProgress,
-  getPageTurnProgress,
-  getPageTurnVertex
+  getIconBookRevealProgress,
+  getIconBookTransitionPose,
+  getIconMarkOpacity,
+  getPageTurnProgress
 } from '../desktop/renderer/bookMotion';
 
 describe('recommendation book motion', () => {
-  it('opens the cover before the final page settles', () => {
-    expect(getCoverOpenProgress(0)).toBe(0);
-    expect(getCoverOpenProgress(1400)).toBeGreaterThan(0.4);
-    expect(getCoverOpenProgress(BOOK_OPENING_DURATION_MS)).toBe(1);
-    expect(getPageOpenProgress(1400, 0)).toBeGreaterThan(
-      getPageOpenProgress(1400, BOOK_PAGE_COUNT - 1)
-    );
-    expect(getPageOpenProgress(BOOK_OPENING_DURATION_MS, BOOK_PAGE_COUNT - 1)).toBe(1);
+  it('fades the icon mark while the curved book reveals with a small overshoot', () => {
+    expect(getIconMarkOpacity(0)).toBe(1);
+    expect(getIconBookRevealProgress(0)).toBe(0);
+    expect(getIconMarkOpacity(1400)).toBe(0);
+    expect(getIconBookRevealProgress(1400)).toBeGreaterThan(1);
+    expect(getIconBookRevealProgress(BOOK_OPENING_DURATION_MS)).toBe(1);
     expect(getBookSettleProgress(BOOK_OPENING_DURATION_MS)).toBe(1);
   });
 
@@ -30,16 +27,21 @@ describe('recommendation book motion', () => {
     expect(getPageTurnProgress(BOOK_CONTENT_CYCLE_MS)).toBe(0);
   });
 
-  it('curls the page around a leading edge and settles it flat', () => {
-    const start = getPageTurnVertex(1, 0.5, 0);
-    const middle = getPageTurnVertex(0.5, 0.5, 0.5);
-    const finish = getPageTurnVertex(1, 0.5, 1);
+  it('adds a small shared lift while the shader sweeps to the next spread', () => {
+    const start = getIconBookTransitionPose(0);
+    const middle = getIconBookTransitionPose(0.5);
+    const finish = getIconBookTransitionPose(1);
 
-    expect(start).toEqual({ xRatio: 1, yOffsetRatio: 0, zRatio: 0 });
-    expect(middle.zRatio).toBeGreaterThan(0.5);
-    expect(finish.xRatio).toBeCloseTo(-1, 8);
-    expect(finish.yOffsetRatio).toBeCloseTo(0, 8);
-    expect(finish.zRatio).toBeCloseTo(0, 8);
+    expect(start).toMatchObject({
+      glow: 0,
+      lift: 0,
+      scale: 1
+    });
+    expect(middle.glow).toBe(1);
+    expect(middle.lift).toBeGreaterThan(0);
+    expect(middle.scale).toBeLessThan(1);
+    expect(finish.scale).toBe(1);
+    expect(finish.glow).toBeCloseTo(0, 8);
   });
 
   it('advances the prepared artwork only after a complete page cycle', () => {

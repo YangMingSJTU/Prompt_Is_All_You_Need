@@ -1458,7 +1458,7 @@ p {
   display: block;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 16px 15px rgba(0, 0, 0, 0.34));
+  filter: drop-shadow(0 0 12px rgba(193, 145, 65, 0.14));
 }
 
 .candidate-memory-phrase {

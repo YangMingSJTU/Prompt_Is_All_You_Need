@@ -1,6 +1,11 @@
 export const BOOK_OPENING_DURATION_MS = 3200;
-export const BOOK_PAGE_COUNT = 6;
 export const BOOK_CONTENT_CYCLE_MS = 6500;
+
+export interface IconBookTransitionPose {
+  glow: number;
+  lift: number;
+  scale: number;
+}
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -8,6 +13,12 @@ function clamp01(value: number): number {
 
 function smootherUnitProgress(value: number): number {
   const progress = clamp01(value);
+  if (progress <= Number.EPSILON) {
+    return 0;
+  }
+  if (progress >= 1 - Number.EPSILON) {
+    return 1;
+  }
   return progress * progress * progress * (progress * (progress * 6 - 15) + 10);
 }
 
@@ -16,13 +27,19 @@ export function smoothProgress(startMs: number, endMs: number, elapsedMs: number
   return progress * progress * (3 - 2 * progress);
 }
 
-export function getCoverOpenProgress(elapsedMs: number): number {
-  return smoothProgress(420, 2380, elapsedMs);
+function backOutProgress(value: number): number {
+  const progress = clamp01(value);
+  const overshoot = 1.35;
+  const shifted = progress - 1;
+  return 1 + (overshoot + 1) * shifted ** 3 + overshoot * shifted ** 2;
 }
 
-export function getPageOpenProgress(elapsedMs: number, pageIndex: number): number {
-  const index = Math.min(BOOK_PAGE_COUNT - 1, Math.max(0, pageIndex));
-  return smoothProgress(980 + index * 115, 2520 + index * 92, elapsedMs);
+export function getIconBookRevealProgress(elapsedMs: number): number {
+  return backOutProgress((elapsedMs - 420) / (2380 - 420));
+}
+
+export function getIconMarkOpacity(elapsedMs: number): number {
+  return 1 - smoothProgress(360, 1220, elapsedMs);
 }
 
 export function getBookSettleProgress(elapsedMs: number): number {
@@ -45,26 +62,14 @@ export function getBookSpreadIndex(contentElapsedMs: number, spreadCount: number
   return cycleIndex % safeSpreadCount;
 }
 
-export function getPageTurnVertex(
-  normalizedX: number,
-  normalizedY: number,
+export function getIconBookTransitionPose(
   turnProgress: number
-): { xRatio: number; yOffsetRatio: number; zRatio: number } {
-  const x = clamp01(normalizedX);
-  const y = clamp01(normalizedY);
+): IconBookTransitionPose {
   const progress = clamp01(turnProgress);
-  const columnDelay = 0.12 * (1 - x);
-  const delayedProgress = clamp01((progress - columnDelay) / (1 - columnDelay));
-  const columnProgress = 1 - Math.pow(1 - delayedProgress, 1.18);
-  const angle = Math.PI * columnProgress;
-  const lift = Math.sin(Math.PI * progress);
-  const pageCenterBias = 1 - Math.abs(y * 2 - 1);
-  const curl = Math.sin(Math.PI * x) * lift * (0.09 + pageCenterBias * 0.045);
-  const edgeRipple = Math.sin(y * Math.PI * 2 + progress * Math.PI) * x * lift * 0.006;
-
+  const glow = Math.sin(Math.PI * progress);
   return {
-    xRatio: x * Math.cos(angle),
-    yOffsetRatio: Math.sin((y - 0.5) * Math.PI) * Math.sin(Math.PI * x) * lift * 0.012,
-    zRatio: x * Math.sin(angle) + curl + edgeRipple
+    glow,
+    lift: glow * 0.018,
+    scale: 1 - glow * 0.025
   };
 }

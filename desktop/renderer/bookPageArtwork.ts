@@ -1,14 +1,22 @@
 export const BOOK_PAGE_TEXTURE_WIDTH = 512;
 export const BOOK_PAGE_TEXTURE_HEIGHT = 720;
 export const BOOK_ARTWORK_SPREAD_COUNT = 8;
+export const BOOK_PAGE_WRITING_WIDTH = 400;
+
+const GRIMOIRE_GOLD = '#cfa85c';
+const GRIMOIRE_GOLD_BRIGHT = '#f0d79b';
+const GRIMOIRE_INK = '#e7dcc1';
+const GRIMOIRE_MUTED = '#988da3';
+const GRIMOIRE_SURFACE = '#232229';
 
 export type BookPageSide = 'left' | 'right';
-export type BookPageLayout = 'text' | 'diagram';
+export type BookPageLayout = 'runes' | 'sigil';
 
 export interface SpellPlacement {
   fontSize: number;
   maxWidth: number;
   role: 'featured' | 'entry';
+  targetWidth: number;
   text: string;
   x: number;
   y: number;
@@ -36,7 +44,7 @@ export interface BookSpreadArtwork {
   right: BookPageArtwork;
 }
 
-type SpellSlot = Omit<SpellPlacement, 'text'>;
+type SpellSlot = Omit<SpellPlacement, 'targetWidth' | 'text'>;
 
 const SPELL_POOL = [
   'Aberto',
@@ -92,31 +100,26 @@ const SPELL_POOL = [
   'Wingardium Leviosa'
 ];
 
-const TEXT_PAGE_SLOTS: SpellSlot[] = [
-  { x: 72, y: 112, fontSize: 23, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 178, fontSize: 22, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 244, fontSize: 23, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 310, fontSize: 22, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 376, fontSize: 23, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 442, fontSize: 22, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 508, fontSize: 23, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 574, fontSize: 22, maxWidth: 356, role: 'entry' },
-  { x: 72, y: 640, fontSize: 23, maxWidth: 356, role: 'entry' }
+const RUNES_PAGE_SLOTS: SpellSlot[] = Array.from({ length: 8 }, (_, index) => ({
+  x: 92,
+  y: 150 + index * 64,
+  fontSize: index % 2 === 0 ? 20 : 19,
+  maxWidth: 352,
+  role: 'entry'
+}));
+
+const SIGIL_PAGE_SLOTS: SpellSlot[] = [
+  { x: 256, y: 112, fontSize: 24, maxWidth: 344, role: 'featured' },
+  ...Array.from({ length: 7 }, (_, index) => ({
+    x: 88,
+    y: 450 + index * 29,
+    fontSize: 16,
+    maxWidth: 356,
+    role: 'entry' as const
+  }))
 ];
 
-const DIAGRAM_PAGE_SLOTS: SpellSlot[] = [
-  { x: 256, y: 108, fontSize: 28, maxWidth: 372, role: 'featured' },
-  { x: 66, y: 448, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 282, y: 448, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 66, y: 506, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 282, y: 506, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 66, y: 564, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 282, y: 564, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 66, y: 622, fontSize: 21, maxWidth: 166, role: 'entry' },
-  { x: 282, y: 622, fontSize: 21, maxWidth: 166, role: 'entry' }
-];
-
-const SPELLS_PER_SPREAD = TEXT_PAGE_SLOTS.length + DIAGRAM_PAGE_SLOTS.length;
+const SPELLS_PER_SPREAD = RUNES_PAGE_SLOTS.length + SIGIL_PAGE_SLOTS.length;
 
 function hashSeed(value: string): number {
   let hash = 2166136261;
@@ -147,6 +150,19 @@ function shuffled<T>(values: T[], random: () => number): T[] {
   return result;
 }
 
+function createSpellPlacement(
+  slot: SpellSlot,
+  baseSpell: string,
+  random: () => number
+): SpellPlacement {
+  const widthRatio = 0.5 + random() * 0.4;
+  return {
+    ...slot,
+    targetWidth: Math.min(slot.maxWidth, BOOK_PAGE_WRITING_WIDTH * widthRatio),
+    text: baseSpell
+  };
+}
+
 function createPageArtwork(
   side: BookPageSide,
   folio: number,
@@ -154,23 +170,25 @@ function createPageArtwork(
   spellNames: string[],
   random: () => number
 ): BookPageArtwork {
-  const slots = layout === 'text' ? TEXT_PAGE_SLOTS : DIAGRAM_PAGE_SLOTS;
+  const slots = layout === 'runes' ? RUNES_PAGE_SLOTS : SIGIL_PAGE_SLOTS;
   return {
     folio,
     layout,
     seed: Math.floor(random() * 0xffffffff) >>> 0,
     side,
     sigil:
-      layout === 'diagram'
+      layout === 'sigil'
         ? {
-            radius: 112,
+            radius: 104,
             rotation: random() * Math.PI * 2,
             variant: Math.floor(random() * 4),
             x: 256,
-            y: 278
+            y: 286
           }
         : null,
-    spells: slots.map((slot, index) => ({ ...slot, text: spellNames[index] }))
+    spells: slots.map((slot, index) =>
+      createSpellPlacement(slot, spellNames[index], random)
+    )
   };
 }
 
@@ -190,10 +208,11 @@ export function createBookArtworkDeck(
     const spreadSpellNames = shuffled(spellSource, random).slice(0, SPELLS_PER_SPREAD);
     previousSpellNames = new Set(spreadSpellNames);
 
-    const diagramOnLeft = (spreadIndex + Math.floor(random() * 2)) % 2 === 0;
-    const leftLayout: BookPageLayout = diagramOnLeft ? 'diagram' : 'text';
-    const rightLayout: BookPageLayout = diagramOnLeft ? 'text' : 'diagram';
-    const leftSpellCount = leftLayout === 'text' ? TEXT_PAGE_SLOTS.length : DIAGRAM_PAGE_SLOTS.length;
+    const sigilOnLeft = (spreadIndex + Math.floor(random() * 2)) % 2 === 0;
+    const leftLayout: BookPageLayout = sigilOnLeft ? 'sigil' : 'runes';
+    const rightLayout: BookPageLayout = sigilOnLeft ? 'runes' : 'sigil';
+    const leftSpellCount =
+      leftLayout === 'runes' ? RUNES_PAGE_SLOTS.length : SIGIL_PAGE_SLOTS.length;
 
     spreads.push({
       left: createPageArtwork(
@@ -216,229 +235,277 @@ export function createBookArtworkDeck(
   return spreads;
 }
 
-function drawParchment(
+function roundedRectPath(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - safeRadius,
+    y + height
+  );
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+}
+
+export function traceBookIconPage(
+  context: CanvasRenderingContext2D,
+  side: BookPageSide
+): void {
+  const mirrorX = (x: number) =>
+    side === 'left' ? x : BOOK_PAGE_TEXTURE_WIDTH - x;
+
+  context.beginPath();
+  context.moveTo(mirrorX(498), 142);
+  context.bezierCurveTo(
+    mirrorX(386),
+    36,
+    mirrorX(182),
+    34,
+    mirrorX(64),
+    72
+  );
+  context.quadraticCurveTo(mirrorX(48), 78, mirrorX(44), 100);
+  context.bezierCurveTo(
+    mirrorX(38),
+    262,
+    mirrorX(28),
+    486,
+    mirrorX(34),
+    616
+  );
+  context.quadraticCurveTo(mirrorX(34), 640, mirrorX(52), 646);
+  context.bezierCurveTo(
+    mirrorX(184),
+    620,
+    mirrorX(356),
+    664,
+    mirrorX(498),
+    706
+  );
+  context.lineTo(mirrorX(498), 142);
+  context.closePath();
+}
+
+function drawGraphicPage(
   context: CanvasRenderingContext2D,
   artwork: BookPageArtwork
 ): void {
   const width = BOOK_PAGE_TEXTURE_WIDTH;
   const height = BOOK_PAGE_TEXTURE_HEIGHT;
-  const spineOnRight = artwork.side === 'left';
-  const background = context.createLinearGradient(0, 0, width, 0);
-  if (spineOnRight) {
-    background.addColorStop(0, '#f2e9d2');
-    background.addColorStop(0.78, '#ead9b2');
-    background.addColorStop(1, '#b99a67');
-  } else {
-    background.addColorStop(0, '#b99a67');
-    background.addColorStop(0.22, '#ead9b2');
-    background.addColorStop(1, '#f2e9d2');
-  }
-  context.fillStyle = background;
-  context.fillRect(0, 0, width, height);
+  context.clearRect(0, 0, width, height);
 
-  const random = createRandom(artwork.seed);
-  for (let index = 0; index < 58; index += 1) {
-    const x = 24 + random() * (width - 48);
-    const y = 24 + random() * (height - 48);
-    const fiberWidth = 10 + random() * 38;
-    context.fillStyle = `rgba(91, 58, 27, ${0.014 + random() * 0.024})`;
-    context.fillRect(x, y, fiberWidth, 0.6 + random() * 0.7);
-  }
+  traceBookIconPage(context, artwork.side);
+  const surface = context.createLinearGradient(
+    artwork.side === 'left' ? 0 : width,
+    0,
+    artwork.side === 'left' ? width : 0,
+    0
+  );
+  surface.addColorStop(0, '#2d2a32');
+  surface.addColorStop(0.7, GRIMOIRE_SURFACE);
+  surface.addColorStop(1, '#15161a');
+  context.fillStyle = surface;
+  context.fill();
+  context.strokeStyle = '#0b0c0f';
+  context.lineWidth = 11;
+  context.stroke();
 
+  context.save();
+  traceBookIconPage(context, artwork.side);
+  context.shadowBlur = 8;
+  context.shadowColor = 'rgba(207, 168, 92, 0.4)';
+  context.strokeStyle = GRIMOIRE_GOLD;
+  context.lineWidth = 4;
+  context.stroke();
+  context.shadowBlur = 0;
+  context.strokeStyle = GRIMOIRE_GOLD_BRIGHT;
+  context.lineWidth = 1.25;
+  context.stroke();
+  context.restore();
+
+  traceBookIconPage(context, artwork.side);
+  context.clip();
+
+  const random = createRandom(artwork.seed ^ 0x67a9d31f);
   for (let index = 0; index < 3; index += 1) {
-    const x = 70 + random() * (width - 140);
-    const y = 84 + random() * (height - 168);
-    const stain = context.createRadialGradient(x, y, 0, x, y, 30 + random() * 36);
-    stain.addColorStop(0, 'rgba(128, 84, 35, 0.022)');
-    stain.addColorStop(1, 'rgba(128, 84, 35, 0)');
-    context.fillStyle = stain;
-    context.fillRect(0, 0, width, height);
+    const x = index % 2 === 0 ? 62 + random() * 18 : width - 80 + random() * 18;
+    const y = 170 + random() * 360;
+    const size = 2.5 + random() * 1.5;
+    context.save();
+    context.translate(x, y);
+    context.rotate(Math.PI / 4);
+    context.fillStyle = index % 2 === 0 ? GRIMOIRE_GOLD : GRIMOIRE_MUTED;
+    context.fillRect(-size / 2, -size / 2, size, size);
+    context.restore();
   }
-
-  context.strokeStyle = 'rgba(91, 58, 27, 0.17)';
-  context.lineWidth = 2;
-  context.strokeRect(20, 18, width - 40, height - 36);
-  context.strokeStyle = 'rgba(151, 105, 44, 0.1)';
-  context.lineWidth = 1;
-  context.strokeRect(28, 26, width - 56, height - 52);
 }
 
-function drawChapterHeader(
+function drawSpacedText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  y: number,
+  spacing: number
+): void {
+  const characters = [...text];
+  const widths = characters.map((character) => context.measureText(character).width);
+  const totalWidth =
+    widths.reduce((sum, width) => sum + width, 0) +
+    Math.max(0, characters.length - 1) * spacing;
+  let cursor = centerX - totalWidth / 2;
+  context.textAlign = 'left';
+  context.textBaseline = 'middle';
+  characters.forEach((character, index) => {
+    context.fillText(character, cursor, y);
+    cursor += widths[index] + spacing;
+  });
+}
+
+function drawGlyphHeader(
   context: CanvasRenderingContext2D,
   artwork: BookPageArtwork
 ): void {
-  const title = artwork.layout === 'text' ? 'INCANTAMENTA' : 'SIGILLUM ARCANA';
   context.save();
-  context.fillStyle = '#4a2b19';
-  context.font = "700 14px 'Palatino Linotype', 'Book Antiqua', Georgia, serif";
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText(title, BOOK_PAGE_TEXTURE_WIDTH / 2, 59);
-
-  context.strokeStyle = '#9a672f';
-  context.fillStyle = '#8c5728';
-  context.lineWidth = 1;
+  context.lineCap = 'round';
+  context.strokeStyle = 'rgba(207, 168, 92, 0.58)';
+  context.lineWidth = 1.5;
   context.beginPath();
-  context.moveTo(74, 78);
-  context.lineTo(238, 78);
-  context.moveTo(274, 78);
-  context.lineTo(438, 78);
+  context.moveTo(74, 88);
+  context.lineTo(154, 88);
+  context.moveTo(358, 88);
+  context.lineTo(438, 88);
   context.stroke();
-  context.beginPath();
-  context.arc(256, 78, 3, 0, Math.PI * 2);
-  context.fill();
+
+  context.fillStyle = GRIMOIRE_GOLD;
+  context.font = "600 11px Georgia, 'Times New Roman', serif";
+  drawSpacedText(
+    context,
+    artwork.layout === 'runes' ? 'INCANTAMENTA' : 'SIGILLUM ARCANA',
+    256,
+    88,
+    2.4
+  );
+
+  drawDiamond(context, 256, 109, 6, GRIMOIRE_MUTED);
   context.restore();
 }
 
 function fitSpellFont(
   context: CanvasRenderingContext2D,
-  spell: SpellPlacement
+  spell: SpellPlacement,
+  minimumFontSize: number
 ): number {
   let fontSize = spell.fontSize;
-  context.font = `italic 700 ${fontSize}px 'Palatino Linotype', 'Book Antiqua', Georgia, serif`;
-  while (context.measureText(spell.text).width > spell.maxWidth && fontSize > 14) {
+  const targetWidth = Math.min(spell.targetWidth, spell.maxWidth);
+  context.font = `italic 600 ${fontSize}px Georgia, 'Times New Roman', serif`;
+  while (context.measureText(spell.text).width > targetWidth && fontSize > minimumFontSize) {
     fontSize -= 1;
-    context.font = `italic 700 ${fontSize}px 'Palatino Linotype', 'Book Antiqua', Georgia, serif`;
+    context.font = `italic 600 ${fontSize}px Georgia, 'Times New Roman', serif`;
   }
   return fontSize;
 }
 
-function drawEntryMarker(
+function drawDiamond(
   context: CanvasRenderingContext2D,
   x: number,
   y: number,
-  index: number
+  size: number,
+  color: string
 ): void {
   context.save();
-  context.strokeStyle = '#87511f';
-  context.fillStyle = '#704019';
-  context.lineWidth = 1.2;
-  context.beginPath();
-  context.arc(x, y, 6.5, 0, Math.PI * 2);
-  context.stroke();
-  context.font = "700 8px 'Palatino Linotype', Georgia, serif";
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText(String(index + 1), x, y + 0.5);
+  context.translate(x, y);
+  context.rotate(Math.PI / 4);
+  context.fillStyle = color;
+  roundedRectPath(context, -size / 2, -size / 2, size, size, size * 0.2);
+  context.fill();
   context.restore();
 }
 
-function drawAnnotationLine(
+function drawArcaneRule(
   context: CanvasRenderingContext2D,
   x: number,
   y: number,
-  width: number
+  width: number,
+  index: number,
+  compact: boolean
 ): void {
+  const endX = x + width;
   context.save();
-  context.strokeStyle = 'rgba(73, 42, 23, 0.42)';
-  context.lineWidth = 1;
+  context.lineCap = 'round';
+  context.strokeStyle = index % 2 === 0
+    ? 'rgba(207, 168, 92, 0.42)'
+    : 'rgba(152, 141, 163, 0.42)';
+  context.lineWidth = compact ? 1 : 1.4;
   context.beginPath();
   context.moveTo(x, y);
-  context.lineTo(x + width, y);
+  context.lineTo(endX, y);
   context.stroke();
+
+  const markerRatios = compact ? [0.44, 0.82] : [0.3, 0.63, 0.88];
+  markerRatios.forEach((ratio, markerIndex) => {
+    const markerX = x + width * ratio;
+    if ((index + markerIndex) % 2 === 0) {
+      drawDiamond(
+        context,
+        markerX,
+        y,
+        compact ? 3.5 : 4.5,
+        markerIndex % 2 === 0 ? GRIMOIRE_GOLD : GRIMOIRE_MUTED
+      );
+      return;
+    }
+    context.fillStyle = markerIndex % 2 === 0 ? GRIMOIRE_GOLD : GRIMOIRE_MUTED;
+    context.beginPath();
+    context.arc(markerX, y, compact ? 1.5 : 2, 0, Math.PI * 2);
+    context.fill();
+  });
   context.restore();
 }
 
-function drawEntrySpell(
+function drawRuneEntry(
   context: CanvasRenderingContext2D,
   spell: SpellPlacement,
   index: number,
-  random: () => number
+  compact = false
 ): void {
-  context.save();
-  const fontSize = fitSpellFont(context, spell);
-  context.fillStyle = '#392016';
+  const markerX = compact ? 67 : 66;
+  const markerY = spell.y;
+  const accentColor = index % 2 === 0 ? GRIMOIRE_MUTED : GRIMOIRE_GOLD;
+  drawDiamond(context, markerX, markerY, compact ? 5 : 7, accentColor);
+
+  const fontSize = fitSpellFont(context, spell, compact ? 11 : 13);
+  context.fillStyle = GRIMOIRE_INK;
+  context.font = `italic 600 ${fontSize}px Georgia, 'Times New Roman', serif`;
   context.textAlign = 'left';
-  context.textBaseline = 'alphabetic';
-  context.fillText(spell.text, spell.x, spell.y);
-  drawEntryMarker(context, spell.x - 28, spell.y - fontSize * 0.34, index);
+  context.textBaseline = 'middle';
+  context.fillText(spell.text, spell.x, markerY, spell.maxWidth);
 
-  drawAnnotationLine(context, spell.x, spell.y + 17, 250 + random() * 92);
-
-  context.strokeStyle = 'rgba(92, 53, 25, 0.24)';
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(48, spell.y + 42);
-  context.lineTo(456, spell.y + 42);
-  context.stroke();
-  context.restore();
-}
-
-function drawDiagramEntry(
-  context: CanvasRenderingContext2D,
-  spell: SpellPlacement,
-  random: () => number
-): void {
-  context.save();
-  const fontSize = fitSpellFont(context, spell);
-  context.fillStyle = '#392016';
-  context.textAlign = 'left';
-  context.textBaseline = 'alphabetic';
-  context.fillText(spell.text, spell.x, spell.y);
-
-  context.strokeStyle = '#7e4d1d';
-  context.fillStyle = '#6f3d18';
-  context.lineWidth = 1.1;
-  context.beginPath();
-  context.arc(spell.x - 18, spell.y - fontSize * 0.34, 5.5, 0, Math.PI * 2);
-  context.stroke();
-  context.beginPath();
-  context.arc(spell.x - 18, spell.y - fontSize * 0.34, 1.7, 0, Math.PI * 2);
-  context.fill();
-
-  context.strokeStyle = 'rgba(73, 42, 23, 0.44)';
-  context.beginPath();
-  context.moveTo(spell.x, spell.y + 18);
-  context.lineTo(spell.x + Math.min(spell.maxWidth, 116 + random() * 40), spell.y + 16);
-  context.stroke();
-  context.restore();
-}
-
-function drawFeaturedSpell(
-  context: CanvasRenderingContext2D,
-  spell: SpellPlacement
-): void {
-  context.save();
-  const fontSize = fitSpellFont(context, spell);
-  context.fillStyle = '#351d13';
-  context.textAlign = 'center';
-  context.textBaseline = 'alphabetic';
-  context.fillText(spell.text, spell.x, spell.y);
-  const width = Math.min(context.measureText(spell.text).width + 48, 310);
-  context.strokeStyle = '#8a5524';
-  context.lineWidth = 1.2;
-  context.beginPath();
-  context.moveTo(spell.x - width / 2, spell.y + fontSize * 0.55);
-  context.lineTo(spell.x - 13, spell.y + fontSize * 0.55);
-  context.moveTo(spell.x + 13, spell.y + fontSize * 0.55);
-  context.lineTo(spell.x + width / 2, spell.y + fontSize * 0.55);
-  context.stroke();
-  context.fillStyle = '#7f491f';
-  context.beginPath();
-  context.arc(spell.x, spell.y + fontSize * 0.55, 2.6, 0, Math.PI * 2);
-  context.fill();
-  context.restore();
-}
-
-function strokePolygon(
-  context: CanvasRenderingContext2D,
-  radius: number,
-  points: number,
-  rotation: number
-): void {
-  context.beginPath();
-  for (let index = 0; index <= points; index += 1) {
-    const pointIndex = index === points ? 0 : index;
-    const angle = rotation + (pointIndex / points) * Math.PI * 2;
-    const x = Math.cos(angle) * radius;
-    const y = Math.sin(angle) * radius;
-    if (index === 0) {
-      context.moveTo(x, y);
-    } else {
-      context.lineTo(x, y);
-    }
-  }
-  context.stroke();
+  const ruleWidth = compact
+    ? Math.min(292, spell.targetWidth * 0.86)
+    : Math.min(332, spell.targetWidth * 0.92);
+  drawArcaneRule(
+    context,
+    spell.x,
+    markerY + (compact ? 11 : 18),
+    ruleWidth,
+    index,
+    compact
+  );
 }
 
 function strokeStar(
@@ -468,60 +535,98 @@ function drawSigil(context: CanvasRenderingContext2D, sigil: SigilPlacement): vo
   context.save();
   context.translate(sigil.x, sigil.y);
   context.rotate(sigil.rotation);
-  context.strokeStyle = '#663613';
-  context.fillStyle = '#663613';
-  context.lineWidth = 2.4;
 
+  context.strokeStyle = 'rgba(207, 168, 92, 0.12)';
+  context.lineWidth = 18;
+  context.beginPath();
+  context.arc(0, 0, sigil.radius + 16, 0, Math.PI * 2);
+  context.stroke();
+
+  context.strokeStyle = GRIMOIRE_GOLD;
+  context.lineWidth = 4;
   context.beginPath();
   context.arc(0, 0, sigil.radius, 0, Math.PI * 2);
   context.stroke();
+
+  context.strokeStyle = GRIMOIRE_MUTED;
+  context.lineWidth = 3;
   context.beginPath();
-  context.arc(0, 0, sigil.radius * 0.84, 0, Math.PI * 2);
-  context.stroke();
-  context.beginPath();
-  context.arc(0, 0, sigil.radius * 0.3, 0, Math.PI * 2);
+  context.arc(0, 0, sigil.radius * 0.72, 0, Math.PI * 2);
   context.stroke();
 
-  if (sigil.variant === 0) {
-    strokeStar(context, sigil.radius * 0.68, 5, 2, -Math.PI / 2);
-  } else if (sigil.variant === 1) {
-    strokePolygon(context, sigil.radius * 0.66, 3, -Math.PI / 2);
-    strokePolygon(context, sigil.radius * 0.66, 3, Math.PI / 2);
-  } else if (sigil.variant === 2) {
-    strokePolygon(context, sigil.radius * 0.64, 4, Math.PI / 4);
-    strokePolygon(context, sigil.radius * 0.43, 4, 0);
-  } else {
-    strokeStar(context, sigil.radius * 0.68, 7, 3, -Math.PI / 2);
+  context.strokeStyle = 'rgba(240, 215, 155, 0.66)';
+  context.lineWidth = 1.5;
+  context.beginPath();
+  context.arc(0, 0, sigil.radius * 0.88, 0, Math.PI * 2);
+  context.stroke();
+
+  context.strokeStyle = GRIMOIRE_GOLD;
+  context.lineWidth = 3;
+
+  const starPoints = sigil.variant % 2 === 0 ? 5 : 7;
+  strokeStar(
+    context,
+    sigil.radius * 0.55,
+    starPoints,
+    sigil.variant % 2 === 0 ? 2 : 3,
+    -Math.PI / 2
+  );
+
+  for (let index = 0; index < 8; index += 1) {
+    const angle = (index / 8) * Math.PI * 2;
+    drawDiamond(
+      context,
+      Math.cos(angle) * sigil.radius * 0.86,
+      Math.sin(angle) * sigil.radius * 0.86,
+      10,
+      index % 2 === 0 ? GRIMOIRE_MUTED : GRIMOIRE_GOLD
+    );
   }
 
-  const tickCount = 16;
-  for (let index = 0; index < tickCount; index += 1) {
-    const angle = (index / tickCount) * Math.PI * 2;
-    const inner = sigil.radius * (index % 4 === 0 ? 0.72 : 0.78);
-    const outer = sigil.radius * 0.94;
-    context.beginPath();
-    context.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
-    context.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
-    context.stroke();
-  }
-
+  context.fillStyle = GRIMOIRE_GOLD;
   context.beginPath();
-  context.arc(0, 0, 4, 0, Math.PI * 2);
+  context.arc(0, 0, 9, 0, Math.PI * 2);
   context.fill();
+  context.strokeStyle = GRIMOIRE_GOLD_BRIGHT;
+  context.lineWidth = 2;
+  context.stroke();
   context.restore();
 }
 
-function drawTextPage(
+function drawFeaturedSpell(
+  context: CanvasRenderingContext2D,
+  spell: SpellPlacement
+): void {
+  const title = spell.text.toUpperCase();
+  const fontSize = fitSpellFont(context, { ...spell, text: title }, 14);
+  context.fillStyle = GRIMOIRE_GOLD_BRIGHT;
+  context.font = `italic 700 ${fontSize}px Georgia, 'Times New Roman', serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(title, 256, 124, 318);
+
+  context.strokeStyle = 'rgba(207, 168, 92, 0.68)';
+  context.lineCap = 'round';
+  context.lineWidth = 1.5;
+  context.beginPath();
+  context.moveTo(106, 151);
+  context.lineTo(224, 151);
+  context.moveTo(288, 151);
+  context.lineTo(406, 151);
+  context.stroke();
+  drawDiamond(context, 256, 151, 7, GRIMOIRE_MUTED);
+}
+
+function drawRunesPage(
   context: CanvasRenderingContext2D,
   artwork: BookPageArtwork
 ): void {
-  const random = createRandom(artwork.seed ^ 0x517cc1b7);
   artwork.spells.forEach((spell, index) => {
-    drawEntrySpell(context, spell, index, random);
+    drawRuneEntry(context, spell, index);
   });
 }
 
-function drawDiagramPage(
+function drawSigilPage(
   context: CanvasRenderingContext2D,
   artwork: BookPageArtwork
 ): void {
@@ -532,23 +637,30 @@ function drawDiagramPage(
   if (artwork.sigil) {
     drawSigil(context, artwork.sigil);
   }
-
-  const random = createRandom(artwork.seed ^ 0x8f4d13a9);
-  entries.forEach((spell) => {
-    drawDiagramEntry(context, spell, random);
+  entries.forEach((spell, index) => {
+    drawRuneEntry(context, spell, index, true);
   });
 }
 
-function drawFolio(
+function drawPageFooter(
   context: CanvasRenderingContext2D,
   artwork: BookPageArtwork
 ): void {
   context.save();
-  context.fillStyle = 'rgba(91, 58, 27, 0.5)';
-  context.font = "600 14px 'Palatino Linotype', Georgia, serif";
+  context.strokeStyle = 'rgba(207, 168, 92, 0.48)';
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(184, 650);
+  context.lineTo(226, 650);
+  context.moveTo(286, 650);
+  context.lineTo(328, 650);
+  context.stroke();
+  drawDiamond(context, 256, 650, 5, GRIMOIRE_MUTED);
+  context.fillStyle = GRIMOIRE_GOLD;
+  context.font = "italic 600 11px Georgia, 'Times New Roman', serif";
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillText(String(artwork.folio).padStart(2, '0'), BOOK_PAGE_TEXTURE_WIDTH / 2, 684);
+  context.fillText(String(artwork.folio).padStart(2, '0'), 256, 671);
   context.restore();
 }
 
@@ -556,12 +668,14 @@ export function drawBookPageArtwork(
   context: CanvasRenderingContext2D,
   artwork: BookPageArtwork
 ): void {
-  drawParchment(context, artwork);
-  drawChapterHeader(context, artwork);
-  if (artwork.layout === 'text') {
-    drawTextPage(context, artwork);
+  context.save();
+  drawGraphicPage(context, artwork);
+  drawGlyphHeader(context, artwork);
+  if (artwork.layout === 'runes') {
+    drawRunesPage(context, artwork);
   } else {
-    drawDiagramPage(context, artwork);
+    drawSigilPage(context, artwork);
   }
-  drawFolio(context, artwork);
+  drawPageFooter(context, artwork);
+  context.restore();
 }

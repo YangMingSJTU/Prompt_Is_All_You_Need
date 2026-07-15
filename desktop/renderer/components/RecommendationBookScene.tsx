@@ -1,22 +1,22 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {
   BOOK_OPENING_DURATION_MS,
-  BOOK_PAGE_COUNT,
   getBookSettleProgress,
-  getCoverOpenProgress,
-  getPageOpenProgress,
   getBookSpreadIndex,
-  getPageTurnProgress,
-  getPageTurnVertex
+  getIconBookRevealProgress,
+  getIconBookTransitionPose,
+  getIconMarkOpacity,
+  getPageTurnProgress
 } from '../bookMotion';
 import {
   BOOK_PAGE_TEXTURE_HEIGHT,
   BOOK_PAGE_TEXTURE_WIDTH,
   createBookArtworkDeck,
   drawBookPageArtwork,
-  type BookPageArtwork
+  traceBookIconPage,
+  type BookPageArtwork,
+  type BookPageSide
 } from '../bookPageArtwork';
 
 type RecommendationBookPhase = 'opening' | 'message' | 'ready';
@@ -35,8 +35,9 @@ interface PageSurface {
 const PAGE_WIDTH = 1.34;
 const PAGE_TEXTURE_SCALE = 2;
 const PAGE_HEIGHT = 1.92;
+const CAMERA_VIEW_HEIGHT = 3.2;
 
-function createPageSurface(mirrored: boolean): PageSurface {
+function createPageSurface(): PageSurface {
   const canvas = document.createElement('canvas');
   canvas.width = BOOK_PAGE_TEXTURE_WIDTH * PAGE_TEXTURE_SCALE;
   canvas.height = BOOK_PAGE_TEXTURE_HEIGHT * PAGE_TEXTURE_SCALE;
@@ -48,11 +49,6 @@ function createPageSurface(mirrored: boolean): PageSurface {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
-  if (mirrored) {
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.repeat.x = -1;
-    texture.offset.x = 1;
-  }
   return { canvas, context, texture };
 }
 
@@ -64,7 +60,75 @@ function updatePageSurface(
   surface.texture.needsUpdate = true;
 }
 
-function createCoverTexture(): THREE.CanvasTexture {
+function createBookMarkTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 720;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas 2D context is unavailable');
+  }
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.strokeStyle = '#e8bd5f';
+  context.fillStyle = '#f4d47a';
+  context.lineWidth = 13;
+  context.shadowColor = 'rgba(229, 178, 72, 0.62)';
+  context.shadowBlur = 18;
+
+  const drawPage = (direction: -1 | 1) => {
+    const x = (value: number) => 360 + value * direction;
+    context.beginPath();
+    context.moveTo(x(12), 235);
+    context.bezierCurveTo(x(72), 176, x(188), 145, x(274), 164);
+    context.lineTo(x(292), 373);
+    context.bezierCurveTo(x(188), 350, x(78), 386, x(12), 432);
+    context.lineTo(x(12), 235);
+    context.stroke();
+
+    context.beginPath();
+    context.moveTo(x(12), 452);
+    context.bezierCurveTo(x(106), 407, x(208), 398, x(312), 421);
+    context.lineTo(x(292), 190);
+    context.stroke();
+  };
+  drawPage(-1);
+  drawPage(1);
+
+  context.beginPath();
+  context.moveTo(360, 254);
+  context.lineTo(360, 424);
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(360, 50);
+  context.bezierCurveTo(368, 94, 374, 102, 424, 112);
+  context.bezierCurveTo(374, 120, 368, 130, 360, 178);
+  context.bezierCurveTo(352, 130, 346, 120, 296, 112);
+  context.bezierCurveTo(346, 102, 352, 94, 360, 50);
+  context.closePath();
+  context.fill();
+
+  context.shadowBlur = 10;
+  context.lineWidth = 10;
+  context.beginPath();
+  context.moveTo(246, 82);
+  context.lineTo(268, 104);
+  context.moveTo(474, 82);
+  context.lineTo(452, 104);
+  context.stroke();
+  context.beginPath();
+  context.arc(360, 24, 7, 0, Math.PI * 2);
+  context.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function createBackingTexture(side: BookPageSide): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 720;
@@ -72,57 +136,13 @@ function createCoverTexture(): THREE.CanvasTexture {
   if (!context) {
     throw new Error('Canvas 2D context is unavailable');
   }
-  const leather = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-  leather.addColorStop(0, '#59453c');
-  leather.addColorStop(0.5, '#3d302b');
-  leather.addColorStop(1, '#2c2421');
-  context.fillStyle = leather;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  context.fillStyle = 'rgba(255, 255, 255, 0.022)';
-  for (let index = 0; index < 86; index += 1) {
-    const x = (index * 71 + 31) % canvas.width;
-    const y = (index * 43 + 19) % canvas.height;
-    context.fillRect(x, y, 1 + (index % 3), 18 + (index % 17));
-  }
-
-  context.strokeStyle = '#b99655';
-  context.lineWidth = 5;
-  context.strokeRect(34, 34, canvas.width - 68, canvas.height - 68);
-  context.strokeStyle = 'rgba(223, 194, 125, 0.48)';
-  context.lineWidth = 2;
-  context.strokeRect(49, 49, canvas.width - 98, canvas.height - 98);
-
-  context.save();
-  context.translate(canvas.width / 2, canvas.height / 2);
-  context.strokeStyle = '#d1ad62';
-  context.lineCap = 'round';
-  context.lineWidth = 7;
-  context.beginPath();
-  context.moveTo(-42, 30);
-  context.lineTo(38, -48);
-  context.moveTo(-26, 48);
-  context.lineTo(54, -30);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  traceBookIconPage(context, side);
+  context.fillStyle = '#101115';
+  context.fill();
+  context.strokeStyle = '#c79b49';
+  context.lineWidth = 6;
   context.stroke();
-  context.fillStyle = '#ddbd72';
-  for (const [x, y, radius] of [
-    [-50, -22, 7],
-    [20, 40, 6],
-    [55, -52, 5]
-  ] as const) {
-    context.beginPath();
-    context.moveTo(x, y - radius);
-    context.lineTo(x + radius * 0.35, y - radius * 0.35);
-    context.lineTo(x + radius, y);
-    context.lineTo(x + radius * 0.35, y + radius * 0.35);
-    context.lineTo(x, y + radius);
-    context.lineTo(x - radius * 0.35, y + radius * 0.35);
-    context.lineTo(x - radius, y);
-    context.lineTo(x - radius * 0.35, y - radius * 0.35);
-    context.closePath();
-    context.fill();
-  }
-  context.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -150,32 +170,50 @@ function createSparkTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+function createHoverGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas 2D context is unavailable');
+  }
+  const glow = context.createRadialGradient(128, 64, 0, 128, 64, 118);
+  glow.addColorStop(0, 'rgba(213, 174, 91, 0.22)');
+  glow.addColorStop(0.46, 'rgba(118, 95, 52, 0.1)');
+  glow.addColorStop(1, 'rgba(30, 32, 38, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function createCircleLine(radius: number, material: THREE.LineBasicMaterial) {
-  const points = Array.from({ length: 96 }, (_, index) => {
-    const angle = (index / 96) * Math.PI * 2;
+  const points = Array.from({ length: 64 }, (_, index) => {
+    const angle = (index / 64) * Math.PI * 2;
     return new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
   });
   return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), material);
 }
 
-function createArcaneCircle(
+function createArcaneBadge(
   primaryMaterial: THREE.LineBasicMaterial,
   detailMaterial: THREE.LineBasicMaterial
 ) {
   const field = new THREE.Group();
   const rotor = new THREE.Group();
 
-  field.add(createCircleLine(1.62, primaryMaterial));
-  field.add(createCircleLine(1.5, detailMaterial));
-  rotor.add(createCircleLine(1.18, detailMaterial));
+  field.add(createCircleLine(1.56, primaryMaterial));
+  field.add(createCircleLine(1.31, detailMaterial));
 
   const tickPoints: THREE.Vector3[] = [];
-  for (let index = 0; index < 24; index += 1) {
-    const angle = (index / 24) * Math.PI * 2;
-    const innerRadius = index % 3 === 0 ? 1.32 : 1.39;
+  for (let index = 0; index < 12; index += 1) {
+    const angle = (index / 12) * Math.PI * 2;
+    const innerRadius = index % 3 === 0 ? 1.08 : 1.14;
     tickPoints.push(
       new THREE.Vector3(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius, 0),
-      new THREE.Vector3(Math.cos(angle) * 1.48, Math.sin(angle) * 1.48, 0)
+      new THREE.Vector3(Math.cos(angle) * 1.24, Math.sin(angle) * 1.24, 0)
     );
   }
   rotor.add(
@@ -185,85 +223,99 @@ function createArcaneCircle(
     )
   );
 
-  for (const offset of [-Math.PI / 2, Math.PI / 2]) {
-    const trianglePoints = Array.from({ length: 3 }, (_, index) => {
-      const angle = offset + (index / 3) * Math.PI * 2;
-      return new THREE.Vector3(Math.cos(angle) * 1.08, Math.sin(angle) * 1.08, 0);
-    });
-    rotor.add(
-      new THREE.LineLoop(
-        new THREE.BufferGeometry().setFromPoints(trianglePoints),
-        detailMaterial
-      )
-    );
-  }
-
   field.add(rotor);
   return { field, rotor };
 }
 
-function createPageGeometry(): THREE.PlaneGeometry {
-  const geometry = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 36, 10);
-  geometry.translate(PAGE_WIDTH / 2, 0, 0);
-  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
-  position.setUsage(THREE.DynamicDrawUsage);
-  geometry.userData.basePositions = Float32Array.from(
-    position.array as ArrayLike<number>
-  );
+function createFourPointStarGeometry(): THREE.ShapeGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.23);
+  shape.lineTo(0.032, 0.04);
+  shape.lineTo(0.17, 0);
+  shape.lineTo(0.032, -0.04);
+  shape.lineTo(0, -0.23);
+  shape.lineTo(-0.032, -0.04);
+  shape.lineTo(-0.17, 0);
+  shape.lineTo(-0.032, 0.04);
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+function createPageGeometry(side: 'left' | 'right'): THREE.PlaneGeometry {
+  const geometry = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 1, 1);
+  geometry.translate(side === 'left' ? -PAGE_WIDTH / 2 : PAGE_WIDTH / 2, 0, 0);
   return geometry;
 }
 
-function getBasePagePositions(geometry: THREE.PlaneGeometry): Float32Array {
-  const basePositions = geometry.userData.basePositions;
-  if (!(basePositions instanceof Float32Array)) {
-    throw new Error('Page geometry is missing its base positions');
-  }
-  return basePositions;
-}
+function createPageTransitionMaterial(
+  currentTexture: THREE.Texture,
+  nextTexture: THREE.Texture,
+  side: BookPageSide
+): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    depthWrite: false,
+    fragmentShader: `
+      uniform sampler2D uCurrentMap;
+      uniform sampler2D uNextMap;
+      uniform float uProgress;
+      uniform float uSide;
+      varying vec2 vUv;
 
-function setPageCurl(geometry: THREE.PlaneGeometry, amount: number): void {
-  const position = geometry.attributes.position;
-  const basePositions = getBasePagePositions(geometry);
-  for (let index = 0; index < position.count; index += 1) {
-    const x = basePositions[index * 3];
-    const y = basePositions[index * 3 + 1];
-    const z = basePositions[index * 3 + 2];
-    const normalized = Math.min(1, Math.max(0, x / PAGE_WIDTH));
-    position.setXYZ(index, x, y, z + Math.sin(Math.PI * normalized) * amount);
-  }
-  position.needsUpdate = true;
-  geometry.computeVertexNormals();
-}
+      void main() {
+        float globalX = mix(vUv.x * 0.5, 0.5 + vUv.x * 0.5, uSide);
+        float sweepEdge = mix(1.08, -0.08, uProgress);
+        float sweepWidth = 0.018;
+        float pageArc = sin(vUv.y * 3.14159265);
+        float curvedEdge = sweepEdge + (1.0 - pageArc) * 0.022;
+        float reveal = smoothstep(
+          curvedEdge - sweepWidth,
+          curvedEdge + sweepWidth,
+          globalX
+        );
+        float edgeDistance = abs(globalX - curvedEdge);
+        float curl = 1.0 - smoothstep(0.0, sweepWidth * 2.2, edgeDistance);
+        float edgeHighlight = 1.0 - smoothstep(
+          0.0,
+          sweepWidth * 0.34,
+          edgeDistance
+        );
 
-function setTurningPageShape(geometry: THREE.PlaneGeometry, progress: number): void {
-  const position = geometry.attributes.position;
-  const basePositions = getBasePagePositions(geometry);
-  for (let index = 0; index < position.count; index += 1) {
-    const baseX = basePositions[index * 3];
-    const baseY = basePositions[index * 3 + 1];
-    const normalizedX = baseX / PAGE_WIDTH;
-    const normalizedY = baseY / PAGE_HEIGHT + 0.5;
-    const vertex = getPageTurnVertex(normalizedX, normalizedY, progress);
-    position.setXYZ(
-      index,
-      vertex.xRatio * PAGE_WIDTH,
-      baseY + vertex.yOffsetRatio * PAGE_WIDTH,
-      vertex.zRatio * PAGE_WIDTH
-    );
-  }
-  position.needsUpdate = true;
-  geometry.computeVertexNormals();
-}
+        vec2 currentUv = vUv;
+        vec2 nextUv = vUv;
+        currentUv.x += curl * pageArc * 0.008;
+        nextUv.x -= curl * pageArc * 0.006;
 
-function setMaterialMap(
-  material: THREE.MeshStandardMaterial,
-  texture: THREE.Texture
-): void {
-  if (material.map === texture) {
-    return;
-  }
-  material.map = texture;
-  material.needsUpdate = true;
+        vec4 currentColor = texture2D(uCurrentMap, currentUv);
+        vec4 nextColor = texture2D(uNextMap, nextUv);
+        vec4 color = mix(currentColor, nextColor, reveal);
+        color.rgb *= 1.0 - curl * 0.14;
+        color.rgb += vec3(0.44, 0.29, 0.08) * edgeHighlight * 0.38;
+
+        if (color.a < 0.02) {
+          discard;
+        }
+        gl_FragColor = color;
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    side: THREE.FrontSide,
+    transparent: true,
+    uniforms: {
+      uCurrentMap: { value: currentTexture },
+      uNextMap: { value: nextTexture },
+      uProgress: { value: 0 },
+      uSide: { value: side === 'left' ? 0 : 1 }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `
+  });
 }
 
 export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBookSceneProps) {
@@ -296,39 +348,35 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, canvas });
     renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = false;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMapping = THREE.NoToneMapping;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-    camera.position.set(0, 0.05, 5.35);
+    const camera = new THREE.OrthographicCamera(
+      -CAMERA_VIEW_HEIGHT / 2,
+      CAMERA_VIEW_HEIGHT / 2,
+      CAMERA_VIEW_HEIGHT / 2,
+      -CAMERA_VIEW_HEIGHT / 2,
+      0.1,
+      100
+    );
+    camera.position.set(0, 0.02, 5);
     camera.lookAt(0, 0, 0);
 
-    scene.add(new THREE.HemisphereLight(0xffedcf, 0x202638, 1.35));
-    const lanternLight = new THREE.PointLight(0xffc66b, 18, 8, 2);
-    lanternLight.position.set(-2.25, 2.1, 3.4);
-    lanternLight.castShadow = true;
-    scene.add(lanternLight);
-    const rimLight = new THREE.DirectionalLight(0xb8d2e8, 1.8);
-    rimLight.position.set(2.8, 1.4, 3.5);
-    scene.add(rimLight);
-
     const arcanePrimaryMaterial = new THREE.LineBasicMaterial({
-      color: 0xd7ae5d,
+      color: 0xc79b49,
       depthWrite: false,
-      opacity: 0.2,
+      opacity: 0.18,
       transparent: true
     });
     const arcaneDetailMaterial = new THREE.LineBasicMaterial({
-      color: 0xe7c984,
+      color: 0x81718f,
       depthWrite: false,
-      opacity: 0.13,
+      opacity: 0.14,
       transparent: true
     });
-    const { field: arcaneField, rotor: arcaneRotor } = createArcaneCircle(
+    const { field: arcaneField, rotor: arcaneRotor } = createArcaneBadge(
       arcanePrimaryMaterial,
       arcaneDetailMaterial
     );
@@ -340,12 +388,15 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
     root.position.y = -0.02;
     scene.add(root);
 
-    const coverTexture = createCoverTexture();
+    const bookMarkTexture = createBookMarkTexture();
+    const leftBackingTexture = createBackingTexture('left');
+    const rightBackingTexture = createBackingTexture('right');
     const sparkTexture = createSparkTexture();
-    const leftSurface = createPageSurface(true);
-    const rightSurface = createPageSurface(false);
-    const nextLeftSurface = createPageSurface(true);
-    const nextRightSurface = createPageSurface(false);
+    const hoverGlowTexture = createHoverGlowTexture();
+    const leftSurface = createPageSurface();
+    const rightSurface = createPageSurface();
+    const nextLeftSurface = createPageSurface();
+    const nextRightSurface = createPageSurface();
     const artworkDeck = createBookArtworkDeck(artworkSeed);
     const firstNextArtwork = artworkDeck[1 % artworkDeck.length];
     updatePageSurface(leftSurface, artworkDeck[0].left);
@@ -353,157 +404,144 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
     updatePageSurface(nextLeftSurface, firstNextArtwork.left);
     updatePageSurface(nextRightSurface, firstNextArtwork.right);
 
-    const coverMaterial = new THREE.MeshPhysicalMaterial({
-      clearcoat: 0.18,
-      clearcoatRoughness: 0.62,
-      map: coverTexture,
-      metalness: 0.02,
-      roughness: 0.74
+    const bookMarkMaterial = new THREE.MeshBasicMaterial({
+      alphaTest: 0.08,
+      depthWrite: false,
+      map: bookMarkTexture,
+      opacity: 1,
+      transparent: true
     });
-    const pageEdgeMaterial = new THREE.MeshStandardMaterial({
-      color: 0xdac9a1,
-      metalness: 0,
-      roughness: 0.9
+    const leftBackingMaterial = new THREE.MeshBasicMaterial({
+      alphaTest: 0.08,
+      depthWrite: false,
+      map: leftBackingTexture,
+      transparent: true
     });
-    const pageFrontMaterial = new THREE.MeshStandardMaterial({
-      map: rightSurface.texture,
-      metalness: 0,
-      roughness: 0.88,
-      side: THREE.FrontSide
+    const rightBackingMaterial = new THREE.MeshBasicMaterial({
+      alphaTest: 0.08,
+      depthWrite: false,
+      map: rightBackingTexture,
+      transparent: true
     });
-    const pageBackMaterial = new THREE.MeshStandardMaterial({
-      map: leftSurface.texture,
-      metalness: 0,
-      roughness: 0.88,
-      side: THREE.BackSide
-    });
-    const rightPageMaterial = new THREE.MeshStandardMaterial({
-      map: rightSurface.texture,
-      metalness: 0,
-      roughness: 0.88,
-      side: THREE.FrontSide
-    });
-    const turningPageFrontMaterial = new THREE.MeshStandardMaterial({
-      map: rightSurface.texture,
-      metalness: 0,
-      roughness: 0.88,
-      side: THREE.FrontSide
-    });
-    const turningPageBackMaterial = new THREE.MeshStandardMaterial({
-      map: nextLeftSurface.texture,
-      metalness: 0,
-      roughness: 0.88,
-      side: THREE.BackSide
-    });
-    const goldMaterial = new THREE.MeshStandardMaterial({
-      color: 0xb78b43,
-      metalness: 0.64,
-      roughness: 0.35
-    });
-
-    const coverGeometry = new RoundedBoxGeometry(
-      PAGE_WIDTH + 0.11,
-      PAGE_HEIGHT + 0.12,
-      0.055,
-      4,
-      0.035
+    const leftPageMaterial = createPageTransitionMaterial(
+      leftSurface.texture,
+      nextLeftSurface.texture,
+      'left'
     );
-    const backCover = new THREE.Mesh(coverGeometry, coverMaterial);
-    backCover.position.set(PAGE_WIDTH / 2, 0, -0.08);
-    backCover.castShadow = true;
-    backCover.receiveShadow = true;
-    root.add(backCover);
-
-    const pageBlock = new THREE.Mesh(
-      new RoundedBoxGeometry(PAGE_WIDTH, PAGE_HEIGHT, 0.09, 3, 0.025),
-      pageEdgeMaterial
+    const rightPageMaterial = createPageTransitionMaterial(
+      rightSurface.texture,
+      nextRightSurface.texture,
+      'right'
     );
-    pageBlock.position.set(PAGE_WIDTH / 2, 0, -0.01);
-    pageBlock.castShadow = true;
-    pageBlock.receiveShadow = true;
-    root.add(pageBlock);
 
-    const rightPageGeometry = createPageGeometry();
-    setPageCurl(rightPageGeometry, 0.018);
-    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
-    rightPage.position.z = 0.055;
-    rightPage.castShadow = true;
-    rightPage.receiveShadow = true;
-    root.add(rightPage);
-
-    const frontCoverPivot = new THREE.Group();
-    frontCoverPivot.position.z = 0.095;
-    const frontCover = new THREE.Mesh(coverGeometry.clone(), coverMaterial);
-    frontCover.position.x = PAGE_WIDTH / 2;
-    frontCover.castShadow = true;
-    frontCoverPivot.add(frontCover);
-    const clasp = new THREE.Mesh(
-      new RoundedBoxGeometry(0.1, 0.3, 0.08, 3, 0.025),
-      goldMaterial
+    const bookMark = new THREE.Mesh(
+      new THREE.PlaneGeometry(PAGE_WIDTH * 1.74, PAGE_HEIGHT * 1.24),
+      bookMarkMaterial
     );
-    clasp.position.set(PAGE_WIDTH + 0.045, 0, 0.025);
-    clasp.castShadow = true;
-    frontCoverPivot.add(clasp);
-    root.add(frontCoverPivot);
+    bookMark.position.set(0, 0.02, 0.08);
+    root.add(bookMark);
 
-    const pagePivots: THREE.Group[] = [];
-    const pageMeshes: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>[] = [];
-    for (let index = 0; index < BOOK_PAGE_COUNT; index += 1) {
-      const pivot = new THREE.Group();
-      pivot.position.z = 0.058 + index * 0.004;
-      const geometry = createPageGeometry();
-      const pageFront = new THREE.Mesh(geometry, pageFrontMaterial);
-      const pageBack = new THREE.Mesh(geometry, pageBackMaterial);
-      pageFront.castShadow = true;
-      pageFront.receiveShadow = true;
-      pageBack.castShadow = false;
-      pageBack.receiveShadow = true;
-      pivot.add(pageFront, pageBack);
-      root.add(pivot);
-      pagePivots.push(pivot);
-      pageMeshes.push(pageFront);
-    }
-
-    const turningPagePivot = new THREE.Group();
-    turningPagePivot.position.z = 0.082;
-    const turningPageGeometry = createPageGeometry();
-    const turningPageFront = new THREE.Mesh(
-      turningPageGeometry,
-      turningPageFrontMaterial
+    const leftWing = new THREE.Group();
+    const leftBacking = new THREE.Mesh(
+      createPageGeometry('left'),
+      leftBackingMaterial
     );
-    const turningPageBack = new THREE.Mesh(
-      turningPageGeometry,
-      turningPageBackMaterial
-    );
-    turningPageFront.castShadow = false;
-    turningPageFront.receiveShadow = true;
-    turningPageBack.castShadow = false;
-    turningPageBack.receiveShadow = true;
-    turningPagePivot.add(turningPageFront, turningPageBack);
-    turningPagePivot.visible = false;
-    root.add(turningPagePivot);
+    leftBacking.position.set(0, -0.035, -0.025);
+    leftBacking.scale.set(1.012, 1.012, 1);
+    const leftPage = new THREE.Mesh(createPageGeometry('left'), leftPageMaterial);
+    leftPage.position.z = 0.01;
+    leftWing.add(leftBacking, leftPage);
+    root.add(leftWing);
 
-    const spine = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.045, 0.052, PAGE_HEIGHT + 0.09, 20),
-      coverMaterial
+    const rightWing = new THREE.Group();
+    const rightBacking = new THREE.Mesh(
+      createPageGeometry('right'),
+      rightBackingMaterial
     );
-    spine.position.set(0, 0, -0.02);
-    spine.castShadow = true;
-    root.add(spine);
+    rightBacking.position.set(0, -0.035, -0.025);
+    rightBacking.scale.set(1.012, 1.012, 1);
+    const rightPage = new THREE.Mesh(createPageGeometry('right'), rightPageMaterial);
+    rightPage.position.z = 0.01;
+    rightWing.add(rightBacking, rightPage);
+    root.add(rightWing);
 
-    const shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.8, 2.65),
-      new THREE.ShadowMaterial({ opacity: 0.34 })
+    const foldMaterial = new THREE.LineBasicMaterial({
+      color: 0xc79b49,
+      depthWrite: false,
+      opacity: 0.8,
+      transparent: true
+    });
+    const centerFold = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, PAGE_HEIGHT * 0.29, 0.04),
+        new THREE.Vector3(0, -PAGE_HEIGHT * 0.4, 0.04)
+      ]),
+      foldMaterial
     );
-    shadow.position.set(0, -0.08, -0.22);
-    shadow.receiveShadow = true;
-    scene.add(shadow);
+    root.add(centerFold);
 
-    const sparkPositions = new Float32Array(42 * 3);
-    const sparkBaseY = new Float32Array(42);
-    for (let index = 0; index < 42; index += 1) {
-      const x = (((index * 73 + 17) % 101) / 100 - 0.5) * 4.2;
-      const y = (((index * 47 + 31) % 97) / 96 - 0.5) * 2.8;
+    const iconStarMaterial = new THREE.MeshBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0xf0c86f,
+      depthWrite: false,
+      opacity: 0,
+      transparent: true
+    });
+    const iconHaloMaterial = new THREE.SpriteMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0xffe5a2,
+      depthWrite: false,
+      map: sparkTexture,
+      opacity: 0,
+      transparent: true
+    });
+    const iconHalo = new THREE.Sprite(iconHaloMaterial);
+    iconHalo.position.set(0, 1.17, 0.075);
+    iconHalo.scale.setScalar(0.62);
+    root.add(iconHalo);
+
+    const iconStar = new THREE.Mesh(
+      createFourPointStarGeometry(),
+      iconStarMaterial
+    );
+    iconStar.position.set(0, 1.17, 0.09);
+    root.add(iconStar);
+
+    const iconRayMaterial = new THREE.LineBasicMaterial({
+      color: 0xd9aa50,
+      depthWrite: false,
+      opacity: 0,
+      transparent: true
+    });
+    const iconRays = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.35, 1.3, 0.08),
+        new THREE.Vector3(-0.25, 1.22, 0.08),
+        new THREE.Vector3(0.35, 1.3, 0.08),
+        new THREE.Vector3(0.25, 1.22, 0.08)
+      ]),
+      iconRayMaterial
+    );
+    root.add(iconRays);
+
+    const hoverGlow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.15, 0.92),
+      new THREE.MeshBasicMaterial({
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        map: hoverGlowTexture,
+        opacity: 0.5,
+        transparent: true
+      })
+    );
+    hoverGlow.position.set(0, -0.16, -0.24);
+    scene.add(hoverGlow);
+
+    const sparkPositions = new Float32Array(18 * 3);
+    const sparkBaseY = new Float32Array(18);
+    for (let index = 0; index < 18; index += 1) {
+      const x = (((index * 73 + 17) % 101) / 100 - 0.5) * 3.8;
+      const y = (((index * 47 + 31) % 97) / 96 - 0.5) * 2.45;
       sparkPositions[index * 3] = x;
       sparkPositions[index * 3 + 1] = y;
       sparkPositions[index * 3 + 2] = 0.18 + ((index * 29) % 60) / 100;
@@ -516,8 +554,8 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
       color: 0xf2cf83,
       depthWrite: false,
       map: sparkTexture,
-      opacity: 0.58,
-      size: 0.075,
+      opacity: 0.5,
+      size: 0.09,
       transparent: true
     });
     const sparkles = new THREE.Points(sparkGeometry, sparkMaterial);
@@ -525,37 +563,23 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
 
     let animationFrame = 0;
     let currentArtworkIndex = 0;
-    let openingGeometrySettled = false;
     const renderFrame = (now: number) => {
       const openingElapsed =
         phaseRef.current === 'opening'
           ? Math.max(0, now - openingStartedAtRef.current)
           : BOOK_OPENING_DURATION_MS;
       const settle = getBookSettleProgress(openingElapsed);
-      const coverOpen = getCoverOpenProgress(openingElapsed);
+      const reveal = getIconBookRevealProgress(openingElapsed);
+      const markOpacity = getIconMarkOpacity(openingElapsed);
+      const idleBob = phaseRef.current === 'opening' ? 0 : Math.sin(now * 0.0011) * 0.012;
 
-      root.position.x = THREE.MathUtils.lerp(-PAGE_WIDTH / 2, 0, settle);
-      root.position.y = THREE.MathUtils.lerp(-0.2, -0.09, settle);
-      root.rotation.x = THREE.MathUtils.lerp(-0.02, -0.16, settle);
-      root.rotation.z = THREE.MathUtils.lerp(-0.16, -0.055, settle);
-      root.scale.setScalar(THREE.MathUtils.lerp(0.9, 1, settle));
-
-      frontCoverPivot.rotation.y = -Math.PI * coverOpen;
-      frontCoverPivot.position.z =
-        THREE.MathUtils.lerp(0.095, -0.09, coverOpen) +
-        Math.sin(Math.PI * coverOpen) * 0.12;
-
-      pagePivots.forEach((pivot, index) => {
-        const progress = getPageOpenProgress(openingElapsed, index);
-        const finalOffset = (BOOK_PAGE_COUNT - 1 - index) * 0.018;
-        pivot.rotation.y = finalOffset * progress;
-        pivot.position.z =
-          0.058 + index * 0.004 + Math.sin(Math.PI * progress) * 0.018;
-        if (!openingGeometrySettled) {
-          setTurningPageShape(pageMeshes[index].geometry, progress);
-        }
-      });
-      openingGeometrySettled = openingElapsed >= BOOK_OPENING_DURATION_MS;
+      root.position.x = 0;
+      root.position.y = THREE.MathUtils.lerp(-0.1, -0.05, settle) + idleBob;
+      root.rotation.set(0, 0, 0);
+      root.scale.setScalar(THREE.MathUtils.lerp(0.95, 1, settle));
+      bookMarkMaterial.opacity = markOpacity;
+      bookMark.visible = markOpacity > 0.01;
+      bookMark.scale.setScalar(0.84 + settle * 0.16);
 
       const contentIsAnimating = phaseRef.current !== 'opening' && !reducedMotion;
       const contentElapsed =
@@ -573,19 +597,40 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
       }
 
       const pageTurn = contentIsAnimating ? getPageTurnProgress(contentElapsed) : 0;
-      const isTurning = pageTurn > 0.001;
-      setMaterialMap(
-        rightPageMaterial,
-        isTurning ? nextRightSurface.texture : rightSurface.texture
+      const transition = getIconBookTransitionPose(pageTurn);
+      const wingReveal = THREE.MathUtils.smoothstep(1 - markOpacity, 0.12, 0.56);
+      const revealScale = Math.max(0.002, reveal * wingReveal);
+      const visibleReveal = THREE.MathUtils.clamp(revealScale, 0, 1);
+      const wingScaleX = revealScale * transition.scale;
+      const openingTilt = (1 - visibleReveal) * 0.055;
+      const transitionTilt = transition.glow * 0.009;
+      leftWing.visible = revealScale > 0.004;
+      rightWing.visible = revealScale > 0.004;
+      leftWing.position.y = transition.lift;
+      rightWing.position.y = transition.lift;
+      leftWing.rotation.z = -openingTilt - transitionTilt;
+      rightWing.rotation.z = openingTilt + transitionTilt;
+      leftWing.scale.set(wingScaleX, 0.96 + visibleReveal * 0.04, 1);
+      rightWing.scale.set(wingScaleX, 0.96 + visibleReveal * 0.04, 1);
+      centerFold.visible = revealScale > 0.04;
+      foldMaterial.opacity = visibleReveal * (0.76 - transition.glow * 0.18);
+      leftPageMaterial.uniforms.uProgress.value = pageTurn;
+      rightPageMaterial.uniforms.uProgress.value = pageTurn;
+
+      const iconReveal = visibleReveal * (1 - markOpacity);
+      const starPulse = 0.92 + Math.sin(now * 0.0022) * 0.08;
+      iconHalo.visible = iconReveal > 0.01;
+      iconHaloMaterial.opacity = iconReveal * (0.2 + starPulse * 0.1);
+      iconHalo.scale.setScalar(
+        iconReveal * starPulse * (0.62 + transition.glow * 0.08)
       );
-      setMaterialMap(
-        pageBackMaterial,
-        pageTurn > 0.82 ? nextLeftSurface.texture : leftSurface.texture
+      iconStar.visible = iconReveal > 0.01;
+      iconStarMaterial.opacity = iconReveal * (0.76 + starPulse * 0.2);
+      iconStar.scale.setScalar(
+        iconReveal * starPulse * (1 + transition.glow * 0.1)
       );
-      turningPagePivot.visible = pageTurn > 0.001 && pageTurn < 0.999;
-      turningPagePivot.rotation.y = 0;
-      turningPagePivot.position.z = 0.082;
-      setTurningPageShape(turningPageGeometry, pageTurn);
+      iconRayMaterial.opacity = iconReveal * 0.72;
+      iconRays.visible = iconReveal > 0.01;
 
       const sparkPosition = sparkGeometry.attributes.position;
       for (let index = 0; index < sparkBaseY.length; index += 1) {
@@ -595,12 +640,12 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
         );
       }
       sparkPosition.needsUpdate = true;
-      sparkles.rotation.z = Math.sin(now * 0.00012) * 0.025;
-      sparkMaterial.opacity = 0.5 + Math.sin(now * 0.0011) * 0.09;
-      arcaneField.rotation.z = -0.12 + now * 0.000018;
-      arcaneRotor.rotation.z = -now * 0.000037;
-      arcanePrimaryMaterial.opacity = 0.18 + Math.sin(now * 0.00072) * 0.025;
-      arcaneDetailMaterial.opacity = 0.11 + Math.sin(now * 0.00061 + 1.4) * 0.02;
+      sparkles.rotation.z = Math.sin(now * 0.00012) * 0.02;
+      sparkMaterial.opacity = 0.44 + Math.sin(now * 0.0011) * 0.08;
+      arcaneField.rotation.z = -0.08 + now * 0.000012;
+      arcaneRotor.rotation.z = -now * 0.000026;
+      arcanePrimaryMaterial.opacity = 0.16 + Math.sin(now * 0.00072) * 0.02;
+      arcaneDetailMaterial.opacity = 0.13 + Math.sin(now * 0.00061 + 1.4) * 0.018;
 
       renderer.render(scene, camera);
       canvas.dataset.rendered = 'true';
@@ -614,7 +659,11 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
       const width = Math.max(1, container.clientWidth);
       const height = Math.max(1, container.clientHeight);
       renderer.setSize(width, height, false);
-      camera.aspect = width / height;
+      const aspect = width / height;
+      camera.left = (-CAMERA_VIEW_HEIGHT * aspect) / 2;
+      camera.right = (CAMERA_VIEW_HEIGHT * aspect) / 2;
+      camera.top = CAMERA_VIEW_HEIGHT / 2;
+      camera.bottom = -CAMERA_VIEW_HEIGHT / 2;
       camera.updateProjectionMatrix();
     };
     const resizeObserver = new ResizeObserver(resize);
@@ -648,8 +697,11 @@ export function RecommendationBookScene({ artworkSeed, phase }: RecommendationBo
           }
         }
       });
-      coverTexture.dispose();
+      bookMarkTexture.dispose();
+      leftBackingTexture.dispose();
+      rightBackingTexture.dispose();
       sparkTexture.dispose();
+      hoverGlowTexture.dispose();
       leftSurface.texture.dispose();
       rightSurface.texture.dispose();
       nextLeftSurface.texture.dispose();
