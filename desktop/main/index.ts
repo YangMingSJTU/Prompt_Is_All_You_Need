@@ -23,7 +23,6 @@ import type {
   ScanProvider,
   ScanRunRequest,
   ScanSourceConfig,
-  SkillPlatform,
   SpellCreateInput,
   SpellStatePatch,
   SpellUpdatePatch
@@ -47,6 +46,7 @@ import { createSettingsService, defaultScanSources, type SettingsService } from 
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
 import { getAppIconPath, getTrayIconPath } from './services/appAssets';
+import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -191,12 +191,7 @@ async function bootstrap(): Promise<void> {
     spellService.promoteCandidates(candidateIds)
   );
   ipcMain.handle('analytics:get', () => spellService.getAnalytics());
-  ipcMain.handle('skills:list', () => skillService.listSkills());
-  ipcMain.handle('skills:scan', () => skillService.scanSkills());
-  ipcMain.handle('skills:package', (_event, skillId: string) => skillService.packageSkill(skillId));
-  ipcMain.handle('skills:install', (_event, skillId: string, targetPlatform: SkillPlatform) =>
-    skillService.installSkill(skillId, targetPlatform)
-  );
+  registerSkillHandlers(ipcMain, skillService);
   ipcMain.handle('settings:get', () => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
@@ -205,8 +200,7 @@ async function bootstrap(): Promise<void> {
   });
   ipcMain.handle('settings:info', () => ({
     defaultScanSources: defaultScanSources(),
-    historyRoots: defaultHistoryRoots(),
-    skillRoots: skillService.getSkillRoots()
+    historyRoots: defaultHistoryRoots()
   }));
   ipcMain.handle(
     'window:setRecommendationPanelOpen',
@@ -269,21 +263,6 @@ async function bootstrap(): Promise<void> {
         source.target === scanRequest.target &&
         scanRequest.providers.includes(source.provider)
     );
-    if (scanRequest.target === 'skills') {
-      const skills = await skillService.scanSkills(
-        roots.map((root) => ({ platform: root.provider, path: root.path }))
-      );
-      return {
-        id: randomUUID(),
-        target: scanRequest.target,
-        scannedPrompts: 0,
-        sourceFiles: [],
-        candidates: await spellService.listCandidates(),
-        skills,
-        warningCount: 0
-      };
-    }
-
     const summaries = [];
     const allPrompts = [];
 
@@ -305,7 +284,6 @@ async function bootstrap(): Promise<void> {
       scannedPrompts: allPrompts.length,
       sourceFiles: summaries,
       candidates: await spellService.listCandidates(),
-      skills: await skillService.listSkills(),
       warningCount: summaries.reduce((total, source) => total + source.warningCount, 0)
     };
   });
@@ -367,7 +345,7 @@ function applyAppIdentity(): void {
 }
 
 function normalizeScanRunRequest(request: ScanRunRequest, fallbackSources: ScanSourceConfig[]): ScanRunRequest {
-  const target = request?.target === 'skills' ? 'skills' : 'spells';
+  const target = 'spells';
   const providers = Array.isArray(request?.providers)
     ? request.providers.filter((provider): provider is ScanProvider => provider === 'claude' || provider === 'codex')
     : [];
@@ -388,7 +366,7 @@ function isScanSourceConfig(value: unknown): value is ScanSourceConfig {
   const source = value as Record<string, unknown>;
   return (
     (source.provider === 'claude' || source.provider === 'codex') &&
-    (source.target === 'spells' || source.target === 'skills') &&
+    source.target === 'spells' &&
     typeof source.path === 'string' &&
     typeof source.enabled === 'boolean'
   );

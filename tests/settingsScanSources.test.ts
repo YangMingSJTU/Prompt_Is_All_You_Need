@@ -5,7 +5,7 @@ import { createTestDatabase } from '../desktop/main/services/database';
 import { createSettingsService } from '../desktop/main/services/settingsService';
 
 describe('settings scan source configuration', () => {
-  it('provides editable default scan sources for spells and skills', () => {
+  it('provides editable default scan sources only for spell history', () => {
     const dbPromise = createTestDatabase();
 
     return dbPromise.then((db) => {
@@ -15,9 +15,7 @@ describe('settings scan source configuration', () => {
 
       expect(settings.scanSources).toEqual([
         { provider: 'claude', target: 'spells', path: join(home, '.claude'), enabled: true },
-        { provider: 'codex', target: 'spells', path: join(home, '.codex'), enabled: true },
-        { provider: 'claude', target: 'skills', path: join(home, '.claude', 'skills'), enabled: true },
-        { provider: 'codex', target: 'skills', path: join(home, '.agents', 'skills'), enabled: true }
+        { provider: 'codex', target: 'spells', path: join(home, '.codex'), enabled: true }
       ]);
     });
   });
@@ -32,5 +30,25 @@ describe('settings scan source configuration', () => {
     });
 
     expect(service.getSettings().scanSources[0].path).toBe('D:\\Custom\\Claude');
+  });
+
+  it('filters legacy skill scan sources from persisted settings', async () => {
+    const db = await createTestDatabase();
+    db.run(
+      'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)',
+      [
+        'scanSources',
+        JSON.stringify([
+          { provider: 'claude', target: 'spells', path: 'D:\\History', enabled: true },
+          { provider: 'codex', target: 'skills', path: 'D:\\Skills', enabled: true }
+        ]),
+        '2026-07-15T00:00:00.000Z'
+      ]
+    );
+
+    expect(createSettingsService(db).getSettings().scanSources).toEqual([
+      { provider: 'claude', target: 'spells', path: 'D:\\History', enabled: true },
+      expect.objectContaining({ provider: 'codex', target: 'spells' })
+    ]);
   });
 });

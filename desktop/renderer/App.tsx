@@ -9,7 +9,7 @@ import {
   MAIN_WINDOW_MIN_WIDTH
 } from '../shared/layout';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
-import type { Candidate, SkillRecord, Spell, UsageAnalytics } from '../shared/types';
+import type { Candidate, Spell, UsageAnalytics } from '../shared/types';
 import appIconUrl from '../../assets/icons/app-icon.png';
 import { AnalyticsView } from './components/AnalyticsView';
 import { FeedbackToastProvider } from './components/FeedbackToast';
@@ -50,7 +50,6 @@ export function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('preferences');
   const [spells, setSpells] = useState<Spell[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [analytics, setAnalytics] = useState<UsageAnalytics | null>(null);
 
   if (mode === 'floating') {
@@ -62,16 +61,14 @@ export function App() {
   }
 
   const refresh = useCallback(async () => {
-    const [spellList, candidateList, usage, skillList] = await Promise.all([
+    const [spellList, candidateList, usage] = await Promise.all([
       window.spellbook.listSpells(),
       window.spellbook.listCandidates(),
-      window.spellbook.getAnalytics(),
-      window.spellbook.listSkills()
+      window.spellbook.getAnalytics()
     ]);
     setSpells(spellList);
     setCandidates(candidateList);
     setAnalytics(usage);
-    setSkills(skillList);
   }, []);
 
   useEffect(() => {
@@ -118,7 +115,7 @@ export function App() {
       );
     }
     if (view === 'skills') {
-      return <SkillLibraryView skills={skills} onChanged={refresh} t={t} />;
+      return <SkillLibraryView t={t} />;
     }
     if (view === 'analytics') {
       return <AnalyticsView analytics={analytics} t={t} />;
@@ -136,7 +133,7 @@ export function App() {
       );
     }
     return <SpellPanel spells={spells} onChanged={refresh} t={t} />;
-  }, [analytics, candidates, openSettings, refresh, settings, settingsTab, skills, spells, t, updateRecommendationPanelOpen, view]);
+  }, [analytics, candidates, openSettings, refresh, settings, settingsTab, spells, t, updateRecommendationPanelOpen, view]);
 
   const compactLibraryWindow = view === 'library' && !settings.recommendationPanelOpen;
   const appFrameStyle = {

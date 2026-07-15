@@ -163,6 +163,22 @@ describe('i18n', () => {
     expect(en('spell.bulkDeleted')).toBe('Selected spells deleted');
   });
 
+  it('provides complete local skill library copy in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('skill.findLocal')).toBe('寻找本机技能');
+    expect(en('skill.findLocal')).toBe('Find local skills');
+    expect(zh('skill.bundled.promptRefiner.name')).toBe('提示词优化');
+    expect(en('skill.bundled.promptRefiner.name')).toBe('Prompt Refiner');
+    expect(zh('skill.scan.stale')).toContain('可能已过期');
+    expect(en('skill.scan.stale')).toContain('out of date');
+    expect(zh('skill.install.conflict.body')).toContain('未覆盖任何文件');
+    expect(en('skill.install.conflict.body')).toContain('No files were overwritten');
+    expect(zh('skill.description')).toContain('不会上传内容');
+    expect(en('skill.description')).toContain('Nothing is uploaded');
+  });
+
   it('uses recommendation copy for candidate batch saving in both languages', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));

@@ -1,4 +1,4 @@
-import type { ScanSourceConfig, SkillPlatform } from './types';
+import type { ScanSourceConfig } from './types';
 
 export type AppLanguage = 'system' | 'zh' | 'en';
 
@@ -37,7 +37,6 @@ export interface ShortcutKeyInput {
 export interface SettingsInfo {
   defaultScanSources: ScanSourceConfig[];
   historyRoots: Array<{ sourceTool: 'claude' | 'codex'; path: string }>;
-  skillRoots: Array<{ platform: SkillPlatform; path: string }>;
 }
 
 export const DEFAULT_QUICK_PANEL_SHORTCUT = 'CommandOrControl+Shift+Space';

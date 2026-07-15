@@ -170,6 +170,15 @@ function createSchema(db: SqlJsDatabase): void {
       UNIQUE(platform, root_path)
     );
 
+    CREATE TABLE IF NOT EXISTS skill_scan_sources (
+      platform TEXT PRIMARY KEY CHECK (platform IN ('claude', 'codex')),
+      root_path TEXT NOT NULL,
+      last_attempt_status TEXT NOT NULL,
+      last_attempt_at TEXT NOT NULL,
+      last_success_at TEXT,
+      last_error_code TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -179,7 +188,7 @@ function createSchema(db: SqlJsDatabase): void {
   `);
 
   ensureColumn(db, 'spells', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
-  db.exec('PRAGMA user_version = 9;');
+  db.exec('PRAGMA user_version = 10;');
 }
 
 function ensureColumn(

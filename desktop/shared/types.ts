@@ -1,18 +1,18 @@
-export type SkillPlatform = 'claude' | 'codex';
+import type { SkillPlatform } from './skillTypes';
+
+export type { SkillPlatform } from './skillTypes';
 
 export type SourceTool = SkillPlatform | 'manual';
 
 export type ScanProvider = SkillPlatform;
 
-export type ScanTarget = 'spells' | 'skills';
+export type ScanTarget = 'spells';
 
 export type AssetType = 'spell' | 'skill';
 
 export type CandidateType = 'spell';
 
 export type CandidateStatus = 'pending' | 'saved' | 'ignored';
-
-export type SkillInstallState = 'installed' | 'missing';
 
 export interface ExtractedPrompt {
   id: string;
@@ -116,20 +116,6 @@ export interface CandidatePromotionResult {
     candidateId: string;
     reason: 'duplicate' | 'missing';
   }>;
-}
-
-export interface SkillRecord {
-  id: string;
-  platform: SkillPlatform;
-  name: string;
-  description: string;
-  rootPath: string;
-  entryFilePath: string;
-  fileCount: number;
-  files: string[];
-  updatedAt: string;
-  packageable: boolean;
-  installState: SkillInstallState;
 }
 
 export interface UsageAnalytics {

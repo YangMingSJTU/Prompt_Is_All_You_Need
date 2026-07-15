@@ -89,8 +89,69 @@ describe('spell schema', () => {
         updated_at: '2026-07-02T00:00:00.000Z'
       });
       expect(migratedDb.get<{ user_version: number }>('PRAGMA user_version')).toEqual({
-        user_version: 9
+        user_version: 10
       });
+      expect(
+        migratedDb.get<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'skill_scan_sources'"
+        )
+      ).toEqual({ name: 'skill_scan_sources' });
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('upgrades version 9 while retaining populated skills and app settings', async () => {
+    const legacyDb = await createTestDatabase();
+    legacyDb.run(
+      `INSERT INTO skills
+        (id, platform, name, description, root_path, entry_file_path, file_count,
+         files, updated_at, packageable, install_state)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'local:retained',
+        'codex',
+        'Retained skill',
+        'Keep this row.',
+        'C:\\skills\\retained',
+        'C:\\skills\\retained\\SKILL.md',
+        1,
+        JSON.stringify(['SKILL.md']),
+        '2026-07-14T00:00:00.000Z',
+        1,
+        'installed'
+      ]
+    );
+    legacyDb.run(
+      'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)',
+      ['locale', 'zh-CN', '2026-07-14T00:00:00.000Z']
+    );
+    legacyDb.run('DROP TABLE skill_scan_sources');
+    legacyDb.run('PRAGMA user_version = 9');
+    const tempDirectory = await mkdtemp(join(tmpdir(), 'spellbook-v9-schema-'));
+    const databasePath = join(tempDirectory, 'spellbook.db');
+
+    try {
+      await writeFile(databasePath, legacyDb.exportBytes());
+      const migratedDb = await openAppDatabase(databasePath);
+
+      expect(migratedDb.get('SELECT * FROM skills WHERE id = ?', ['local:retained'])).toMatchObject({
+        id: 'local:retained',
+        name: 'Retained skill',
+        files: JSON.stringify(['SKILL.md'])
+      });
+      expect(migratedDb.get('SELECT * FROM app_settings WHERE key = ?', ['locale'])).toMatchObject({
+        key: 'locale',
+        value: 'zh-CN'
+      });
+      expect(migratedDb.get<{ user_version: number }>('PRAGMA user_version')).toEqual({
+        user_version: 10
+      });
+      expect(
+        migratedDb.get<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'skill_scan_sources'"
+        )
+      ).toEqual({ name: 'skill_scan_sources' });
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
