@@ -1,5 +1,4 @@
 import {
-  BrainCircuit,
   Clipboard,
   Heart,
   PanelRightClose,
@@ -7,7 +6,6 @@ import {
   Plus,
   Save,
   ScanSearch,
-  Sparkles,
   Trash2
 } from 'lucide-react';
 import {
@@ -49,6 +47,7 @@ import {
   type SpellTableSortState
 } from '../spellSort';
 import { useFeedbackToast } from './FeedbackToast';
+import { RecommendationBookScene } from './RecommendationBookScene';
 import { SpellEditorDialog, type SpellEditorDraft } from './SpellEditorDialog';
 import { SpellIdentity, SpellListSortHeader } from './SpellListPrimitives';
 import { SpellSearchFilter } from './SpellSearchFilter';
@@ -70,17 +69,14 @@ type EditorState =
 
 type RecommendationIntroPhase = 'opening' | 'message' | 'ready';
 
-const RECOMMENDATION_INTRO_SESSION_KEY = 'spellbook:recommendation-empty-intro-seen';
-const RECOMMENDATION_MESSAGE_DELAY_MS = 2200;
-const RECOMMENDATION_READY_DELAY_MS = 4900;
+const RECOMMENDATION_MESSAGE_DELAY_MS = 3200;
+const RECOMMENDATION_READY_DELAY_MS = 7500;
 
 function getInitialRecommendationIntroPhase(): RecommendationIntroPhase {
   if (typeof window === 'undefined') {
     return 'ready';
   }
-  const introSeen = window.sessionStorage.getItem(RECOMMENDATION_INTRO_SESSION_KEY) === '1';
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  return introSeen || reducedMotion ? 'ready' : 'opening';
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'ready' : 'opening';
 }
 
 export function LibraryView({
@@ -207,7 +203,10 @@ export function LibraryView({
     if (recommendationPanelOpen && pendingCandidates.length === 0) {
       return;
     }
-    if (window.sessionStorage.getItem(RECOMMENDATION_INTRO_SESSION_KEY) === '1') {
+    if (
+      recommendationIntroStartedRef.current &&
+      !recommendationIntroCompletedRef.current
+    ) {
       recommendationIntroCompletedRef.current = true;
       setRecommendationIntroPhase('ready');
     }
@@ -218,24 +217,17 @@ export function LibraryView({
       return;
     }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      window.sessionStorage.setItem(RECOMMENDATION_INTRO_SESSION_KEY, '1');
       recommendationIntroCompletedRef.current = true;
       setRecommendationIntroPhase('ready');
       return;
     }
-    const introSeen = window.sessionStorage.getItem(RECOMMENDATION_INTRO_SESSION_KEY) === '1';
-    if (
-      recommendationIntroCompletedRef.current ||
-      (introSeen && !recommendationIntroStartedRef.current)
-    ) {
-      recommendationIntroCompletedRef.current = true;
+    if (recommendationIntroCompletedRef.current) {
       setRecommendationIntroPhase('ready');
       return;
     }
 
     if (!recommendationIntroStartedRef.current) {
       recommendationIntroStartedRef.current = true;
-      window.sessionStorage.setItem(RECOMMENDATION_INTRO_SESSION_KEY, '1');
       setRecommendationIntroPhase('opening');
     }
     const messageTimer = window.setTimeout(
@@ -843,87 +835,37 @@ export function LibraryView({
                     <div
                       className={`candidate-memory-reveal phase-${recommendationIntroPhase}`}
                     >
-                      <div aria-hidden="true" className="candidate-memory-book">
-                        <span className="candidate-memory-cover candidate-memory-cover-left" />
-                        <span className="candidate-memory-cover candidate-memory-cover-right" />
-                        <span
-                          className="candidate-memory-page-stack candidate-memory-page-stack-left"
-                        />
-                        <span
-                          className="candidate-memory-page-stack candidate-memory-page-stack-right"
-                        />
-                        <div className="candidate-memory-page candidate-memory-page-left">
-                          <div className="candidate-memory-ai-seal">
-                            <span className="candidate-memory-seal-ring" />
-                            <BrainCircuit size={23} strokeWidth={1.6} />
-                            <span className="candidate-memory-node node-one" />
-                            <span className="candidate-memory-node node-two" />
-                            <span className="candidate-memory-node node-three" />
-                          </div>
-                          <span className="candidate-memory-spell candidate-memory-spell-reasoning">
-                            推理回响
-                          </span>
-                          <span className="candidate-memory-spell candidate-memory-spell-memory">
-                            记忆召回
-                          </span>
-                        </div>
-                        <div className="candidate-memory-page candidate-memory-page-right">
-                          <div className="candidate-memory-model-map">
-                            <span className="candidate-memory-map-node map-node-one" />
-                            <span className="candidate-memory-map-node map-node-two" />
-                            <span className="candidate-memory-map-node map-node-three" />
-                            <span className="candidate-memory-map-link map-link-one" />
-                            <span className="candidate-memory-map-link map-link-two" />
-                          </div>
-                          <span className="candidate-memory-spell candidate-memory-spell-vector">
-                            向量共鸣
-                          </span>
-                          <span className="candidate-memory-spell candidate-memory-spell-agent">
-                            智能体觉醒
-                          </span>
-                        </div>
-                        <span className="candidate-memory-spine" />
-                        <span className="candidate-memory-bookmark" />
-                        <span className="candidate-memory-searchlight" />
-                        <Sparkles
-                          className="candidate-memory-spark candidate-memory-spark-top"
-                          size={18}
-                        />
-                        <Sparkles
-                          className="candidate-memory-spark candidate-memory-spark-bottom"
-                          size={13}
-                        />
-                      </div>
+                      <RecommendationBookScene phase={recommendationIntroPhase} />
                       {recommendationIntroPhase === 'message' ? (
                         <strong
                           aria-label={t('library.emptyRecommendationsTitle')}
                           className="candidate-memory-phrase"
                         >
-                          <span
-                            aria-hidden="true"
-                            className="candidate-memory-phrase-line candidate-memory-phrase-lead"
-                          >
-                            {t('library.emptyRecommendationsLead')}
-                          </span>
-                          <span
-                            aria-hidden="true"
-                            className="candidate-memory-phrase-line candidate-memory-phrase-tail"
-                          >
-                            {t('library.emptyRecommendationsTail')}
-                          </span>
+                          {[...t('library.emptyRecommendationsTitle')].map(
+                            (character, index) => (
+                              <span
+                                aria-hidden="true"
+                                className="candidate-memory-phrase-character"
+                                key={`${character}-${index}`}
+                                style={{ '--character-index': index } as CSSProperties}
+                              >
+                                {character === ' ' ? '\u00a0' : character}
+                              </span>
+                            )
+                          )}
                         </strong>
                       ) : null}
+                      {recommendationIntroPhase === 'ready' ? (
+                        <button
+                          className="primary-button candidate-empty-action"
+                          onClick={onOpenRecommendationDiscovery}
+                          type="button"
+                        >
+                          <ScanSearch size={15} />
+                          {t('library.find')}
+                        </button>
+                      ) : null}
                     </div>
-                    {recommendationIntroPhase === 'ready' ? (
-                      <button
-                        className="primary-button candidate-empty-action"
-                        onClick={onOpenRecommendationDiscovery}
-                        type="button"
-                      >
-                        <ScanSearch size={15} />
-                        {t('library.find')}
-                      </button>
-                    ) : null}
                   </div>
                 )}
               </div>

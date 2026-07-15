@@ -18,13 +18,15 @@
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "sql.js": "latest"
+    "sql.js": "latest",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@types/sql.js": "latest",
+    "@types/three": "^0.185.1",
     "electron": "latest",
     "typescript": "latest",
     "vite": "^7.3.6",
