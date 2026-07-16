@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createAppReadinessBarrier,
   createWindowRestorer,
   registerSingleInstanceLifecycle,
   type RestorableWindow
@@ -113,6 +114,73 @@ describe('app single-instance lifecycle', () => {
     expect(createCalls).toBe(3);
   });
 
+  it('queues cold-start relaunches behind bootstrap and creates exactly one focused window', async () => {
+    let currentWindow: TestWindow | null = null;
+    let createCalls = 0;
+    let initializeCalls = 0;
+    let secondInstanceHandler: (() => void) | null = null;
+    const bootstrapStarted = deferred();
+    const releaseBootstrap = deferred();
+    const pendingRestores: Promise<void>[] = [];
+    const restoreWindow = createWindowRestorer({
+      getWindow: () => currentWindow,
+      async createWindow() {
+        createCalls += 1;
+        currentWindow = new TestWindow();
+        return currentWindow;
+      }
+    });
+    const readiness = createAppReadinessBarrier({
+      async startApplication() {
+        initializeCalls += 1;
+        bootstrapStarted.resolve();
+        await releaseBootstrap.promise;
+        await restoreWindow();
+        return 'started';
+      },
+      restorePrimaryWindow: restoreWindow
+    });
+
+    expect(
+      registerSingleInstanceLifecycle({
+        requestLock: () => true,
+        onSecondInstance(handler) {
+          secondInstanceHandler = handler;
+        },
+        restorePrimaryWindow() {
+          const restore = readiness.restorePrimaryWindow().then(() => undefined);
+          pendingRestores.push(restore);
+          return restore;
+        },
+        reportRestoreFailure(error) {
+          throw error;
+        },
+        quitSecondary() {
+          throw new Error('Primary instance must not quit');
+        }
+      })
+    ).toBe('primary');
+
+    const startup = readiness.start();
+    secondInstanceHandler!();
+    secondInstanceHandler!();
+    await bootstrapStarted.promise;
+    await Promise.resolve();
+
+    expect(initializeCalls).toBe(1);
+    expect(createCalls).toBe(0);
+    expect(currentWindow).toBeNull();
+
+    releaseBootstrap.resolve();
+    await Promise.all([startup, ...pendingRestores]);
+
+    expect(initializeCalls).toBe(1);
+    expect(createCalls).toBe(1);
+    expect(currentWindow).not.toBeNull();
+    expect(currentWindow!.visible).toBe(true);
+    expect(currentWindow!.focusCalls).toBeGreaterThan(0);
+  });
+
   it('restores and focuses an existing minimized window without creating another one', async () => {
     const window = new TestWindow();
     window.minimized = true;
@@ -133,3 +201,11 @@ describe('app single-instance lifecycle', () => {
     expect(window.focusCalls).toBe(1);
   });
 });
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}

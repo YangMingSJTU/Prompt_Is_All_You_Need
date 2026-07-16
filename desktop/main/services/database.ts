@@ -11,11 +11,36 @@ export interface AppDatabase {
   save(): Promise<void>;
 }
 
+export interface DatabaseWriteOperations {
+  createParentDirectory(filePath: string): Promise<void>;
+  writeFile(filePath: string, bytes: Uint8Array): Promise<void>;
+}
+
+export interface TestDatabaseOptions {
+  filePath?: string;
+  writeOperations?: DatabaseWriteOperations;
+}
+
 const sqlModulePromises = new Map<string, Promise<SqlJsStatic>>();
 
-export async function createTestDatabase(): Promise<AppDatabase> {
+const nodeDatabaseWriteOperations: DatabaseWriteOperations = {
+  async createParentDirectory(filePath) {
+    await mkdir(dirname(filePath), { recursive: true });
+  },
+  async writeFile(filePath, bytes) {
+    await writeFile(filePath, bytes);
+  }
+};
+
+export async function createTestDatabase(
+  options: TestDatabaseOptions = {}
+): Promise<AppDatabase> {
   const SQL = await getSqlModule();
-  return wrapDatabase(new SQL.Database(), null);
+  return wrapDatabase(
+    new SQL.Database(),
+    options.filePath ?? null,
+    options.writeOperations ?? nodeDatabaseWriteOperations
+  );
 }
 
 export async function openAppDatabase(
@@ -30,7 +55,7 @@ export async function openAppDatabase(
   } catch {
     db = new SQL.Database();
   }
-  return wrapDatabase(db, filePath);
+  return wrapDatabase(db, filePath, nodeDatabaseWriteOperations);
 }
 
 async function getSqlModule(sqlWasmPath = resolveInstalledSqlWasmPath()): Promise<SqlJsStatic> {
@@ -46,7 +71,11 @@ function resolveInstalledSqlWasmPath(): string {
   return fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
 }
 
-function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
+function wrapDatabase(
+  db: SqlJsDatabase,
+  filePath: string | null,
+  writeOperations: DatabaseWriteOperations
+): AppDatabase {
   createSchema(db);
   let pendingSave = Promise.resolve();
   return {
@@ -80,8 +109,8 @@ function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
       const save = pendingSave
         .catch(() => undefined)
         .then(async () => {
-          await mkdir(dirname(filePath), { recursive: true });
-          await writeFile(filePath, bytes);
+          await writeOperations.createParentDirectory(filePath);
+          await writeOperations.writeFile(filePath, bytes);
         });
       pendingSave = save;
       await save;

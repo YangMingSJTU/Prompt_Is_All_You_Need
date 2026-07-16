@@ -20,6 +20,42 @@ export interface SingleInstanceOperations {
   quitSecondary(): void;
 }
 
+export type AppReadinessResult = 'started' | 'failed';
+
+export interface AppReadinessOperations {
+  startApplication(): Promise<AppReadinessResult>;
+  restorePrimaryWindow(): Promise<void>;
+}
+
+export interface AppReadinessBarrier {
+  start(): Promise<AppReadinessResult>;
+  restorePrimaryWindow(): Promise<boolean>;
+}
+
+export function createAppReadinessBarrier(
+  operations: AppReadinessOperations
+): AppReadinessBarrier {
+  let readinessPromise: Promise<AppReadinessResult> | null = null;
+
+  const start = () => {
+    if (!readinessPromise) {
+      readinessPromise = operations.startApplication();
+    }
+    return readinessPromise;
+  };
+
+  return {
+    start,
+    async restorePrimaryWindow() {
+      if ((await start()) !== 'started') {
+        return false;
+      }
+      await operations.restorePrimaryWindow();
+      return true;
+    }
+  };
+}
+
 export function createWindowRestorer<TWindow extends RestorableWindow>(
   operations: WindowRestorationOperations<TWindow>
 ): () => Promise<void> {

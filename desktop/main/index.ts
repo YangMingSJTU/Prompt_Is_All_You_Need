@@ -53,7 +53,11 @@ import {
 } from './services/appAssets';
 import { runAppPreflight, runAppStartup } from './services/appStartup';
 import { configureElectronStorage } from './services/electronStorage';
-import { createWindowRestorer, registerSingleInstanceLifecycle } from './services/appLifecycle';
+import {
+  createAppReadinessBarrier,
+  createWindowRestorer,
+  registerSingleInstanceLifecycle
+} from './services/appLifecycle';
 import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
@@ -533,6 +537,30 @@ const preflightResult = runAppPreflight({
   }
 });
 
+const appReadiness = createAppReadinessBarrier({
+  async startApplication() {
+    await app.whenReady();
+    return runAppStartup({
+      async initialize() {
+        Menu.setApplicationMenu(null);
+        await bootstrap();
+      },
+      async createWindows() {
+        await restoreMainWindow();
+        await createFloatingWindow();
+        registerDesktopControls();
+      },
+      showFailure(feedback) {
+        dialog.showErrorBox(feedback.title, feedback.message);
+      },
+      quit() {
+        app.quit();
+      }
+    });
+  },
+  restorePrimaryWindow: restoreMainWindow
+});
+
 const instanceRole =
   preflightResult === 'ready'
     ? registerSingleInstanceLifecycle({
@@ -540,7 +568,9 @@ const instanceRole =
         onSecondInstance(handler) {
           app.on('second-instance', () => handler());
         },
-        restorePrimaryWindow: restoreMainWindow,
+        async restorePrimaryWindow() {
+          await appReadiness.restorePrimaryWindow();
+        },
         reportRestoreFailure(error) {
           const detail = error instanceof Error ? error.message : String(error);
           dialog.showErrorBox(
@@ -553,25 +583,7 @@ const instanceRole =
     : 'secondary';
 
 if (preflightResult === 'ready' && instanceRole === 'primary') {
-  void app.whenReady().then(() =>
-    runAppStartup({
-      async initialize() {
-        Menu.setApplicationMenu(null);
-        await bootstrap();
-      },
-      async createWindows() {
-        await createWindow();
-        await createFloatingWindow();
-        registerDesktopControls();
-      },
-      showFailure(feedback) {
-        dialog.showErrorBox(feedback.title, feedback.message);
-      },
-      quit() {
-        app.quit();
-      }
-    })
-  );
+  void appReadiness.start();
 }
 
 app.on('window-all-closed', () => {
@@ -581,7 +593,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', async () => {
-  await restoreMainWindow();
+  if (!(await appReadiness.restorePrimaryWindow())) {
+    return;
+  }
   if (!floatingWindow || floatingWindow.isDestroyed()) {
     await createFloatingWindow();
   }
