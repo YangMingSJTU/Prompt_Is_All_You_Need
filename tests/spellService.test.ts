@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createSpellService } from '../desktop/main/services/spellService';
-import { createTestDatabase } from '../desktop/main/services/database';
+import { createTestDatabase, openAppDatabase } from '../desktop/main/services/database';
 
 describe('spell service', () => {
   it('seeds starter spells and searches by tag and body', async () => {
@@ -11,6 +14,38 @@ describe('spell service', () => {
     const results = await service.searchSpells('review');
 
     expect(results.some((spell) => spell.body.includes('Review the current git diff.'))).toBe(true);
+  });
+
+  it('keeps starter initialization idempotent across concurrent calls and persistence', async () => {
+    const fixture = await mkdtemp(join(tmpdir(), 'spellbook-seed-'));
+    const databasePath = join(fixture, 'index.sqlite');
+
+    try {
+      const db = await openAppDatabase(databasePath);
+      const service = createSpellService(db);
+
+      await Promise.all(Array.from({ length: 12 }, () => service.seedStarterSpells()));
+
+      const inMemory = await service.listSpells();
+      expect(inMemory).toHaveLength(3);
+      expect(new Set(inMemory.map((spell) => spell.id))).toEqual(
+        new Set([
+          'starter-review-current-diff',
+          'starter-debug-failing-tests',
+          'starter-generate-commit-message'
+        ])
+      );
+
+      const reopened = createSpellService(await openAppDatabase(databasePath));
+      await reopened.seedStarterSpells();
+      const persisted = await reopened.listSpells();
+      expect(persisted).toHaveLength(3);
+      expect(persisted.map((spell) => spell.name).sort()).toEqual(
+        inMemory.map((spell) => spell.name).sort()
+      );
+    } finally {
+      await rm(fixture, { recursive: true, force: true });
+    }
   });
 
   it('records usage and returns analytics', async () => {

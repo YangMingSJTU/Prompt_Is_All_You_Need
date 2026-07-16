@@ -53,6 +53,7 @@ import {
 } from './services/appAssets';
 import { runAppPreflight, runAppStartup } from './services/appStartup';
 import { configureElectronStorage } from './services/electronStorage';
+import { createWindowRestorer, registerSingleInstanceLifecycle } from './services/appLifecycle';
 import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
@@ -76,10 +77,10 @@ function getRuntimeAppRoot(): string {
   });
 }
 
-async function createWindow(): Promise<void> {
+async function createWindow(): Promise<BrowserWindow> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
     height: MAIN_WINDOW_DEFAULT_HEIGHT,
     minWidth: MAIN_WINDOW_MIN_WIDTH,
@@ -103,12 +104,26 @@ async function createWindow(): Promise<void> {
     }
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+  mainWindow = window;
+  window.once('ready-to-show', () => {
+    if (!window.isDestroyed()) {
+      window.show();
+    }
+  });
+  window.on('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
   });
 
-  await loadRenderer(mainWindow, 'main');
+  await loadRenderer(window, 'main');
+  return window;
 }
+
+const restoreMainWindow = createWindowRestorer<BrowserWindow>({
+  getWindow: () => mainWindow,
+  createWindow
+});
 
 async function createFloatingWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
@@ -518,7 +533,26 @@ const preflightResult = runAppPreflight({
   }
 });
 
-if (preflightResult === 'ready') {
+const instanceRole =
+  preflightResult === 'ready'
+    ? registerSingleInstanceLifecycle({
+        requestLock: () => app.requestSingleInstanceLock(),
+        onSecondInstance(handler) {
+          app.on('second-instance', () => handler());
+        },
+        restorePrimaryWindow: restoreMainWindow,
+        reportRestoreFailure(error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          dialog.showErrorBox(
+            'Spellbook could not restore its window',
+            `The existing Spellbook process is still running, but its window could not be restored.\n\nDetails: ${detail}`
+          );
+        },
+        quitSecondary: () => app.quit()
+      })
+    : 'secondary';
+
+if (preflightResult === 'ready' && instanceRole === 'primary') {
   void app.whenReady().then(() =>
     runAppStartup({
       async initialize() {
@@ -547,8 +581,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', async () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    await createWindow();
+  await restoreMainWindow();
+  if (!floatingWindow || floatingWindow.isDestroyed()) {
     await createFloatingWindow();
   }
 });

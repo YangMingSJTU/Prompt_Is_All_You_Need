@@ -48,6 +48,7 @@ function resolveInstalledSqlWasmPath(): string {
 
 function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
   createSchema(db);
+  let pendingSave = Promise.resolve();
   return {
     run(sql: string, params: unknown[] = []) {
       db.run(sql, params as never[]);
@@ -75,8 +76,15 @@ function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
       if (!filePath) {
         return;
       }
-      await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, db.export());
+      const bytes = db.export();
+      const save = pendingSave
+        .catch(() => undefined)
+        .then(async () => {
+          await mkdir(dirname(filePath), { recursive: true });
+          await writeFile(filePath, bytes);
+        });
+      pendingSave = save;
+      await save;
     }
   };
 }

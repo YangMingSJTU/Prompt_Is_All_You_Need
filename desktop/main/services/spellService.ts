@@ -44,9 +44,10 @@ interface CandidateRow extends Record<string, unknown> {
 }
 
 const STARTER_SPELLS: Array<
-  Omit<Spell, 'id' | 'isFavorite' | 'createdAt' | 'updatedAt' | 'copyCount'>
+  Omit<Spell, 'isFavorite' | 'createdAt' | 'updatedAt' | 'copyCount'>
 > = [
   {
+    id: 'starter-review-current-diff',
     name: 'Review current diff',
     body: [
       'Review the current git diff.',
@@ -59,12 +60,14 @@ const STARTER_SPELLS: Array<
     source: 'starter'
   },
   {
+    id: 'starter-debug-failing-tests',
     name: 'Debug failing tests',
     body: 'Investigate the failing tests, identify the failing behavior, decide whether implementation or tests are wrong, and propose the smallest safe fix.',
     tags: ['debug', 'test'],
     source: 'starter'
   },
   {
+    id: 'starter-generate-commit-message',
     name: 'Generate commit message',
     body: 'Generate a concise commit message for the current changes.\n\nFormat:\n<type>: <summary>\n\nBody:\n- What changed\n- Why it changed\n- Testing notes',
     tags: ['git', 'commit'],
@@ -76,21 +79,33 @@ export function createSpellService(db: AppDatabase) {
   return {
     async seedStarterSpells(): Promise<void> {
       const now = new Date().toISOString();
-      for (const spell of STARTER_SPELLS) {
-        db.run(
-          `INSERT OR IGNORE INTO spells
-            (id, name, body, tags, source, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            randomUUID(),
-            spell.name,
-            spell.body,
-            JSON.stringify(spell.tags),
-            spell.source,
-            now,
-            now
-          ]
-        );
+      db.run('BEGIN TRANSACTION');
+      try {
+        for (const spell of STARTER_SPELLS) {
+          db.run(
+            `INSERT INTO spells
+              (id, name, body, tags, source, created_at, updated_at)
+             SELECT ?, ?, ?, ?, ?, ?, ?
+             WHERE NOT EXISTS (
+               SELECT 1 FROM spells WHERE source = ? AND name = ?
+             )`,
+            [
+              spell.id,
+              spell.name,
+              spell.body,
+              JSON.stringify(spell.tags),
+              spell.source,
+              now,
+              now,
+              spell.source,
+              spell.name
+            ]
+          );
+        }
+        db.run('COMMIT');
+      } catch (error) {
+        db.run('ROLLBACK');
+        throw error;
       }
       await db.save();
     },
