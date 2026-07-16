@@ -219,17 +219,21 @@ describe('skill library IPC and UI structure', () => {
     expect(main).not.toContain("scanRequest.target === 'skills'");
   });
 
-  it('uses an accessible master-detail view with independent installation rows and complete files', () => {
+  it('uses the compact accessible master-detail view without the retired page chrome', () => {
     const component = readFileSync(
       'desktop/renderer/components/SkillLibraryView.tsx',
+      'utf8'
+    );
+    const filter = readFileSync(
+      'desktop/renderer/components/SkillSearchFilter.tsx',
       'utf8'
     );
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
 
-    expect(component).toContain('className="skill-workspace"');
+    expect(component).toContain("'skill-library-page panel-grid resizing'");
     expect(component).toContain('className="skill-master-list"');
-    expect(component).toContain('className="skill-detail-pane"');
+    expect(component).toContain('skill-detail-pane quick-spell-detail');
     expect(component).toContain('role="listbox"');
     expect(component).toContain('role="option"');
     expect(component).toContain('aria-selected={selected}');
@@ -240,10 +244,29 @@ describe('skill library IPC and UI structure', () => {
     expect(component).toContain('useFeedbackToast');
     expect(component).toContain('statusRef.current?.focus()');
     expect(component).toContain('aria-busy={hasBusyAction(busyActions, item.id)}');
+    expect(component).toContain('role="separator"');
+    expect(component).toContain('onKeyDown={resizeWithKeyboard}');
+    expect(component).toContain("event.key === 'ArrowDown'");
+    expect(component).toContain("event.key === 'Home'");
+    expect(component).toContain('formatMessage(t(\'skill.detail.files\')');
+    expect(component).toContain('<SkillFileTree files={item.files} t={t} />');
+    expect(component).not.toContain('skill-library-header');
+    expect(component).not.toContain('skill-filter-control');
+    expect(component).not.toContain('skill-result-count');
+    expect(component).not.toContain('skill-info-grid');
+    expect(component).not.toContain('skill-detail-actions');
+    expect(component).not.toContain('skill-tree-root');
     expect(component).not.toContain('Download');
+    expect(filter).toContain('className="spell-search-filter skill-search-filter"');
+    expect(filter).toContain('aria-haspopup="dialog"');
+    expect(filter).toContain('role="radiogroup"');
+    expect(filter).toContain('role="radio"');
     expect(app).toContain('<SkillLibraryView t={t} />');
     expect(app).not.toContain('window.spellbook.listSkills()');
     expect(styles).toContain('.skill-list-row:focus-visible');
+    expect(styles).toContain('height: 52px;');
+    expect(styles).toContain('.skill-list-row:hover,\n.skill-list-row.selected');
+    expect(styles).toContain('grid-template-columns: 48px minmax(0, 1fr);');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });

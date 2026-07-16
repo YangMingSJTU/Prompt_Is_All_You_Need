@@ -4,8 +4,7 @@ import {
   Check,
   FileText,
   FolderInput,
-  RefreshCw,
-  Search
+  ScanSearch
 } from 'lucide-react';
 import {
   useCallback,
@@ -13,7 +12,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent
 } from 'react';
 import type {
   SkillInstallation,
@@ -34,7 +34,15 @@ import {
   type SkillPlatformFilter,
   type SkillSourceFilter
 } from '../skillLibraryState';
+import { calculateSplitRatio, clampSplitRatio, type SplitPaneConstraints } from '../splitPane';
 import { useFeedbackToast } from './FeedbackToast';
+import { SkillSearchFilter } from './SkillSearchFilter';
+
+const SKILL_PANEL_MIN_LIST_WIDTH = 480;
+const SKILL_PANEL_MIN_DETAIL_WIDTH = 360;
+const SKILL_PANEL_SPLITTER_WIDTH = 8;
+const SKILL_PANEL_MIN_WIDTH =
+  SKILL_PANEL_MIN_LIST_WIDTH + SKILL_PANEL_MIN_DETAIL_WIDTH + SKILL_PANEL_SPLITTER_WIDTH;
 
 interface SkillLibraryViewProps {
   t: TFunction;
@@ -52,7 +60,11 @@ export function SkillLibraryView({ t }: SkillLibraryViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyActions, setBusyActions] = useState<Set<string>>(new Set());
   const [actionErrors, setActionErrors] = useState<SkillActionErrors>({});
+  const [splitRatio, setSplitRatio] = useState(60);
+  const [isResizing, setIsResizing] = useState(false);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const panelRef = useRef<HTMLElement>(null);
+  const resizingRef = useRef(false);
   const { showToast } = useFeedbackToast();
 
   const loadLibrary = useCallback(async () => {
@@ -102,8 +114,6 @@ export function SkillLibraryView({ t }: SkillLibraryViewProps) {
     visibleItems.find((item) => item.id === selectedId) ?? null;
   const bundledItems = visibleItems.filter((item) => item.source === 'bundled');
   const localItems = visibleItems.filter((item) => item.source === 'local');
-  const filtersActive =
-    query.trim().length > 0 || sourceFilter !== 'all' || platformFilter !== 'all';
   const neverScanned =
     library?.sources.every((source) => source.status === 'never_scanned') ?? true;
 
@@ -123,12 +133,6 @@ export function SkillLibraryView({ t }: SkillLibraryViewProps) {
             : formatMessage(t('skill.scan.success'), {
                 count: result.freshSkillCount
               })
-        );
-      } else if (result.outcome === 'partial') {
-        const failureCount = result.sources.filter((source) => !source.refreshed).length;
-        showToast(
-          formatMessage(t('skill.scan.partial'), { count: failureCount }),
-          { variant: 'warning' }
         );
       }
     } catch {
@@ -213,8 +217,7 @@ export function SkillLibraryView({ t }: SkillLibraryViewProps) {
     );
   }
 
-  function clearAll(): void {
-    setQuery('');
+  function clearFilters(): void {
     setSourceFilter('all');
     setPlatformFilter('all');
   }
@@ -241,15 +244,79 @@ export function SkillLibraryView({ t }: SkillLibraryViewProps) {
     }
   }
 
+  function getSplitConstraints(): SplitPaneConstraints | null {
+    const panel = panelRef.current;
+    if (!panel) {
+      return null;
+    }
+    return {
+      containerWidth: panel.getBoundingClientRect().width,
+      dividerWidth: SKILL_PANEL_SPLITTER_WIDTH,
+      minStartWidth: SKILL_PANEL_MIN_LIST_WIDTH,
+      minEndWidth: SKILL_PANEL_MIN_DETAIL_WIDTH
+    };
+  }
+
+  function updateSplitFromPointer(clientX: number): void {
+    const panel = panelRef.current;
+    const constraints = getSplitConstraints();
+    if (!panel || !constraints) {
+      return;
+    }
+    setSplitRatio(calculateSplitRatio(clientX, panel.getBoundingClientRect().left, constraints));
+  }
+
+  function startResizing(event: ReactPointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    resizingRef.current = true;
+    setIsResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateSplitFromPointer(event.clientX);
+  }
+
+  function resizeWithPointer(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (resizingRef.current) {
+      updateSplitFromPointer(event.clientX);
+    }
+  }
+
+  function stopResizing(event: ReactPointerEvent<HTMLDivElement>): void {
+    resizingRef.current = false;
+    setIsResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function resizeWithKeyboard(event: KeyboardEvent<HTMLDivElement>): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    const constraints = getSplitConstraints();
+    if (!constraints) {
+      return;
+    }
+    event.preventDefault();
+    setSplitRatio((current) => {
+      if (event.key === 'Home') {
+        return clampSplitRatio(0, constraints);
+      }
+      if (event.key === 'End') {
+        return clampSplitRatio(100, constraints);
+      }
+      return clampSplitRatio(current + (event.key === 'ArrowLeft' ? -2 : 2), constraints);
+    });
+  }
+
   if (loading) {
     return <SkillLibrarySkeleton t={t} />;
   }
 
   if (loadError && !library) {
     return (
-      <section className="skill-library-page">
+      <section className="skill-library-page skill-library-load-error">
         <div className="skill-page-error" role="alert">
-          <strong>{t('skill.load.failed')}</strong>
+          <span>{t('skill.load.failed')}</span>
           <button className="primary-button" onClick={() => void loadLibrary()} type="button">
             {t('skill.load.retry')}
           </button>
@@ -258,161 +325,141 @@ export function SkillLibraryView({ t }: SkillLibraryViewProps) {
     );
   }
 
+  const showLocalEmpty =
+    sourceFilter !== 'bundled' &&
+    query.trim().length === 0 &&
+    platformFilter === 'all' &&
+    localItems.length === 0;
+  const showNoMatch = visibleItems.length === 0 && !showLocalEmpty;
+
   return (
-    <section className="skill-library-page">
-      <header className="skill-library-header">
-        <div>
-          <h3>{t('skill.title')}</h3>
-          <p>{t('skill.description')}</p>
-        </div>
-        <button
-          aria-busy={scanning}
-          className="primary-button"
-          disabled={scanning}
-          onClick={() => void scanSkills()}
-          type="button"
-        >
-          <RefreshCw aria-hidden size={16} />
-          {scanning ? t('skill.findingLocal') : t('skill.findLocal')}
-        </button>
-      </header>
-
-      {library?.localLoadError ? (
-        <div className="skill-inline-notice warning" role="alert">
-          <AlertTriangle aria-hidden size={16} />
-          <span>{t('skill.load.localFailed')}</span>
-          <button onClick={() => void loadLibrary()} type="button">
-            {t('skill.load.retry')}
-          </button>
-        </div>
-      ) : null}
-      {scanNotice ? (
-        <SkillScanNotice notice={scanNotice} onRetry={() => void scanSkills()} t={t} />
-      ) : null}
-
-      <div className="skill-toolbar">
-        <label className="skill-search">
-          <Search aria-hidden size={15} />
-          <span className="sr-only">{t('skill.search.placeholder')}</span>
-          <input
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                setQuery('');
-              }
-            }}
-            placeholder={t('skill.search.placeholder')}
-            value={query}
+    <section
+      className={isResizing ? 'skill-library-page panel-grid resizing' : 'skill-library-page panel-grid'}
+      ref={panelRef}
+      style={{
+        minWidth: SKILL_PANEL_MIN_WIDTH,
+        gridTemplateColumns: `minmax(${SKILL_PANEL_MIN_LIST_WIDTH}px, ${splitRatio}fr) ${SKILL_PANEL_SPLITTER_WIDTH}px minmax(${SKILL_PANEL_MIN_DETAIL_WIDTH}px, ${100 - splitRatio}fr)`
+      }}
+    >
+      <div className="skill-master-pane search-pane">
+        <div className="skill-toolbar">
+          <SkillSearchFilter
+            onClear={clearFilters}
+            onPlatformChange={setPlatformFilter}
+            onQueryChange={setQuery}
+            onSourceChange={setSourceFilter}
+            platform={platformFilter}
+            query={query}
+            source={sourceFilter}
+            t={t}
           />
-        </label>
-        <label className="skill-filter-control">
-          <span>{t('skill.filter.source')}</span>
-          <select
-            aria-label={t('skill.filter.source')}
-            onChange={(event) => setSourceFilter(event.target.value as SkillSourceFilter)}
-            value={sourceFilter}
-          >
-            <option value="all">{t('skill.filter.source.all')}</option>
-            <option value="bundled">{t('skill.filter.source.bundled')}</option>
-            <option value="local">{t('skill.filter.source.local')}</option>
-          </select>
-        </label>
-        <label className="skill-filter-control">
-          <span>{t('skill.filter.platform')}</span>
-          <select
-            aria-label={t('skill.filter.platform')}
-            onChange={(event) => setPlatformFilter(event.target.value as SkillPlatformFilter)}
-            value={platformFilter}
-          >
-            <option value="all">{t('skill.filter.platform.all')}</option>
-            <option value="claude">Claude</option>
-            <option value="codex">Codex</option>
-          </select>
-        </label>
-        {filtersActive ? (
-          <button className="secondary-button" onClick={clearAll} type="button">
-            {t('skill.filter.clearAll')}
-          </button>
-        ) : null}
-      </div>
-
-      <div className="skill-workspace">
-        <div className="skill-master-pane">
-          <div className="skill-result-count">
-            {formatMessage(t('skill.resultCount'), { count: visibleItems.length })}
-          </div>
-          <div
+          <button
             aria-busy={scanning}
-            aria-label={t('skill.title')}
-            className="skill-master-list"
-            role="listbox"
+            aria-label={t('skill.findLocal.aria')}
+            className="secondary-button skill-scan-button"
+            disabled={scanning}
+            onClick={() => void scanSkills()}
+            title={t('skill.findLocal.aria')}
+            type="button"
           >
-            {visibleItems.length === 0 ? (
-              sourceFilter === 'local' &&
-              query.trim().length === 0 &&
-              platformFilter === 'all' ? (
-                <SkillLocalEmpty
-                  neverScanned={neverScanned}
-                  onScan={() => void scanSkills()}
-                  t={t}
-                />
-              ) : (
-                <SkillNoMatch filtersActive={filtersActive} onClear={clearAll} t={t} />
-              )
-            ) : (
-              <>
-                <SkillGroup
-                  busyActions={busyActions}
-                  items={bundledItems}
-                  label={t('skill.group.bundled')}
-                  moveSelection={moveListSelection}
-                  rowRefs={rowRefs}
-                  selectedId={selectedId}
-                  setSelectedId={setSelectedId}
-                  t={t}
-                />
-                <SkillGroup
-                  busyActions={busyActions}
-                  items={localItems}
-                  label={t('skill.group.local')}
-                  moveSelection={moveListSelection}
-                  rowRefs={rowRefs}
-                  selectedId={selectedId}
-                  setSelectedId={setSelectedId}
-                  t={t}
-                />
-                {localItems.length === 0 && sourceFilter !== 'bundled' && !filtersActive ? (
-                  <SkillLocalEmpty
-                    neverScanned={neverScanned}
-                    onScan={() => void scanSkills()}
-                    t={t}
-                  />
-                ) : null}
-              </>
-            )}
-          </div>
+            <ScanSearch aria-hidden className={scanning ? 'spinning' : undefined} size={15} />
+            <span>{scanning ? t('skill.findingLocal') : t('skill.findLocal')}</span>
+          </button>
         </div>
-        <div className="skill-detail-pane">
-          {selectedItem ? (
-            <SkillDetailPanel
-              actionErrors={actionErrors}
-              busyActions={busyActions}
-              item={selectedItem}
-              onInstall={installSkill}
-              onPackage={packageSkill}
-              t={t}
-            />
+
+        {library?.localLoadError ? (
+          <div className="skill-inline-notice warning" role="alert">
+            <AlertTriangle aria-hidden size={15} />
+            <span>{t('skill.load.localFailed')}</span>
+            <button onClick={() => void loadLibrary()} type="button">
+              {t('skill.load.retry')}
+            </button>
+          </div>
+        ) : null}
+        {scanNotice ? (
+          <SkillScanNotice notice={scanNotice} onRetry={() => void scanSkills()} t={t} />
+        ) : null}
+
+        <div
+          aria-busy={scanning}
+          aria-label={t('skill.title')}
+          className="skill-master-list"
+          role="listbox"
+        >
+          {showNoMatch ? (
+            <SkillListEmpty text={t('skill.empty.noMatch')} />
           ) : (
-            <div className="skill-detail-empty">{t('skill.empty.detail')}</div>
+            <>
+              <SkillGroup
+                busyActions={busyActions}
+                items={bundledItems}
+                label={formatMessage(t('skill.group.bundled'), { count: bundledItems.length })}
+                moveSelection={moveListSelection}
+                rowRefs={rowRefs}
+                selectedId={selectedId}
+                setSelectedId={setSelectedId}
+                t={t}
+              />
+              <SkillGroup
+                busyActions={busyActions}
+                emptyText={
+                  showLocalEmpty
+                    ? neverScanned
+                      ? t('skill.empty.neverScanned')
+                      : t('skill.empty.local')
+                    : undefined
+                }
+                items={localItems}
+                label={formatMessage(t('skill.group.local'), { count: localItems.length })}
+                moveSelection={moveListSelection}
+                rowRefs={rowRefs}
+                selectedId={selectedId}
+                setSelectedId={setSelectedId}
+                t={t}
+              />
+            </>
           )}
         </div>
       </div>
+
+      <div
+        aria-label={t('skill.resizePanels')}
+        aria-orientation="vertical"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(splitRatio)}
+        className="quick-spell-resizer"
+        onKeyDown={resizeWithKeyboard}
+        onLostPointerCapture={stopResizing}
+        onPointerDown={startResizing}
+        onPointerMove={resizeWithPointer}
+        onPointerUp={stopResizing}
+        role="separator"
+        tabIndex={0}
+        title={t('skill.resizePanels')}
+      />
+
+      <aside className="skill-detail-pane quick-spell-detail" aria-label={t('skill.detail.label')}>
+        {selectedItem ? (
+          <SkillDetailPanel
+            actionErrors={actionErrors}
+            busyActions={busyActions}
+            item={selectedItem}
+            onInstall={installSkill}
+            onPackage={packageSkill}
+            t={t}
+          />
+        ) : (
+          <div className="skill-detail-empty">{t('skill.empty.detail')}</div>
+        )}
+      </aside>
     </section>
   );
 }
 
 function SkillGroup({
   busyActions,
+  emptyText,
   items,
   label,
   moveSelection,
@@ -422,6 +469,7 @@ function SkillGroup({
   t
 }: {
   busyActions: Set<string>;
+  emptyText?: string;
   items: SkillLibraryItem[];
   label: string;
   moveSelection(event: KeyboardEvent<HTMLButtonElement>, itemId: string): void;
@@ -430,15 +478,13 @@ function SkillGroup({
   setSelectedId(id: string): void;
   t: TFunction;
 }) {
-  if (items.length === 0) {
+  if (items.length === 0 && !emptyText) {
     return null;
   }
   return (
     <section className="skill-list-group">
-      <h4>
-        <span>{label}</span>
-        <small>{items.length}</small>
-      </h4>
+      <h4>{label}</h4>
+      {emptyText ? <SkillListEmpty text={emptyText} /> : null}
       {items.map((item) => {
         const selected = item.id === selectedId;
         return (
@@ -460,17 +506,16 @@ function SkillGroup({
             tabIndex={selected ? 0 : -1}
             type="button"
           >
-            <strong>{item.name}</strong>
-            <span>{item.description || t('skill.noDescription')}</span>
-            <small>
-              {item.source === 'bundled'
-                ? `${t('skill.source.bundled')} · ${summarizeInstallations(item, t)}`
-                : `${t('skill.source.local')} · ${formatPlatform(item.discoveredPlatform!)} · ${item.fileCount} ${t('skill.detail.files')}`}
-              {item.stale ? ` · ${t('skill.scan.stale')}` : ''}
-              {hasBusyAction(busyActions, item.id)
-                ? ` · ${busyActions.has(packageErrorKey(item.id)) ? t('skill.packaging') : t('skill.installing')}`
-                : ''}
-            </small>
+            <span className="skill-row-title">
+              <strong>{item.name}</strong>
+              {item.stale ? (
+                <span className="skill-stale-icon" title={t('skill.scan.stale')}>
+                  <AlertTriangle aria-hidden size={14} />
+                  <span className="sr-only">{t('skill.scan.stale')}</span>
+                </span>
+              ) : null}
+            </span>
+            <small>{compactSkillMeta(item, t)}</small>
           </button>
         );
       })}
@@ -496,18 +541,22 @@ function SkillDetailPanel({
   const itemBusy = hasBusyAction(busyActions, item.id);
   const packaging = busyActions.has(`${item.id}:package`);
   const packageError = actionErrors[packageErrorKey(item.id)];
+  const detailMeta = compactSkillMeta(item, t, true);
   return (
     <article className="skill-detail" aria-busy={itemBusy}>
       <header>
         <div className="skill-detail-title-line">
           <h3>{item.name}</h3>
-          <span className="skill-source-badge">
+          <span className="spell-identity-tag skill-source-badge">
             {item.source === 'bundled'
               ? t('skill.source.bundled')
               : t('skill.source.local')}
           </span>
         </div>
-        <p>{item.description || t('skill.noDescription')}</p>
+        <p title={item.description || t('skill.noDescription')}>
+          {item.description || t('skill.noDescription')}
+        </p>
+        <small>{detailMeta}</small>
       </header>
 
       <section className="skill-detail-section">
@@ -528,64 +577,33 @@ function SkillDetailPanel({
         </div>
       </section>
 
-      <section className="skill-detail-section">
-        <h4>{t('skill.detail.info')}</h4>
-        <dl className="skill-info-grid">
-          <InfoRow
-            label={t('skill.detail.source')}
-            value={
-              item.source === 'bundled'
-                ? t('skill.detail.bundledSource')
-                : t('skill.source.local')
-            }
-          />
-          {item.source === 'local' && item.discoveredPlatform ? (
-            <InfoRow
-              label={t('skill.detail.discoveredIn')}
-              value={formatPlatform(item.discoveredPlatform)}
-            />
-          ) : (
-            <InfoRow
-              label={t('skill.detail.compatibleWith')}
-              value={item.compatiblePlatforms.map(formatPlatform).join(', ')}
-            />
-          )}
-          {item.updatedAt && formatDate(item.updatedAt) ? (
-            <InfoRow label={t('skill.detail.updatedAt')} value={formatDate(item.updatedAt)} />
-          ) : null}
-          {item.rootPath ? (
-            <InfoRow code label={t('skill.detail.root')} value={item.rootPath} />
-          ) : null}
-          <InfoRow code label={t('skill.detail.entry')} value={item.entryFilePath} />
-          <InfoRow label={t('skill.detail.fileCount')} value={String(item.fileCount)} />
-        </dl>
+      <section className="skill-detail-section skill-path-list">
+        {item.source === 'local' && item.rootPath ? (
+          <PathRow label={t('skill.detail.root')} value={item.rootPath} />
+        ) : null}
+        <PathRow label={t('skill.detail.entry')} value={item.entryFilePath} />
       </section>
 
       <section className="skill-detail-section skill-file-section">
-        <h4>{t('skill.detail.files')}</h4>
-        <SkillFileTree
-          directoryName={item.directoryName}
-          files={item.files}
-          t={t}
-        />
-      </section>
-
-      <div className="skill-detail-actions">
+        <div className="skill-file-heading">
+          <h4>{formatMessage(t('skill.detail.files'), { count: item.fileCount })}</h4>
+          <button
+            className="secondary-button skill-package-button"
+            disabled={!item.packageable || itemBusy}
+            onClick={() => void onPackage(item)}
+            type="button"
+          >
+            <Archive aria-hidden size={14} />
+            {packaging ? t('skill.packaging') : t('skill.package')}
+          </button>
+        </div>
         {packageError ? (
           <OperationErrorMessage error={packageError} kind="package" t={t} />
         ) : item.packageUnavailableReason ? (
           <p className="skill-action-error">{t('skill.package.empty')}</p>
         ) : null}
-        <button
-          className="secondary-button"
-          disabled={!item.packageable || itemBusy}
-          onClick={() => void onPackage(item)}
-          type="button"
-        >
-          <Archive aria-hidden size={15} />
-          {packaging ? t('skill.packaging') : t('skill.package')}
-        </button>
-      </div>
+        <SkillFileTree files={item.files} t={t} />
+      </section>
     </article>
   );
 }
@@ -647,11 +665,7 @@ function InstallationRow({
           ? t('skill.installing')
           : installed
             ? t('skill.installed')
-            : installation.state === 'missing'
-              ? t('skill.notInstalled')
-              : derivedError
-                ? operationErrorTitle(derivedError, 'install', t)
-                : t('skill.notInstalled')}
+            : t('skill.notInstalled')}
       </span>
       {!installed ? (
         <button
@@ -678,11 +692,9 @@ function InstallationRow({
 }
 
 function SkillFileTree({
-  directoryName,
   files,
   t
 }: {
-  directoryName: string;
   files: string[];
   t: TFunction;
 }) {
@@ -702,9 +714,6 @@ function SkillFileTree({
       role="tree"
       style={files.length > 40 ? { maxHeight: viewportHeight } : undefined}
     >
-      <div className="skill-tree-root">
-        <strong>{directoryName}</strong>
-      </div>
       {virtualized && start > 0 ? (
         <div aria-hidden style={{ height: start * rowHeight }} />
       ) : null}
@@ -738,24 +747,17 @@ function SkillScanNotice({
   t: TFunction;
 }) {
   const failedSources = notice.sources.filter((source) => !source.refreshed);
+  const failedSource = failedSources[0];
+  const text =
+    notice.outcome === 'partial' && failedSource
+      ? formatMessage(t('skill.scan.sourceFailed'), {
+          platform: formatPlatform(failedSource.platform)
+        })
+      : t('skill.scan.failed');
   return (
     <div className="skill-inline-notice warning" role="alert">
-      <AlertTriangle aria-hidden size={16} />
-      <div>
-        <strong>
-          {notice.outcome === 'partial'
-            ? formatMessage(t('skill.scan.partial'), { count: failedSources.length })
-            : t('skill.scan.failed')}
-        </strong>
-        {failedSources.map((source) => (
-          <p key={source.platform}>
-            {formatMessage(t('skill.scan.sourceUnreadable'), {
-              platform: formatPlatform(source.platform),
-              path: source.path
-            })}
-          </p>
-        ))}
-      </div>
+      <AlertTriangle aria-hidden size={15} />
+      <span title={failedSources.map((source) => source.path).join('\n') || undefined}>{text}</span>
       <button onClick={onRetry} type="button">
         {t('skill.retry')}
       </button>
@@ -763,99 +765,48 @@ function SkillScanNotice({
   );
 }
 
-function SkillNoMatch({
-  filtersActive,
-  onClear,
-  t
-}: {
-  filtersActive: boolean;
-  onClear(): void;
-  t: TFunction;
-}) {
-  return (
-    <div className="skill-no-match">
-      <strong>
-        {filtersActive
-          ? t('skill.empty.noMatch.title')
-          : t('skill.empty.local.title')}
-      </strong>
-      <p>
-        {filtersActive
-          ? t('skill.empty.noMatch.body')
-          : t('skill.empty.local.body')}
-      </p>
-      {filtersActive ? (
-        <button className="secondary-button" onClick={onClear} type="button">
-          {t('skill.filter.clearAll')}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function SkillLocalEmpty({
-  neverScanned,
-  onScan,
-  t
-}: {
-  neverScanned: boolean;
-  onScan(): void;
-  t: TFunction;
-}) {
-  return (
-    <div className="skill-local-empty">
-      <strong>
-        {neverScanned
-          ? t('skill.empty.neverScanned.title')
-          : t('skill.empty.local.title')}
-      </strong>
-      <p>
-        {neverScanned
-          ? t('skill.empty.neverScanned.body')
-          : t('skill.empty.local.body')}
-      </p>
-      <button className="secondary-button" onClick={onScan} type="button">
-        {neverScanned ? t('skill.findLocal') : t('skill.scan.again')}
-      </button>
-    </div>
-  );
+function SkillListEmpty({ text }: { text: string }) {
+  return <div className="skill-list-empty">{text}</div>;
 }
 
 function SkillLibrarySkeleton({ t }: { t: TFunction }) {
   return (
-    <section aria-busy className="skill-library-page">
-      <header className="skill-library-header">
-        <div>
-          <h3>{t('skill.title')}</h3>
-          <p>{t('skill.description')}</p>
+    <section
+      aria-busy
+      className="skill-library-page panel-grid skill-skeleton"
+      style={{ minWidth: SKILL_PANEL_MIN_WIDTH }}
+    >
+      <div className="skill-master-pane search-pane">
+        <div className="skill-skeleton-toolbar">
+          <span />
+          <span />
         </div>
-      </header>
-      <div className="skill-workspace skill-skeleton">
-        <div>
-          {Array.from({ length: 5 }, (_, index) => (
-            <span key={index} />
-          ))}
+        <div className="skill-skeleton-list">
+          {Array.from({ length: 5 }, (_, index) => <span key={index} />)}
         </div>
-        <div />
       </div>
+      <div aria-hidden className="quick-spell-resizer" />
+      <aside aria-label={t('skill.detail.label')} className="skill-detail-pane quick-spell-detail">
+        <div className="skill-skeleton-detail">
+          {Array.from({ length: 3 }, (_, index) => <span key={index} />)}
+        </div>
+      </aside>
     </section>
   );
 }
 
-function InfoRow({
-  code = false,
+function PathRow({
   label,
   value
 }: {
-  code?: boolean;
   label: string;
   value: string;
 }) {
   return (
-    <>
-      <dt>{label}</dt>
-      <dd>{code ? <code>{value}</code> : value}</dd>
-    </>
+    <div className="skill-path-row">
+      <span>{label}</span>
+      <code>{value}</code>
+    </div>
   );
 }
 
@@ -868,21 +819,25 @@ function OperationErrorMessage({
   kind: 'install' | 'package';
   t: TFunction;
 }) {
-  return (
-    <p className="skill-action-error">
-      <strong>{operationErrorTitle(error, kind, t)}</strong>
-      {operationErrorBody(error, kind, t)}
-    </p>
-  );
+  return <p className="skill-action-error">{operationErrorText(error, kind, t)}</p>;
 }
 
-function operationErrorTitle(
+function operationErrorText(
   error: SkillOperationError,
   kind: 'install' | 'package',
   t: TFunction
 ): string {
   if (kind === 'install' && error.code === 'target_conflict') {
-    return t('skill.install.conflict.title');
+    return formatMessage(t('skill.install.conflict'), { path: error.path ?? '' });
+  }
+  if (kind === 'install' && error.code === 'permission_denied') {
+    return formatMessage(t('skill.install.permissionDenied'), { path: error.path ?? '' });
+  }
+  if (
+    kind === 'install' &&
+    (error.code === 'source_missing' || error.code === 'source_unreadable')
+  ) {
+    return t('skill.install.sourceMissing');
   }
   if (kind === 'package' && error.code === 'empty_skill') {
     return t('skill.package.empty');
@@ -890,39 +845,15 @@ function operationErrorTitle(
   if (kind === 'package' && error.code === 'source_unreadable') {
     return t('skill.package.unreadable');
   }
-  return kind === 'install' ? t('skill.install.failed') : t('skill.package.failed');
-}
-
-function operationErrorBody(
-  error: SkillOperationError,
-  kind: 'install' | 'package',
-  t: TFunction
-): string {
-  if (kind === 'install' && error.code === 'target_conflict') {
-    return ` ${formatMessage(t('skill.install.conflict.body'), {
-      path: error.path ?? ''
-    })}`;
-  }
-  if (kind === 'install' && error.code === 'permission_denied') {
-    return ` ${formatMessage(t('skill.install.permissionDenied'), {
-      path: error.path ?? ''
-    })}`;
-  }
-  if (
-    kind === 'install' &&
-    (error.code === 'source_missing' || error.code === 'source_unreadable')
-  ) {
-    return ` ${t('skill.install.sourceMissing')}`;
-  }
   if (
     kind === 'package' &&
     (error.code === 'write_failed' || error.code === 'permission_denied')
   ) {
-    return ` ${formatMessage(t('skill.package.writeFailed'), {
+    return formatMessage(t('skill.package.writeFailed'), {
       path: error.path ?? ''
-    })}`;
+    });
   }
-  return '';
+  return kind === 'install' ? t('skill.install.failed') : t('skill.package.failed');
 }
 
 function localizeBundledItem(item: SkillLibraryItem, t: TFunction): SkillLibraryItem {
@@ -950,13 +881,14 @@ function compareSkillItems(left: SkillLibraryItem, right: SkillLibraryItem): num
   return left.name.localeCompare(right.name);
 }
 
-function summarizeInstallations(item: SkillLibraryItem, t: TFunction): string {
-  return (['claude', 'codex'] as const)
-    .map(
-      (platform) =>
-        `${formatPlatform(platform)} ${item.installation[platform].state === 'installed' ? t('skill.installed') : t('skill.notInstalled')}`
-    )
-    .join(' · ');
+function compactSkillMeta(item: SkillLibraryItem, t: TFunction, includeDate = false): string {
+  const fileCount = formatMessage(t('skill.fileCount'), { count: item.fileCount });
+  if (item.source === 'bundled') {
+    return `Claude / Codex · ${fileCount}`;
+  }
+  const base = `${formatPlatform(item.discoveredPlatform!)} · ${fileCount}`;
+  const updatedAt = includeDate && item.updatedAt ? formatDate(item.updatedAt) : '';
+  return updatedAt ? `${base} · ${updatedAt}` : base;
 }
 
 function formatMessage(

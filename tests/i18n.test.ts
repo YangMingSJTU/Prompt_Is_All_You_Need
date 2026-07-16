@@ -181,16 +181,32 @@ describe('i18n', () => {
     const zh = createTranslator(detectLocale('zh-CN'));
     const en = createTranslator(detectLocale('en-US'));
 
-    expect(zh('skill.findLocal')).toBe('寻找本机技能');
-    expect(en('skill.findLocal')).toBe('Find local skills');
+    expect(zh('skill.findLocal')).toBe('寻找技能');
+    expect(en('skill.findLocal')).toBe('Find skills');
+    expect(zh('skill.findLocal.aria')).toBe('寻找本机技能，仅扫描 Claude 和 Codex 目录');
+    expect(en('skill.findLocal.aria')).toBe(
+      'Find local skills in the Claude and Codex folders'
+    );
+    expect(zh('skill.search.placeholder')).toBe('搜索技能');
+    expect(en('skill.search.placeholder')).toBe('Search skills');
+    expect(zh('skill.filter.clearAll')).toBe('清除筛选');
+    expect(en('skill.filter.clearAll')).toBe('Clear filters');
+    expect(zh('skill.group.bundled')).toBe('随书 {count}');
+    expect(en('skill.group.bundled')).toBe('Bundled {count}');
     expect(zh('skill.bundled.promptRefiner.name')).toBe('提示词优化');
     expect(en('skill.bundled.promptRefiner.name')).toBe('Prompt Refiner');
-    expect(zh('skill.scan.stale')).toContain('可能已过期');
-    expect(en('skill.scan.stale')).toContain('out of date');
-    expect(zh('skill.install.conflict.body')).toContain('未覆盖任何文件');
-    expect(en('skill.install.conflict.body')).toContain('No files were overwritten');
-    expect(zh('skill.description')).toContain('不会上传内容');
-    expect(en('skill.description')).toContain('Nothing is uploaded');
+    expect(zh('skill.scan.stale')).toBe('上次扫描结果');
+    expect(en('skill.scan.stale')).toBe('Previous scan result');
+    expect(zh('skill.install.conflict')).toBe('已存在：{path}。未修改文件。');
+    expect(en('skill.install.conflict')).toBe(
+      'Already exists: {path}. No files changed.'
+    );
+    expect(zh('skill.bundled.promptRefiner.description')).toBe(
+      '整理模糊需求，生成结构清晰的提示词。'
+    );
+    expect(en('skill.bundled.promptRefiner.description')).toBe(
+      'Turn vague requests into clear prompts.'
+    );
   });
 
   it('uses recommendation copy for candidate batch saving in both languages', () => {
