@@ -602,7 +602,7 @@ function SkillDetailPanel({
         ) : item.packageUnavailableReason ? (
           <p className="skill-action-error">{t('skill.package.empty')}</p>
         ) : null}
-        <SkillFileTree files={item.files} t={t} />
+        <SkillFileList files={item.files} skillId={item.id} t={t} />
       </section>
     </article>
   );
@@ -691,38 +691,52 @@ function InstallationRow({
   );
 }
 
-function SkillFileTree({
+export function SkillFileList({
   files,
+  skillId,
   t
 }: {
   files: string[];
+  skillId: string;
   t: TFunction;
 }) {
   const rowHeight = 28;
   const viewportHeight = 360;
   const [scrollTop, setScrollTop] = useState(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const virtualized = files.length > 120;
   const start = virtualized ? Math.max(0, Math.floor(scrollTop / rowHeight) - 5) : 0;
   const end = virtualized
     ? Math.min(files.length, start + Math.ceil(viewportHeight / rowHeight) + 10)
     : files.length;
   const visibleFiles = files.slice(start, end);
+
+  useEffect(() => {
+    setScrollTop(0);
+    if (viewportRef.current) {
+      viewportRef.current.scrollTop = 0;
+    }
+  }, [skillId]);
+
   return (
     <div
+      aria-label={formatMessage(t('skill.detail.files'), { count: files.length })}
       className="skill-file-tree"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-      role="tree"
+      ref={viewportRef}
+      role="list"
       style={files.length > 40 ? { maxHeight: viewportHeight } : undefined}
     >
       {virtualized && start > 0 ? (
         <div aria-hidden style={{ height: start * rowHeight }} />
       ) : null}
-      {visibleFiles.map((file) => (
+      {visibleFiles.map((file, index) => (
         <div
-          aria-level={Math.max(1, file.split('/').length)}
+          aria-posinset={start + index + 1}
+          aria-setsize={files.length}
           className="skill-tree-item"
           key={file}
-          role="treeitem"
+          role="listitem"
           style={{ paddingLeft: `${12 + Math.min(5, file.split('/').length - 1) * 14}px` }}
         >
           <FileText aria-hidden size={14} />

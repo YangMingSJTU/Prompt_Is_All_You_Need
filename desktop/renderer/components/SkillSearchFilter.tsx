@@ -1,5 +1,12 @@
 import { Check, Funnel, FunnelX, Search } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject
+} from 'react';
 import type { I18nKey, TFunction } from '../i18n';
 import type { SkillPlatformFilter, SkillSourceFilter } from '../skillLibraryState';
 
@@ -38,21 +45,33 @@ export function SkillSearchFilter({
 }: SkillSearchFilterProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const initialRadioRef = useRef<HTMLButtonElement>(null);
   const popoverId = useId();
   const hasActiveFilters = source !== 'all' || platform !== 'all';
+
+  function closeFilterMenu(restoreFocus = false): void {
+    setOpen(false);
+    if (restoreFocus) {
+      filterButtonRef.current?.focus();
+    }
+  }
 
   useEffect(() => {
     if (!open) {
       return undefined;
     }
+    initialRadioRef.current?.focus();
     function closeOnOutsidePointer(event: PointerEvent): void {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closeFilterMenu();
       }
     }
     function closeOnEscape(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
-        setOpen(false);
+        event.preventDefault();
+        event.stopPropagation();
+        closeFilterMenu(true);
       }
     }
     document.addEventListener('pointerdown', closeOnOutsidePointer);
@@ -66,7 +85,7 @@ export function SkillSearchFilter({
   }, [open]);
 
   function closeOnBlur(): void {
-    setOpen(false);
+    closeFilterMenu();
   }
 
   return (
@@ -92,7 +111,8 @@ export function SkillSearchFilter({
           aria-haspopup="dialog"
           aria-label={t('skill.filter.label')}
           className={hasActiveFilters ? 'spell-filter-button active' : 'spell-filter-button'}
-          onClick={() => setOpen((current) => !current)}
+          onClick={() => (open ? closeFilterMenu() : setOpen(true))}
+          ref={filterButtonRef}
           title={t('skill.filter.label')}
           type="button"
         >
@@ -106,6 +126,7 @@ export function SkillSearchFilter({
             role="dialog"
           >
             <FilterRadioGroup
+              initialFocusRef={initialRadioRef}
               label={t('skill.filter.source')}
               onChange={onSourceChange}
               options={SOURCE_OPTIONS.map((option) => ({
@@ -137,37 +158,70 @@ export function SkillSearchFilter({
 }
 
 function FilterRadioGroup<T extends string>({
+  initialFocusRef,
   label,
   onChange,
   options,
   value
 }: {
+  initialFocusRef?: MutableRefObject<HTMLButtonElement | null>;
   label: string;
   onChange(value: T): void;
   options: Array<{ label: string; value: T }>;
   value: T;
 }) {
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function moveSelection(event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void {
+    let nextIndex: number;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      nextIndex = (index + 1) % options.length;
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + options.length) % options.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = options.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    onChange(options[nextIndex].value);
+    optionRefs.current[nextIndex]?.focus();
+  }
+
   return (
     <section className="spell-filter-section">
       <div className="spell-filter-heading">{label}</div>
       <div aria-label={label} className="spell-filter-scope-options" role="radiogroup">
-        {options.map((option) => (
-          <button
-            aria-checked={value === option.value}
-            className={
-              value === option.value
-                ? 'spell-filter-scope-option selected'
-                : 'spell-filter-scope-option'
-            }
-            key={option.value}
-            onClick={() => onChange(option.value)}
-            role="radio"
-            type="button"
-          >
-            <span>{option.label}</span>
-            {value === option.value ? <Check aria-hidden size={14} /> : null}
-          </button>
-        ))}
+        {options.map((option, index) => {
+          const selected = value === option.value;
+          return (
+            <button
+              aria-checked={selected}
+              className={
+                selected
+                  ? 'spell-filter-scope-option selected'
+                  : 'spell-filter-scope-option'
+              }
+              key={option.value}
+              onKeyDown={(event) => moveSelection(event, index)}
+              onClick={() => onChange(option.value)}
+              ref={(element) => {
+                optionRefs.current[index] = element;
+                if (initialFocusRef && selected) {
+                  initialFocusRef.current = element;
+                }
+              }}
+              role="radio"
+              tabIndex={selected ? 0 : -1}
+              type="button"
+            >
+              <span>{option.label}</span>
+              {selected ? <Check aria-hidden size={14} /> : null}
+            </button>
+          );
+        })}
       </div>
     </section>
   );

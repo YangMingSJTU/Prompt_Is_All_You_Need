@@ -230,6 +230,7 @@ describe('skill library IPC and UI structure', () => {
     );
     const app = readFileSync('desktop/renderer/App.tsx', 'utf8');
     const styles = readFileSync('desktop/renderer/styles.css', 'utf8');
+    const windowsStyles = styles.replace(/\r?\n/g, '\r\n');
 
     expect(component).toContain("'skill-library-page panel-grid resizing'");
     expect(component).toContain('className="skill-master-list"');
@@ -239,7 +240,10 @@ describe('skill library IPC and UI structure', () => {
     expect(component).toContain('aria-selected={selected}');
     expect(component).toContain('aria-busy={scanning}');
     expect(component).toContain("(['claude', 'codex'] as const).map");
-    expect(component).toContain('role="tree"');
+    expect(component).toContain('role="list"');
+    expect(component).toContain('role="listitem"');
+    expect(component).toContain('aria-setsize={files.length}');
+    expect(component).toContain('aria-posinset={start + index + 1}');
     expect(component).toContain('files.slice(start, end)');
     expect(component).toContain('useFeedbackToast');
     expect(component).toContain('statusRef.current?.focus()');
@@ -249,7 +253,7 @@ describe('skill library IPC and UI structure', () => {
     expect(component).toContain("event.key === 'ArrowDown'");
     expect(component).toContain("event.key === 'Home'");
     expect(component).toContain('formatMessage(t(\'skill.detail.files\')');
-    expect(component).toContain('<SkillFileTree files={item.files} t={t} />');
+    expect(component).toContain('<SkillFileList files={item.files} skillId={item.id} t={t} />');
     expect(component).not.toContain('skill-library-header');
     expect(component).not.toContain('skill-filter-control');
     expect(component).not.toContain('skill-result-count');
@@ -265,7 +269,7 @@ describe('skill library IPC and UI structure', () => {
     expect(app).not.toContain('window.spellbook.listSkills()');
     expect(styles).toContain('.skill-list-row:focus-visible');
     expect(styles).toContain('height: 52px;');
-    expect(styles).toContain('.skill-list-row:hover,\n.skill-list-row.selected');
+    expect(windowsStyles).toMatch(/\.skill-list-row:hover,\r?\n\.skill-list-row\.selected/);
     expect(styles).toContain('grid-template-columns: 48px minmax(0, 1fr);');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
