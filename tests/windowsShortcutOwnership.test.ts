@@ -174,13 +174,15 @@ describeWindows('Windows desktop shortcut ownership', () => {
     }
   }, 20_000);
 
-  it('keeps the source-owned NSIS path from running electron-builder shortcut deletion', async () => {
+  it('keeps desktop and start-menu shortcuts under source-owned lifecycle control', async () => {
     const config = await readFile(join(process.cwd(), 'electron-builder.yml'), 'utf8');
     const include = await readFile(join(process.cwd(), 'build', 'installer.nsh'), 'utf8');
 
     expect(config).toContain('include: build/installer.nsh');
     expect(config).toContain('createDesktopShortcut: false');
+    expect(config).toContain('createStartMenuShortcut: false');
     expect(include).toContain('${isNoDesktopShortcut}');
+    expect(include).toContain('.spellbook-start-menu-shortcut-owner.json');
     expect(include).toContain('customUnInstall');
   });
 });

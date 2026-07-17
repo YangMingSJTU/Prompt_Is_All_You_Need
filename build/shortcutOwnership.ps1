@@ -109,7 +109,7 @@ if ($Action -eq 'install') {
 
   $createdTarget = Get-ShortcutTarget $ShortcutPath
   if ($null -eq $createdTarget -or -not (Test-SamePath $createdTarget $normalizedTarget)) {
-    throw 'The desktop shortcut was not created with the expected target.'
+    throw 'The shortcut was not created with the expected target.'
   }
   Write-OwnershipMarker $MarkerPath $normalizedShortcut $normalizedTarget
   return

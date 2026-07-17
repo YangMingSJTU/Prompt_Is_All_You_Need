@@ -10,6 +10,7 @@
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
+    "test:nsis-integration": "vitest run --config vitest.nsis.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

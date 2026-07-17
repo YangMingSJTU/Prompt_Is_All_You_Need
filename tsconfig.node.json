@@ -18,6 +18,7 @@
     "desktop/shared",
     "electron.vite.config.ts",
     "vitest.config.ts",
+    "vitest.nsis.config.ts",
     "tests"
   ]
 }

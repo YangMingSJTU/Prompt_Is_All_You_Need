@@ -39,5 +39,5 @@ nsis:
   allowToChangeInstallationDirectory: true
   include: build/installer.nsh
   createDesktopShortcut: false
-  createStartMenuShortcut: true
+  createStartMenuShortcut: false
   deleteAppDataOnUninstall: false
