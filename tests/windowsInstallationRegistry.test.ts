@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 const describeWindows = process.platform === 'win32' ? describe : describe.skip;
@@ -53,8 +53,18 @@ async function runRegistry(
     '-InstancesKeyPath',
     fixture.instancesKey,
     '-InstallPath',
-    installPath
+    installPath,
+    '-InstalledExecutablePath',
+    join(installPath, 'Spellbook.exe'),
+    '-UninstallerPath',
+    join(installPath, 'Uninstall Spellbook.exe')
   ]);
+}
+
+async function writeInstalledArtifacts(installPath: string): Promise<void> {
+  await mkdir(installPath, { recursive: true });
+  await writeFile(join(installPath, 'Spellbook.exe'), 'application');
+  await writeFile(join(installPath, 'Uninstall Spellbook.exe'), 'uninstaller');
 }
 
 async function writeRegistration(
@@ -99,6 +109,44 @@ async function removeSingletonRegistration(fixture: RegistryFixture): Promise<vo
       ...process.env,
       TEST_INSTALL_KEY: fixture.installKey,
       TEST_UNINSTALL_KEY: fixture.uninstallKey
+    }
+  );
+}
+
+function getInstanceId(installPath: string): string {
+  const normalized = installPath.replace(/[\\/]+$/, '').toUpperCase();
+  return createHash('sha256').update(normalized, 'utf8').digest('hex').toUpperCase();
+}
+
+async function writePartiallyInvalidInstance(
+  installPath: string,
+  fixture: RegistryFixture
+): Promise<void> {
+  const installValues = JSON.stringify([
+    { name: 'InstallLocation', kind: 'String', value: installPath }
+  ]);
+  const uninstallValues = JSON.stringify([
+    { name: 'UninstallString', kind: 'InvalidKind', value: 'invalid' }
+  ]);
+  await runPowerShell(
+    [
+      '-Command',
+      [
+        '$instance = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($env:TEST_INSTANCE_KEY)',
+        'try {',
+        '  $instance.SetValue("InstallLocation", $env:TEST_INSTALL_PATH, [Microsoft.Win32.RegistryValueKind]::String)',
+        '  $instance.SetValue("InstallValues", $env:TEST_INSTALL_VALUES, [Microsoft.Win32.RegistryValueKind]::String)',
+        '  $instance.SetValue("UninstallValues", $env:TEST_UNINSTALL_VALUES, [Microsoft.Win32.RegistryValueKind]::String)',
+        '  $instance.SetValue("UpdatedAt", [DateTime]::UtcNow.Ticks, [Microsoft.Win32.RegistryValueKind]::QWord)',
+        '} finally { $instance.Dispose() }'
+      ].join('; ')
+    ],
+    {
+      ...process.env,
+      TEST_INSTANCE_KEY: `${fixture.instancesKey}\\${getInstanceId(installPath)}`,
+      TEST_INSTALL_PATH: installPath,
+      TEST_INSTALL_VALUES: installValues,
+      TEST_UNINSTALL_VALUES: uninstallValues
     }
   );
 }
@@ -165,8 +213,8 @@ describeWindows('Windows installation registry isolation', () => {
     const installB = join(directory, 'B');
 
     try {
-      await mkdir(installA);
-      await mkdir(installB);
+      await writeInstalledArtifacts(installA);
+      await writeInstalledArtifacts(installB);
 
       await writeRegistration(installA, fixture, 'A');
       await runRegistry('installed', installA, fixture);
@@ -207,6 +255,72 @@ describeWindows('Windows installation registry isolation', () => {
         displayVersion: null,
         estimatedSize: null
       });
+    } finally {
+      await cleanupRegistry(fixture);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('restores A when the installer registration exists but committed artifacts are missing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
+    const fixture = {
+      installKey: `${rootKey}\\Install`,
+      uninstallKey: `${rootKey}\\Uninstall`,
+      instancesKey: `${rootKey}\\Instances`
+    };
+    const installA = join(directory, 'A');
+    const installB = join(directory, 'B');
+
+    try {
+      await writeInstalledArtifacts(installA);
+      await mkdir(installB);
+      await writeRegistration(installA, fixture, 'A');
+      await runRegistry('installed', installA, fixture);
+
+      await runRegistry('prepare', installB, fixture);
+      await writeRegistration(installB, fixture, 'B');
+      await expect(runRegistry('installed', installB, fixture)).rejects.toThrow(
+        /application executable[\s\S]+is missing/
+      );
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: installA,
+        displayVersion: 'A',
+        estimatedSize: 321
+      });
+    } finally {
+      await cleanupRegistry(fixture);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('restores the original singleton registration after a partial prepare write', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
+    const fixture = {
+      installKey: `${rootKey}\\Install`,
+      uninstallKey: `${rootKey}\\Uninstall`,
+      instancesKey: `${rootKey}\\Instances`
+    };
+    const installA = join(directory, 'A');
+    const installB = join(directory, 'B');
+
+    try {
+      await writeInstalledArtifacts(installA);
+      await mkdir(installB);
+      await writeRegistration(installA, fixture, 'A');
+      await runRegistry('installed', installA, fixture);
+      await writePartiallyInvalidInstance(installB, fixture);
+
+      await expect(runRegistry('prepare', installB, fixture)).rejects.toThrow();
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: installA,
+        displayVersion: 'A',
+        estimatedSize: 321
+      });
+
+      await runRegistry('rollback', installB, fixture);
+      expect((await readRegistration(fixture)).installLocation).toBe(installA);
     } finally {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });

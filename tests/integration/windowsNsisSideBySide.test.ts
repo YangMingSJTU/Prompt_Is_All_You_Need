@@ -1,22 +1,40 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const describeWindows = process.platform === 'win32' ? describe : describe.skip;
 
-function runExecutable(path: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
+interface ExecutableResult {
+  exitCode: number;
+  stderr: string;
+}
+
+function runExecutableResult(path: string, args: string[]): Promise<ExecutableResult> {
+  return new Promise((resolve) => {
     execFile(path, args, { timeout: 120_000 }, (error, _stdout, stderr) => {
       if (error) {
-        reject(new Error(`${error.message}\n${stderr}`));
+        const code = (error as { code?: string | number | null }).code;
+        resolve({
+          exitCode: typeof code === 'number' ? code : -1,
+          stderr: `${error.message}\n${stderr}`
+        });
         return;
       }
-      resolve();
+      resolve({ exitCode: 0, stderr });
     });
   });
+}
+
+async function runExecutable(path: string, args: string[]): Promise<void> {
+  const result = await runExecutableResult(path, args);
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Executable exited with code ${result.exitCode}.\n${result.stderr}`
+    );
+  }
 }
 
 function runPowerShell(command: string, environment: NodeJS.ProcessEnv): Promise<string> {
@@ -78,6 +96,59 @@ async function readTestRegistryState(
   };
 }
 
+async function readTestRegistration(
+  installKey: string,
+  uninstallKey: string
+): Promise<{
+  installLocation: string | null;
+  uninstallString: string | null;
+  instanceLocations: string[];
+}> {
+  const output = await runPowerShell(
+    [
+      '$root = [Microsoft.Win32.Registry]::CurrentUser',
+      '$install = $root.OpenSubKey($env:TEST_INSTALL_KEY)',
+      '$uninstall = $root.OpenSubKey($env:TEST_UNINSTALL_KEY)',
+      '$instances = $root.OpenSubKey(($env:TEST_INSTALL_KEY + ".Instances"))',
+      'try {',
+      '  $instanceLocations = @()',
+      '  if ($null -ne $instances) {',
+      '    foreach ($name in $instances.GetSubKeyNames()) {',
+      '      $instance = $instances.OpenSubKey($name)',
+      '      if ($null -ne $instance) {',
+      '        try { $instanceLocations += [string]$instance.GetValue("InstallLocation", "") }',
+      '        finally { $instance.Dispose() }',
+      '      }',
+      '    }',
+      '  }',
+      '  [pscustomobject]@{',
+      '    installLocation = if ($null -eq $install) { $null } else { $install.GetValue("InstallLocation", $null) }',
+      '    uninstallString = if ($null -eq $uninstall) { $null } else { $uninstall.GetValue("UninstallString", $null) }',
+      '    instanceLocations = @($instanceLocations)',
+      '  } | ConvertTo-Json -Compress',
+      '} finally {',
+      '  if ($null -ne $install) { $install.Dispose() }',
+      '  if ($null -ne $uninstall) { $uninstall.Dispose() }',
+      '  if ($null -ne $instances) { $instances.Dispose() }',
+      '}'
+    ].join('\n'),
+    {
+      ...process.env,
+      TEST_INSTALL_KEY: installKey,
+      TEST_UNINSTALL_KEY: uninstallKey
+    }
+  );
+  const registration = JSON.parse(output) as {
+    installLocation: string | null;
+    uninstallString: string | null;
+    instanceLocations?: string[];
+  };
+  return {
+    ...registration,
+    instanceLocations: registration.instanceLocations ?? []
+  };
+}
+
 async function waitForPath(path: string, expected: boolean, timeout = 20_000): Promise<void> {
   const deadline = Date.now() + timeout;
   let stableSince: number | null = null;
@@ -130,6 +201,11 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
       ]);
       expect(existsSync(executableA)).toBe(true);
       expect(existsSync(uninstallerA)).toBe(true);
+      const registrationA = await readTestRegistration(installKey, uninstallKey);
+      expect(registrationA.installLocation?.toLowerCase()).toBe(installA.toLowerCase());
+      expect(registrationA.uninstallString?.toLowerCase()).toContain(
+        uninstallerA.toLowerCase()
+      );
 
       await runExecutable(installer, [
         '/S',
@@ -147,6 +223,7 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
       await waitForPath(installB, false);
       expect(existsSync(executableA)).toBe(true);
       expect(existsSync(uninstallerA)).toBe(true);
+      expect(await readTestRegistration(installKey, uninstallKey)).toEqual(registrationA);
 
       await runExecutable(uninstallerA, ['/S', '/currentuser']);
       await waitForPath(installA, false);
@@ -160,6 +237,101 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
         await runExecutable(uninstallerB, ['/S', '/currentuser']).catch(() => undefined);
         await waitForPath(installB, false).catch(() => undefined);
       }
+      if (existsSync(uninstallerA)) {
+        await runExecutable(uninstallerA, ['/S', '/currentuser']).catch(() => undefined);
+        await waitForPath(installA, false).catch(() => undefined);
+      }
+      await rm(fixture, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 200
+      });
+      await removeTestRegistry(installKey, uninstallKey);
+    }
+  }, 300_000);
+
+  it('fails an unavailable B target and restores A registration without a B instance', async () => {
+    const installer = process.env.SPELLBOOK_NSIS_INSTALLER;
+    const productName = process.env.SPELLBOOK_NSIS_PRODUCT_NAME;
+    const installKey = process.env.SPELLBOOK_NSIS_TEST_INSTALL_KEY;
+    const uninstallKey = process.env.SPELLBOOK_NSIS_TEST_UNINSTALL_KEY;
+    if (!installer || !productName || !installKey || !uninstallKey) {
+      throw new Error(
+        'Set the SPELLBOOK_NSIS_INSTALLER, SPELLBOOK_NSIS_PRODUCT_NAME, SPELLBOOK_NSIS_TEST_INSTALL_KEY, and SPELLBOOK_NSIS_TEST_UNINSTALL_KEY test inputs.'
+      );
+    }
+
+    const testRoot = process.env.SPELLBOOK_NSIS_TEST_ROOT ?? tmpdir();
+    await mkdir(testRoot, { recursive: true });
+    const fixture = await mkdtemp(join(testRoot, 'spellbook-nsis-rollback-'));
+    const installA = join(fixture, 'A');
+    const installB = join(fixture, 'B');
+    const executableA = join(installA, `${productName}.exe`);
+    const uninstallerA = join(installA, `Uninstall ${productName}.exe`);
+
+    try {
+      await removeTestRegistry(installKey, uninstallKey);
+      await runExecutable(installer, [
+        '/S',
+        '/currentuser',
+        '--no-desktop-shortcut',
+        '--no-start-menu-shortcut',
+        `/D=${installA}`
+      ]);
+      expect(existsSync(executableA)).toBe(true);
+      expect(existsSync(uninstallerA)).toBe(true);
+      const registrationA = await readTestRegistration(installKey, uninstallKey);
+      expect(registrationA.installLocation?.toLowerCase()).toBe(installA.toLowerCase());
+      expect(registrationA.uninstallString?.toLowerCase()).toContain(
+        uninstallerA.toLowerCase()
+      );
+      expect(
+        registrationA.instanceLocations.some(
+          (location) => location.toLowerCase() === installA.toLowerCase()
+        )
+      ).toBe(true);
+
+      await writeFile(installB, 'occupied by an ordinary file');
+      const failedInstall = await runExecutableResult(installer, [
+        '/S',
+        '/currentuser',
+        '--no-desktop-shortcut',
+        '--no-start-menu-shortcut',
+        `/D=${installB}`
+      ]);
+
+      expect(failedInstall.exitCode).toBe(2);
+      expect((await stat(installB)).isFile()).toBe(true);
+      expect(existsSync(join(installB, `${productName}.exe`))).toBe(false);
+      expect(
+        existsSync(join(installB, '.spellbook-desktop-shortcut-owner.json'))
+      ).toBe(false);
+      expect(
+        existsSync(join(installB, '.spellbook-start-menu-shortcut-owner.json'))
+      ).toBe(false);
+      expect(existsSync(executableA)).toBe(true);
+      expect(existsSync(uninstallerA)).toBe(true);
+
+      const registrationAfterFailure = await readTestRegistration(
+        installKey,
+        uninstallKey
+      );
+      expect(registrationAfterFailure).toEqual(registrationA);
+      expect(
+        registrationAfterFailure.instanceLocations.some(
+          (location) => location.toLowerCase() === installB.toLowerCase()
+        )
+      ).toBe(false);
+
+      await runExecutable(uninstallerA, ['/S', '/currentuser']);
+      await waitForPath(installA, false);
+      expect(await readTestRegistryState(installKey, uninstallKey)).toEqual({
+        install: false,
+        instances: false,
+        uninstall: false
+      });
+    } finally {
       if (existsSync(uninstallerA)) {
         await runExecutable(uninstallerA, ['/S', '/currentuser']).catch(() => undefined);
         await waitForPath(installA, false).catch(() => undefined);

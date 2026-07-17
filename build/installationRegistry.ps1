@@ -7,7 +7,9 @@ param(
   [string]$InstallKeyPath = $env:SPELLBOOK_INSTALL_KEY,
   [string]$UninstallKeyPath = $env:SPELLBOOK_UNINSTALL_KEY,
   [string]$InstancesKeyPath = $env:SPELLBOOK_INSTANCES_KEY,
-  [string]$InstallPath = $env:SPELLBOOK_INSTALL_PATH
+  [string]$InstallPath = $env:SPELLBOOK_INSTALL_PATH,
+  [string]$InstalledExecutablePath = $env:SPELLBOOK_INSTALL_EXECUTABLE,
+  [string]$UninstallerPath = $env:SPELLBOOK_INSTALL_UNINSTALLER
 )
 
 $ErrorActionPreference = 'Stop'
@@ -101,7 +103,7 @@ function Read-RegistryValues {
 function Write-RegistryValues {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
-    [Parameter(Mandatory = $true)][object[]]$Values
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Values
   )
 
   Remove-RegistryTree $Path
@@ -132,6 +134,36 @@ function Write-RegistryValues {
   }
 }
 
+function Get-RegistrySnapshot {
+  param([Parameter(Mandatory = $true)][string]$Path)
+
+  $key = $rootKey.OpenSubKey($Path, $false)
+  if ($null -eq $key) {
+    return [pscustomobject]@{
+      exists = $false
+      values = @()
+    }
+  }
+  $key.Dispose()
+  return [pscustomobject]@{
+    exists = $true
+    values = @(Read-RegistryValues $Path)
+  }
+}
+
+function Restore-RegistrySnapshot {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)]$Snapshot
+  )
+
+  if (-not $Snapshot.exists) {
+    Remove-RegistryTree $Path
+    return
+  }
+  Write-RegistryValues $Path @($Snapshot.values)
+}
+
 function Get-ActiveInstallLocation {
   $key = $rootKey.OpenSubKey($InstallKeyPath, $false)
   if ($null -eq $key) {
@@ -147,46 +179,66 @@ function Get-ActiveInstallLocation {
 function Save-ActiveRegistration {
   $location = Get-ActiveInstallLocation
   if ([string]::IsNullOrWhiteSpace([string]$location)) {
-    return
+    return $false
   }
 
   $normalized = Get-NormalizedPath ([string]$location)
   if (-not (Test-Path -LiteralPath $normalized -PathType Container)) {
-    return
+    throw "The active installation directory '$normalized' is unavailable."
   }
 
   $installValues = @(Read-RegistryValues $InstallKeyPath)
   $uninstallValues = @(Read-RegistryValues $UninstallKeyPath)
-  if ($installValues.Count -eq 0 -or $uninstallValues.Count -eq 0) {
-    return
+  $uninstallString = @(
+    $uninstallValues |
+      Where-Object { $_.name -eq 'UninstallString' } |
+      Select-Object -First 1
+  )
+  if (
+    $installValues.Count -eq 0 -or
+    $uninstallValues.Count -eq 0 -or
+    $uninstallString.Count -eq 0 -or
+    [string]::IsNullOrWhiteSpace([string]$uninstallString[0].value)
+  ) {
+    throw "The active installation registration for '$normalized' is incomplete."
   }
 
   $instanceKeyPath = "$InstancesKeyPath\$(Get-InstanceId $normalized)"
-  $instanceKey = $rootKey.CreateSubKey($instanceKeyPath)
+  $previousInstance = Get-RegistrySnapshot $instanceKeyPath
+  $instanceValues = @(
+    [pscustomobject]@{
+      name = 'InstallLocation'
+      kind = 'String'
+      value = $normalized
+    },
+    [pscustomobject]@{
+      name = 'InstallValues'
+      kind = 'String'
+      value = (ConvertTo-Json -InputObject $installValues -Compress -Depth 8)
+    },
+    [pscustomobject]@{
+      name = 'UninstallValues'
+      kind = 'String'
+      value = (ConvertTo-Json -InputObject $uninstallValues -Compress -Depth 8)
+    },
+    [pscustomobject]@{
+      name = 'UpdatedAt'
+      kind = 'QWord'
+      value = [DateTime]::UtcNow.Ticks
+    }
+  )
   try {
-    $instanceKey.SetValue(
-      'InstallLocation',
-      $normalized,
-      [Microsoft.Win32.RegistryValueKind]::String
-    )
-    $instanceKey.SetValue(
-      'InstallValues',
-      (ConvertTo-Json -InputObject $installValues -Compress -Depth 8),
-      [Microsoft.Win32.RegistryValueKind]::String
-    )
-    $instanceKey.SetValue(
-      'UninstallValues',
-      (ConvertTo-Json -InputObject $uninstallValues -Compress -Depth 8),
-      [Microsoft.Win32.RegistryValueKind]::String
-    )
-    $instanceKey.SetValue(
-      'UpdatedAt',
-      [DateTime]::UtcNow.Ticks,
-      [Microsoft.Win32.RegistryValueKind]::QWord
-    )
-  } finally {
-    $instanceKey.Dispose()
+    Write-RegistryValues $instanceKeyPath $instanceValues
+  } catch {
+    $writeFailure = $_
+    try {
+      Restore-RegistrySnapshot $instanceKeyPath $previousInstance
+    } catch {
+      throw "Saving the active installation failed and its previous instance snapshot could not be restored: $($writeFailure.Exception.Message); rollback: $($_.Exception.Message)"
+    }
+    throw $writeFailure
   }
+  return $true
 }
 
 function Get-InstanceRecords {
@@ -245,41 +297,7 @@ function Restore-Registration {
   Write-RegistryValues $UninstallKeyPath $uninstallValues
 }
 
-$normalizedInstallPath = Get-NormalizedPath $InstallPath
-
-if ($Action -eq 'prepare') {
-  Save-ActiveRegistration
-  Remove-StaleInstances
-  $targetId = Get-InstanceId $normalizedInstallPath
-  $target = @(Get-InstanceRecords | Where-Object { $_.id -eq $targetId }) |
-    Select-Object -First 1
-  if ($null -ne $target) {
-    Restore-Registration $target
-  } else {
-    Remove-RegistryTree $InstallKeyPath
-    Remove-RegistryTree $UninstallKeyPath
-  }
-  return
-}
-
-if ($Action -eq 'installed') {
-  $activeLocation = Get-ActiveInstallLocation
-  if (
-    [string]::IsNullOrWhiteSpace([string]$activeLocation) -or
-    -not [string]::Equals(
-      (Get-NormalizedPath ([string]$activeLocation)),
-      $normalizedInstallPath,
-      [StringComparison]::OrdinalIgnoreCase
-    )
-  ) {
-    throw 'The installer did not register the selected installation directory.'
-  }
-  Save-ActiveRegistration
-  Remove-StaleInstances
-  return
-}
-
-if ($Action -eq 'rollback') {
+function Restore-LatestRegistration {
   Remove-StaleInstances
   $survivor = @(Get-InstanceRecords | Sort-Object updatedAt -Descending) |
     Select-Object -First 1
@@ -290,17 +308,117 @@ if ($Action -eq 'rollback') {
     Remove-RegistryTree $UninstallKeyPath
     Remove-RegistryTree $InstancesKeyPath
   }
+}
+
+function Assert-InstalledArtifacts {
+  foreach ($requiredValue in @($InstalledExecutablePath, $UninstallerPath)) {
+    if ([string]::IsNullOrWhiteSpace($requiredValue)) {
+      throw 'The installed action is missing an expected artifact path.'
+    }
+  }
+
+  $normalizedExecutablePath = Get-NormalizedPath $InstalledExecutablePath
+  $normalizedUninstallerPath = Get-NormalizedPath $UninstallerPath
+  foreach ($artifactPath in @($normalizedExecutablePath, $normalizedUninstallerPath)) {
+    if (
+      -not [string]::Equals(
+        [IO.Path]::GetDirectoryName($artifactPath),
+        $normalizedInstallPath,
+        [StringComparison]::OrdinalIgnoreCase
+      )
+    ) {
+      throw "Expected installed artifact '$artifactPath' is outside the selected directory."
+    }
+  }
+
+  if (-not (Test-Path -LiteralPath $normalizedInstallPath -PathType Container)) {
+    throw "The selected installation directory '$normalizedInstallPath' was not created."
+  }
+  if (-not (Test-Path -LiteralPath $normalizedExecutablePath -PathType Leaf)) {
+    throw "The installed application executable '$normalizedExecutablePath' is missing."
+  }
+  if (-not (Test-Path -LiteralPath $normalizedUninstallerPath -PathType Leaf)) {
+    throw "The installed uninstaller '$normalizedUninstallerPath' is missing."
+  }
+}
+
+$normalizedInstallPath = Get-NormalizedPath $InstallPath
+$targetId = Get-InstanceId $normalizedInstallPath
+
+if ($Action -eq 'prepare') {
+  $originalInstall = Get-RegistrySnapshot $InstallKeyPath
+  $originalUninstall = Get-RegistrySnapshot $UninstallKeyPath
+  $restoringTarget = $false
+  try {
+    Save-ActiveRegistration | Out-Null
+    Remove-StaleInstances
+    $target = @(Get-InstanceRecords | Where-Object { $_.id -eq $targetId }) |
+      Select-Object -First 1
+    if ($null -ne $target) {
+      $restoringTarget = $true
+      Restore-Registration $target
+      $restoringTarget = $false
+    } else {
+      Remove-RegistryTree $InstallKeyPath
+      Remove-RegistryTree $UninstallKeyPath
+    }
+  } catch {
+    $prepareFailure = $_
+    if ($restoringTarget) {
+      Remove-RegistryTree "$InstancesKeyPath\$targetId"
+    }
+    $restoreErrors = @()
+    try {
+      Restore-RegistrySnapshot $InstallKeyPath $originalInstall
+    } catch {
+      $restoreErrors += $_.Exception.Message
+    }
+    try {
+      Restore-RegistrySnapshot $UninstallKeyPath $originalUninstall
+    } catch {
+      $restoreErrors += $_.Exception.Message
+    }
+    if ($restoreErrors.Count -gt 0) {
+      throw "Preparing the installation failed and the original registration could not be fully restored: $($prepareFailure.Exception.Message); rollback: $($restoreErrors -join '; ')"
+    }
+    throw $prepareFailure
+  }
   return
 }
 
-Remove-RegistryTree "$InstancesKeyPath\$(Get-InstanceId $normalizedInstallPath)"
-Remove-StaleInstances
-$survivor = @(Get-InstanceRecords | Sort-Object updatedAt -Descending) |
-  Select-Object -First 1
-if ($null -ne $survivor) {
-  Restore-Registration $survivor
-} else {
-  Remove-RegistryTree $InstallKeyPath
-  Remove-RegistryTree $UninstallKeyPath
-  Remove-RegistryTree $InstancesKeyPath
+if ($Action -eq 'installed') {
+  try {
+    Assert-InstalledArtifacts
+    $activeLocation = Get-ActiveInstallLocation
+    if (
+      [string]::IsNullOrWhiteSpace([string]$activeLocation) -or
+      -not [string]::Equals(
+        (Get-NormalizedPath ([string]$activeLocation)),
+        $normalizedInstallPath,
+        [StringComparison]::OrdinalIgnoreCase
+      )
+    ) {
+      throw 'The installer did not register the selected installation directory.'
+    }
+    Save-ActiveRegistration | Out-Null
+    Remove-StaleInstances
+  } catch {
+    $installFailure = $_
+    try {
+      Remove-RegistryTree "$InstancesKeyPath\$targetId"
+      Restore-LatestRegistration
+    } catch {
+      throw "Validating the installation failed and the previous registration could not be restored: $($installFailure.Exception.Message); rollback: $($_.Exception.Message)"
+    }
+    throw $installFailure
+  }
+  return
 }
+
+if ($Action -eq 'rollback') {
+  Restore-LatestRegistration
+  return
+}
+
+Remove-RegistryTree "$InstancesKeyPath\$targetId"
+Restore-LatestRegistration

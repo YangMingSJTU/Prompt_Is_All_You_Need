@@ -32,10 +32,16 @@
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_UNINSTALL_KEY", w "${UNINSTALL_REGISTRY_KEY}") i .r1'
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTANCES_KEY", w "${INSTALL_REGISTRY_KEY}.Instances") i .r1'
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_PATH", w "$INSTDIR") i .r1'
+  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_EXECUTABLE", w "$INSTDIR\${APP_EXECUTABLE_FILENAME}") i .r1'
+  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_UNINSTALLER", w "$INSTDIR\${UNINSTALL_FILENAME}") i .r1'
   nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\installationRegistry.ps1"'
   Pop $0
   ${if} $0 != 0
-    MessageBox MB_OK|MB_ICONSTOP "Spellbook could not safely update its installation registration (error $0). No other installation was changed."
+    ${if} ${Silent}
+      DetailPrint "Spellbook could not safely update its installation registration (error $0). No other installation was changed."
+    ${else}
+      MessageBox MB_OK|MB_ICONSTOP "Spellbook could not safely update its installation registration (error $0). No other installation was changed."
+    ${endIf}
     SetErrorLevel 2
     Quit
   ${endIf}
@@ -45,8 +51,8 @@
   StrCpy $spellbookRegistrationPrepared "false"
   StrCpy $spellbookInstallCommitted "false"
   ${if} ${Silent}
-    !insertmacro runInstallationRegistry "prepare"
     StrCpy $spellbookRegistrationPrepared "true"
+    !insertmacro runInstallationRegistry "prepare"
   ${endIf}
 !macroend
 
@@ -57,8 +63,8 @@
 !macro customHeader
   !ifndef BUILD_UNINSTALLER
     Function SpellbookPrepareSelectedInstall
-      !insertmacro runInstallationRegistry "prepare"
       StrCpy $spellbookRegistrationPrepared "true"
+      !insertmacro runInstallationRegistry "prepare"
       Abort
     FunctionEnd
 
