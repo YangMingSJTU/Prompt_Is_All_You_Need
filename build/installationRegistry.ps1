@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('prepare', 'installed', 'uninstalled', 'rollback')]
+  [ValidateSet('prepare', 'installed', 'validate-uninstall', 'uninstalled', 'rollback')]
   [string]$Action = $env:SPELLBOOK_INSTALL_ACTION,
   [ValidateSet('HKCU', 'HKLM')]
   [string]$RegistryRoot = $env:SPELLBOOK_INSTALL_ROOT,
@@ -334,16 +334,137 @@ function Assert-InstalledArtifacts {
   if (-not (Test-Path -LiteralPath $normalizedInstallPath -PathType Container)) {
     throw "The selected installation directory '$normalizedInstallPath' was not created."
   }
+  $installDirectory = Get-Item -LiteralPath $normalizedInstallPath -Force
+  if (
+    -not ($installDirectory -is [IO.DirectoryInfo]) -or
+    ($installDirectory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+  ) {
+    throw "The selected installation directory '$normalizedInstallPath' is not a real directory."
+  }
   if (-not (Test-Path -LiteralPath $normalizedExecutablePath -PathType Leaf)) {
     throw "The installed application executable '$normalizedExecutablePath' is missing."
   }
   if (-not (Test-Path -LiteralPath $normalizedUninstallerPath -PathType Leaf)) {
     throw "The installed uninstaller '$normalizedUninstallerPath' is missing."
   }
+  foreach ($artifactPath in @($normalizedExecutablePath, $normalizedUninstallerPath)) {
+    $artifact = Get-Item -LiteralPath $artifactPath -Force
+    if (
+      -not ($artifact -is [IO.FileInfo]) -or
+      ($artifact.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+    ) {
+      throw "Expected installed artifact '$artifactPath' is not a real file."
+    }
+  }
+}
+
+function Get-UninstallCommandExecutablePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$CommandLine,
+    [Parameter(Mandatory = $true)][string]$ExpectedPath
+  )
+
+  $command = $CommandLine.Trim()
+  if ([string]::IsNullOrWhiteSpace($command)) {
+    throw 'The registered uninstall command is empty.'
+  }
+
+  if ($command.StartsWith('"')) {
+    $closingQuote = $command.IndexOf('"', 1)
+    if ($closingQuote -le 1) {
+      throw 'The registered uninstall command is malformed.'
+    }
+    if (
+      $command.Length -gt ($closingQuote + 1) -and
+      -not [char]::IsWhiteSpace($command[$closingQuote + 1])
+    ) {
+      throw 'The registered uninstall command is malformed.'
+    }
+    return Get-NormalizedPath $command.Substring(1, $closingQuote - 1)
+  }
+
+  if ($command.Length -lt $ExpectedPath.Length) {
+    throw 'The registered uninstall command does not target the expected uninstaller.'
+  }
+  $pathPrefix = $command.Substring(0, $ExpectedPath.Length)
+  if (
+    -not [string]::Equals(
+      $pathPrefix,
+      $ExpectedPath,
+      [StringComparison]::OrdinalIgnoreCase
+    ) -or
+    (
+      $command.Length -gt $ExpectedPath.Length -and
+      -not [char]::IsWhiteSpace($command[$ExpectedPath.Length])
+    )
+  ) {
+    throw 'The registered uninstall command does not target the expected uninstaller.'
+  }
+  return Get-NormalizedPath $pathPrefix
+}
+
+function Assert-RegisteredUninstallTarget {
+  $target = @(
+    Get-InstanceRecords |
+      Where-Object { $_.id -eq $targetId }
+  ) | Select-Object -First 1
+  if ($null -eq $target) {
+    throw "The uninstall directory '$normalizedInstallPath' is not a registered Spellbook instance."
+  }
+
+  $registeredInstallPath = Get-NormalizedPath $target.installLocation
+  if (
+    -not [string]::Equals(
+      $registeredInstallPath,
+      $normalizedInstallPath,
+      [StringComparison]::OrdinalIgnoreCase
+    )
+  ) {
+    throw "The registered Spellbook instance does not match '$normalizedInstallPath'."
+  }
+
+  $parsedUninstallValues = $target.uninstallValues | ConvertFrom-Json
+  $uninstallStringValue = $null
+  foreach ($entry in $parsedUninstallValues) {
+    if (
+      [string]::Equals(
+        [string]($entry.name),
+        'UninstallString',
+        [StringComparison]::OrdinalIgnoreCase
+      )
+    ) {
+      $uninstallStringValue = [string]($entry.value)
+      break
+    }
+  }
+  if ([string]::IsNullOrWhiteSpace($uninstallStringValue)) {
+    throw "The registered Spellbook instance for '$normalizedInstallPath' has no uninstall command."
+  }
+
+  $expectedUninstallerPath = Get-NormalizedPath $UninstallerPath
+  $registeredUninstallerPath = Get-UninstallCommandExecutablePath `
+    $uninstallStringValue `
+    $expectedUninstallerPath
+  if (
+    -not [string]::Equals(
+      $registeredUninstallerPath,
+      $expectedUninstallerPath,
+      [StringComparison]::OrdinalIgnoreCase
+    )
+  ) {
+    throw "The registered uninstall command does not point to '$expectedUninstallerPath'."
+  }
+
+  Assert-InstalledArtifacts
 }
 
 $normalizedInstallPath = Get-NormalizedPath $InstallPath
 $targetId = Get-InstanceId $normalizedInstallPath
+
+if ($Action -eq 'validate-uninstall') {
+  Assert-RegisteredUninstallTarget
+  return
+}
 
 if ($Action -eq 'prepare') {
   $originalInstall = Get-RegistrySnapshot $InstallKeyPath

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -349,6 +349,94 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
       if (existsSync(uninstallerB)) {
         await runExecutable(uninstallerB, ['/S', '/currentuser']).catch(() => undefined);
         await waitForPath(installB, false).catch(() => undefined);
+      }
+      await rm(fixture, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 200
+      });
+      await removeTestRegistry(installKey, uninstallKey);
+    }
+  }, 300_000);
+
+  it('rejects a copied uninstaller before changing files or registration', async () => {
+    const installer = process.env.SPELLBOOK_NSIS_INSTALLER;
+    const productName = process.env.SPELLBOOK_NSIS_PRODUCT_NAME;
+    const installKey = process.env.SPELLBOOK_NSIS_TEST_INSTALL_KEY;
+    const uninstallKey = process.env.SPELLBOOK_NSIS_TEST_UNINSTALL_KEY;
+    if (!installer || !productName || !installKey || !uninstallKey) {
+      throw new Error(
+        'Set the SPELLBOOK_NSIS_INSTALLER, SPELLBOOK_NSIS_PRODUCT_NAME, SPELLBOOK_NSIS_TEST_INSTALL_KEY, and SPELLBOOK_NSIS_TEST_UNINSTALL_KEY test inputs.'
+      );
+    }
+
+    const testRoot = process.env.SPELLBOOK_NSIS_TEST_ROOT ?? tmpdir();
+    await mkdir(testRoot, { recursive: true });
+    const fixture = await mkdtemp(join(testRoot, 'spellbook-nsis-copied-uninstaller-'));
+    const installA = join(fixture, 'A');
+    const installB = join(fixture, 'B');
+    const foreignDirectory = join(fixture, 'user-data');
+    const executableA = join(installA, `${productName}.exe`);
+    const executableB = join(installB, `${productName}.exe`);
+    const uninstallerA = join(installA, `Uninstall ${productName}.exe`);
+    const uninstallerB = join(installB, `Uninstall ${productName}.exe`);
+    const copiedUninstaller = join(
+      foreignDirectory,
+      `Uninstall ${productName}.exe`
+    );
+    const sentinel = join(foreignDirectory, 'sentinel.txt');
+
+    try {
+      await removeTestRegistry(installKey, uninstallKey);
+      await runExecutable(installer, [
+        '/S',
+        '/currentuser',
+        '--no-desktop-shortcut',
+        '--no-start-menu-shortcut',
+        `/D=${installA}`
+      ]);
+      await runExecutable(installer, [
+        '/S',
+        '/currentuser',
+        '--no-desktop-shortcut',
+        '--no-start-menu-shortcut',
+        `/D=${installB}`
+      ]);
+      const registrationBefore = await readTestRegistration(installKey, uninstallKey);
+      expect(registrationBefore.installLocation?.toLowerCase()).toBe(
+        installB.toLowerCase()
+      );
+      expect(
+        registrationBefore.instanceLocations.map((path) => path.toLowerCase()).sort()
+      ).toEqual([installA.toLowerCase(), installB.toLowerCase()].sort());
+
+      await mkdir(foreignDirectory);
+      await copyFile(uninstallerA, copiedUninstaller);
+      await writeFile(sentinel, 'preserve user data');
+      const rejected = await runExecutableResult(copiedUninstaller, [
+        '/S',
+        '/currentuser'
+      ]);
+
+      expect(rejected.exitCode).toBe(2);
+      expect(await readFile(sentinel, 'utf8')).toBe('preserve user data');
+      expect(existsSync(foreignDirectory)).toBe(true);
+      expect(existsSync(executableA)).toBe(true);
+      expect(existsSync(uninstallerA)).toBe(true);
+      expect(existsSync(executableB)).toBe(true);
+      expect(existsSync(uninstallerB)).toBe(true);
+      expect(await readTestRegistration(installKey, uninstallKey)).toEqual(
+        registrationBefore
+      );
+    } finally {
+      if (existsSync(uninstallerB)) {
+        await runExecutable(uninstallerB, ['/S', '/currentuser']).catch(() => undefined);
+        await waitForPath(installB, false).catch(() => undefined);
+      }
+      if (existsSync(uninstallerA)) {
+        await runExecutable(uninstallerA, ['/S', '/currentuser']).catch(() => undefined);
+        await waitForPath(installA, false).catch(() => undefined);
       }
       await rm(fixture, {
         recursive: true,

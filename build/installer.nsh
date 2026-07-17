@@ -19,7 +19,7 @@
   ${endIf}
 !macroend
 
-!macro runInstallationRegistry ACTION
+!macro runInstallationRegistry ACTION TARGET_PATH
   InitPluginsDir
   File /oname=$PLUGINSDIR\installationRegistry.ps1 "${BUILD_RESOURCES_DIR}\installationRegistry.ps1"
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_ACTION", w "${ACTION}") i .r1'
@@ -31,16 +31,16 @@
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_KEY", w "${INSTALL_REGISTRY_KEY}") i .r1'
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_UNINSTALL_KEY", w "${UNINSTALL_REGISTRY_KEY}") i .r1'
   System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTANCES_KEY", w "${INSTALL_REGISTRY_KEY}.Instances") i .r1'
-  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_PATH", w "$INSTDIR") i .r1'
-  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_EXECUTABLE", w "$INSTDIR\${APP_EXECUTABLE_FILENAME}") i .r1'
-  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_UNINSTALLER", w "$INSTDIR\${UNINSTALL_FILENAME}") i .r1'
+  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_PATH", w "${TARGET_PATH}") i .r1'
+  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_EXECUTABLE", w "${TARGET_PATH}\${APP_EXECUTABLE_FILENAME}") i .r1'
+  System::Call 'Kernel32::SetEnvironmentVariableW(w "SPELLBOOK_INSTALL_UNINSTALLER", w "${TARGET_PATH}\${UNINSTALL_FILENAME}") i .r1'
   nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\installationRegistry.ps1"'
   Pop $0
   ${if} $0 != 0
     ${if} ${Silent}
-      DetailPrint "Spellbook could not safely update its installation registration (error $0). No other installation was changed."
+      DetailPrint "Spellbook could not safely verify or update this installation (error $0). No files or registration were changed."
     ${else}
-      MessageBox MB_OK|MB_ICONSTOP "Spellbook could not safely update its installation registration (error $0). No other installation was changed."
+      MessageBox MB_OK|MB_ICONSTOP "Spellbook could not safely verify or update this installation (error $0). No files or registration were changed."
     ${endIf}
     SetErrorLevel 2
     Quit
@@ -52,14 +52,14 @@
   StrCpy $spellbookInstallCommitted "false"
   ${if} ${Silent}
     StrCpy $spellbookRegistrationPrepared "true"
-    !insertmacro runInstallationRegistry "prepare"
+    !insertmacro runInstallationRegistry "prepare" "$INSTDIR"
   ${endIf}
 !macroend
 
 !macro customUnInit
-  ; initMultiUser resolves $INSTDIR from the shared active registration. An
-  ; uninstaller must instead own the directory it was launched from so an
-  ; inactive side-by-side instance cannot remove the active instance.
+  ; EXEDIR is untrusted until the read-only registry and artifact preflight
+  ; proves it is the exact directory of a registered Spellbook instance.
+  !insertmacro runInstallationRegistry "validate-uninstall" "$EXEDIR"
   StrCpy $INSTDIR "$EXEDIR"
 !macroend
 
@@ -71,14 +71,14 @@
   !ifndef BUILD_UNINSTALLER
     Function SpellbookPrepareSelectedInstall
       StrCpy $spellbookRegistrationPrepared "true"
-      !insertmacro runInstallationRegistry "prepare"
+      !insertmacro runInstallationRegistry "prepare" "$INSTDIR"
       Abort
     FunctionEnd
 
     Function SpellbookRollbackInstallationRegistry
       ${if} $spellbookRegistrationPrepared == "true"
       ${andIf} $spellbookInstallCommitted != "true"
-        !insertmacro runInstallationRegistry "rollback"
+        !insertmacro runInstallationRegistry "rollback" "$INSTDIR"
         StrCpy $spellbookRegistrationPrepared "false"
       ${endIf}
     FunctionEnd
@@ -94,7 +94,7 @@
 !macroend
 
 !macro customInstall
-  !insertmacro runInstallationRegistry "installed"
+  !insertmacro runInstallationRegistry "installed" "$INSTDIR"
   StrCpy $spellbookInstallCommitted "true"
   ${if} ${isNoDesktopShortcut}
     !insertmacro runShortcutOwnership "install" "false" "$DESKTOP\${SHORTCUT_NAME}.lnk" ".spellbook-desktop-shortcut-owner.json"
@@ -119,6 +119,6 @@
 !macro customUnInstallSection
   Section "un.-Spellbook installation registration"
     SectionIn RO
-    !insertmacro runInstallationRegistry "uninstalled"
+    !insertmacro runInstallationRegistry "uninstalled" "$INSTDIR"
   SectionEnd
 !macroend

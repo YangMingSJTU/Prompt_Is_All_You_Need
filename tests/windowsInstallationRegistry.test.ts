@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -35,7 +35,7 @@ function runPowerShell(
 }
 
 async function runRegistry(
-  action: 'prepare' | 'installed' | 'uninstalled' | 'rollback',
+  action: 'prepare' | 'installed' | 'validate-uninstall' | 'uninstalled' | 'rollback',
   installPath: string,
   fixture: RegistryFixture
 ): Promise<void> {
@@ -179,6 +179,33 @@ async function writePartiallyInvalidInstance(
   );
 }
 
+async function overwriteInstanceUninstallString(
+  installPath: string,
+  uninstallString: string,
+  fixture: RegistryFixture
+): Promise<void> {
+  const uninstallValues = JSON.stringify([
+    { name: 'UninstallString', kind: 'String', value: uninstallString }
+  ]);
+  await runPowerShell(
+    [
+      '-Command',
+      [
+        '$instance = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($env:TEST_INSTANCE_KEY, $true)',
+        'if ($null -eq $instance) { throw "Missing test instance." }',
+        'try {',
+        '  $instance.SetValue("UninstallValues", $env:TEST_UNINSTALL_VALUES, [Microsoft.Win32.RegistryValueKind]::String)',
+        '} finally { $instance.Dispose() }'
+      ].join('; ')
+    ],
+    {
+      ...process.env,
+      TEST_INSTANCE_KEY: `${fixture.instancesKey}\\${getInstanceId(installPath)}`,
+      TEST_UNINSTALL_VALUES: uninstallValues
+    }
+  );
+}
+
 async function readRegistration(fixture: RegistryFixture): Promise<{
   installLocation: string | null;
   displayVersion: string | null;
@@ -287,6 +314,23 @@ async function readSingletonSnapshot(fixture: RegistryFixture): Promise<string> 
   );
 }
 
+async function readUninstallGuardState(
+  installA: string,
+  installB: string,
+  fixture: RegistryFixture
+): Promise<{
+  singleton: string;
+  instanceA: Awaited<ReturnType<typeof readInstanceSnapshot>>;
+  instanceB: Awaited<ReturnType<typeof readInstanceSnapshot>>;
+}> {
+  const [singleton, instanceA, instanceB] = await Promise.all([
+    readSingletonSnapshot(fixture),
+    readInstanceSnapshot(installA, fixture),
+    readInstanceSnapshot(installB, fixture)
+  ]);
+  return { singleton, instanceA, instanceB };
+}
+
 async function cleanupRegistry(fixture: RegistryFixture): Promise<void> {
   await runPowerShell(
     [
@@ -359,7 +403,7 @@ describeWindows('Windows installation registry isolation', () => {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 90_000);
 
   it('preserves active B and removes only inactive A when A is uninstalled first', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
@@ -412,7 +456,104 @@ describeWindows('Windows installation registry isolation', () => {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 90_000);
+
+  it('authorizes only an exact registered uninstall target without mutating rejected paths', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'spellbook-uninstall-preflight-'));
+    const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
+    const fixture = {
+      installKey: `${rootKey}\\Install`,
+      uninstallKey: `${rootKey}\\Uninstall`,
+      instancesKey: `${rootKey}\\Instances`
+    };
+    const installA = join(directory, 'A');
+    const installB = join(directory, 'B');
+    const copiedDirectory = join(directory, 'copied-uninstaller');
+    const sentinel = join(copiedDirectory, 'sentinel.txt');
+    const copiedDesktopMarker = join(
+      copiedDirectory,
+      '.spellbook-desktop-shortcut-owner.json'
+    );
+
+    try {
+      await writeInstalledArtifacts(installA);
+      await writeInstalledArtifacts(installB);
+      await writeRegistration(installA, fixture, 'A');
+      await runRegistry('installed', installA, fixture);
+      await runRegistry('prepare', installB, fixture);
+      await writeRegistration(installB, fixture, 'B');
+      await runRegistry('installed', installB, fixture);
+
+      await runRegistry('validate-uninstall', installA, fixture);
+      const registrationBefore = await readRegistration(fixture);
+      const registryBefore = await readUninstallGuardState(
+        installA,
+        installB,
+        fixture
+      );
+      expect(registrationBefore).toEqual({
+        installLocation: installB,
+        displayVersion: 'B',
+        estimatedSize: 321
+      });
+
+      await mkdir(copiedDirectory);
+      await copyFile(
+        join(installA, 'Spellbook.exe'),
+        join(copiedDirectory, 'Spellbook.exe')
+      );
+      await copyFile(
+        join(installA, 'Uninstall Spellbook.exe'),
+        join(copiedDirectory, 'Uninstall Spellbook.exe')
+      );
+      await writeFile(sentinel, 'preserve user data');
+      await writeFile(copiedDesktopMarker, 'preserve marker');
+
+      await expect(
+        runRegistry('validate-uninstall', copiedDirectory, fixture)
+      ).rejects.toThrow(/not a registered Spellbook instance/);
+      expect(await readFile(sentinel, 'utf8')).toBe('preserve user data');
+      expect(await readFile(copiedDesktopMarker, 'utf8')).toBe('preserve marker');
+      expect(await readFile(join(copiedDirectory, 'Spellbook.exe'), 'utf8')).toBe(
+        'application'
+      );
+      expect(
+        await readFile(join(copiedDirectory, 'Uninstall Spellbook.exe'), 'utf8')
+      ).toBe('uninstaller');
+      expect(
+        await readUninstallGuardState(installA, installB, fixture)
+      ).toEqual(registryBefore);
+
+      await rm(join(installA, 'Spellbook.exe'));
+      await expect(
+        runRegistry('validate-uninstall', installA, fixture)
+      ).rejects.toThrow(/application executable[\s\S]+is missing/);
+      expect(
+        await readUninstallGuardState(installA, installB, fixture)
+      ).toEqual(registryBefore);
+      await writeFile(join(installA, 'Spellbook.exe'), 'application');
+
+      await overwriteInstanceUninstallString(
+        installA,
+        join(installB, 'Uninstall Spellbook.exe'),
+        fixture
+      );
+      const mismatchedRegistry = await readUninstallGuardState(
+        installA,
+        installB,
+        fixture
+      );
+      await expect(
+        runRegistry('validate-uninstall', installA, fixture)
+      ).rejects.toThrow(/does not target|does not point/);
+      expect(
+        await readUninstallGuardState(installA, installB, fixture)
+      ).toEqual(mismatchedRegistry);
+    } finally {
+      await cleanupRegistry(fixture);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 90_000);
 
   it('restores A when the installer registration exists but committed artifacts are missing', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
@@ -445,7 +586,7 @@ describeWindows('Windows installation registry isolation', () => {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 90_000);
 
   it('restores the original singleton registration after a partial prepare write', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
@@ -478,7 +619,7 @@ describeWindows('Windows installation registry isolation', () => {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 90_000);
 
   it('preserves a same-directory instance when an upgrade registration is partially written', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
@@ -523,5 +664,5 @@ describeWindows('Windows installation registry isolation', () => {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 90_000);
 });

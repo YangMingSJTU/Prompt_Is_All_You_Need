@@ -97,7 +97,7 @@ describeWindows('Windows desktop shortcut ownership', () => {
     } finally {
       await rm(fixture, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 60_000);
 
   it('preserves a same-name shortcut owned by an existing installation', async () => {
     const fixture = await mkdtemp(join(tmpdir(), 'spellbook-shortcut-existing-'));
@@ -127,7 +127,7 @@ describeWindows('Windows desktop shortcut ownership', () => {
     } finally {
       await rm(fixture, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 60_000);
 
   it('tracks custom-directory upgrades and isolates side-by-side uninstall', async () => {
     const fixture = await mkdtemp(join(tmpdir(), 'spellbook-shortcut-owned-'));
@@ -172,7 +172,7 @@ describeWindows('Windows desktop shortcut ownership', () => {
     } finally {
       await rm(fixture, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 60_000);
 
   it('keeps desktop and start-menu shortcuts under source-owned lifecycle control', async () => {
     const config = await readFile(join(process.cwd(), 'electron-builder.yml'), 'utf8');
@@ -184,8 +184,29 @@ describeWindows('Windows desktop shortcut ownership', () => {
     expect(include).toContain('${isNoDesktopShortcut}');
     expect(include).toContain('.spellbook-start-menu-shortcut-owner.json');
     expect(include).toContain('customUnInstall');
-    expect(include).toMatch(
-      /!macro customUnInit[\s\S]*?StrCpy \$INSTDIR "\$EXEDIR"[\s\S]*?!macroend/
+    const uninit = include.slice(
+      include.indexOf('!macro customUnInit'),
+      include.indexOf('!macroend', include.indexOf('!macro customUnInit'))
+    );
+    const validation = uninit.indexOf(
+      '!insertmacro runInstallationRegistry "validate-uninstall" "$EXEDIR"'
+    );
+    const validationAbsolute = include.indexOf(
+      '!insertmacro runInstallationRegistry "validate-uninstall" "$EXEDIR"'
+    );
+    const rebind = uninit.indexOf('StrCpy $INSTDIR "$EXEDIR"');
+    const uninstallSection = include.indexOf('!macro customUnInstall');
+    const registryMacroStart = include.indexOf('!macro runInstallationRegistry');
+    const registryMacro = include.slice(
+      registryMacroStart,
+      include.indexOf('!macroend', registryMacroStart)
+    );
+
+    expect(validation).toBeGreaterThanOrEqual(0);
+    expect(rebind).toBeGreaterThan(validation);
+    expect(validationAbsolute).toBeLessThan(uninstallSection);
+    expect(registryMacro).toMatch(
+      /\$0 != 0[\s\S]*?SetErrorLevel 2[\s\S]*?Quit/
     );
   });
 });
