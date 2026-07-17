@@ -218,14 +218,24 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
       expect(existsSync(uninstallerA)).toBe(true);
       expect(existsSync(executableB)).toBe(true);
       expect(existsSync(uninstallerB)).toBe(true);
+      const registrationB = await readTestRegistration(installKey, uninstallKey);
+      expect(registrationB.installLocation?.toLowerCase()).toBe(installB.toLowerCase());
+      expect(registrationB.uninstallString?.toLowerCase()).toContain(
+        uninstallerB.toLowerCase()
+      );
+      expect(registrationB.instanceLocations.map((path) => path.toLowerCase()).sort()).toEqual(
+        [installA.toLowerCase(), installB.toLowerCase()].sort()
+      );
 
-      await runExecutable(uninstallerB, ['/S', '/currentuser']);
+      const uninstallB = await runExecutableResult(uninstallerB, ['/S', '/currentuser']);
+      expect(uninstallB.exitCode).toBe(0);
       await waitForPath(installB, false);
       expect(existsSync(executableA)).toBe(true);
       expect(existsSync(uninstallerA)).toBe(true);
       expect(await readTestRegistration(installKey, uninstallKey)).toEqual(registrationA);
 
-      await runExecutable(uninstallerA, ['/S', '/currentuser']);
+      const uninstallA = await runExecutableResult(uninstallerA, ['/S', '/currentuser']);
+      expect(uninstallA.exitCode).toBe(0);
       await waitForPath(installA, false);
       expect(await readTestRegistryState(installKey, uninstallKey)).toEqual({
         install: false,
@@ -240,6 +250,105 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
       if (existsSync(uninstallerA)) {
         await runExecutable(uninstallerA, ['/S', '/currentuser']).catch(() => undefined);
         await waitForPath(installA, false).catch(() => undefined);
+      }
+      await rm(fixture, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 200
+      });
+      await removeTestRegistry(installKey, uninstallKey);
+    }
+  }, 300_000);
+
+  it('binds an inactive A uninstaller to A and preserves active B', async () => {
+    const installer = process.env.SPELLBOOK_NSIS_INSTALLER;
+    const productName = process.env.SPELLBOOK_NSIS_PRODUCT_NAME;
+    const installKey = process.env.SPELLBOOK_NSIS_TEST_INSTALL_KEY;
+    const uninstallKey = process.env.SPELLBOOK_NSIS_TEST_UNINSTALL_KEY;
+    if (!installer || !productName || !installKey || !uninstallKey) {
+      throw new Error(
+        'Set the SPELLBOOK_NSIS_INSTALLER, SPELLBOOK_NSIS_PRODUCT_NAME, SPELLBOOK_NSIS_TEST_INSTALL_KEY, and SPELLBOOK_NSIS_TEST_UNINSTALL_KEY test inputs.'
+      );
+    }
+
+    const testRoot = process.env.SPELLBOOK_NSIS_TEST_ROOT ?? tmpdir();
+    await mkdir(testRoot, { recursive: true });
+    const fixture = await mkdtemp(join(testRoot, 'spellbook-nsis-inactive-first-'));
+    const installA = join(fixture, 'A');
+    const installB = join(fixture, 'B');
+    const executableA = join(installA, `${productName}.exe`);
+    const executableB = join(installB, `${productName}.exe`);
+    const uninstallerA = join(installA, `Uninstall ${productName}.exe`);
+    const uninstallerB = join(installB, `Uninstall ${productName}.exe`);
+
+    try {
+      await removeTestRegistry(installKey, uninstallKey);
+      await runExecutable(installer, [
+        '/S',
+        '/currentuser',
+        '--no-desktop-shortcut',
+        '--no-start-menu-shortcut',
+        `/D=${installA}`
+      ]);
+      await runExecutable(installer, [
+        '/S',
+        '/currentuser',
+        '--no-desktop-shortcut',
+        '--no-start-menu-shortcut',
+        `/D=${installB}`
+      ]);
+
+      expect(existsSync(executableA)).toBe(true);
+      expect(existsSync(uninstallerA)).toBe(true);
+      expect(existsSync(executableB)).toBe(true);
+      expect(existsSync(uninstallerB)).toBe(true);
+      const registrationBeforeUninstall = await readTestRegistration(
+        installKey,
+        uninstallKey
+      );
+      expect(registrationBeforeUninstall.installLocation?.toLowerCase()).toBe(
+        installB.toLowerCase()
+      );
+      expect(
+        registrationBeforeUninstall.instanceLocations
+          .map((path) => path.toLowerCase())
+          .sort()
+      ).toEqual([installA.toLowerCase(), installB.toLowerCase()].sort());
+
+      const uninstallA = await runExecutableResult(uninstallerA, ['/S', '/currentuser']);
+      expect(uninstallA.exitCode).toBe(0);
+      await waitForPath(installA, false);
+      expect(existsSync(executableB)).toBe(true);
+      expect(existsSync(uninstallerB)).toBe(true);
+
+      const registrationAfterA = await readTestRegistration(installKey, uninstallKey);
+      expect(registrationAfterA.installLocation?.toLowerCase()).toBe(
+        installB.toLowerCase()
+      );
+      expect(registrationAfterA.uninstallString?.toLowerCase()).toContain(
+        uninstallerB.toLowerCase()
+      );
+      expect(registrationAfterA.instanceLocations.map((path) => path.toLowerCase())).toEqual(
+        [installB.toLowerCase()]
+      );
+
+      const uninstallB = await runExecutableResult(uninstallerB, ['/S', '/currentuser']);
+      expect(uninstallB.exitCode).toBe(0);
+      await waitForPath(installB, false);
+      expect(await readTestRegistryState(installKey, uninstallKey)).toEqual({
+        install: false,
+        instances: false,
+        uninstall: false
+      });
+    } finally {
+      if (existsSync(uninstallerA)) {
+        await runExecutable(uninstallerA, ['/S', '/currentuser']).catch(() => undefined);
+        await waitForPath(installA, false).catch(() => undefined);
+      }
+      if (existsSync(uninstallerB)) {
+        await runExecutable(uninstallerB, ['/S', '/currentuser']).catch(() => undefined);
+        await waitForPath(installB, false).catch(() => undefined);
       }
       await rm(fixture, {
         recursive: true,

@@ -56,6 +56,13 @@
   ${endIf}
 !macroend
 
+!macro customUnInit
+  ; initMultiUser resolves $INSTDIR from the shared active registration. An
+  ; uninstaller must instead own the directory it was launched from so an
+  ; inactive side-by-side instance cannot remove the active instance.
+  StrCpy $INSTDIR "$EXEDIR"
+!macroend
+
 !macro customPageAfterChangeDir
   Page custom SpellbookPrepareSelectedInstall
 !macroend

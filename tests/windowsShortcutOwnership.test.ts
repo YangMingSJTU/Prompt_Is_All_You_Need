@@ -184,5 +184,8 @@ describeWindows('Windows desktop shortcut ownership', () => {
     expect(include).toContain('${isNoDesktopShortcut}');
     expect(include).toContain('.spellbook-start-menu-shortcut-owner.json');
     expect(include).toContain('customUnInstall');
+    expect(include).toMatch(
+      /!macro customUnInit[\s\S]*?StrCpy \$INSTDIR "\$EXEDIR"[\s\S]*?!macroend/
+    );
   });
 });

@@ -361,6 +361,59 @@ describeWindows('Windows installation registry isolation', () => {
     }
   }, 30_000);
 
+  it('preserves active B and removes only inactive A when A is uninstalled first', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
+    const fixture = {
+      installKey: `${rootKey}\\Install`,
+      uninstallKey: `${rootKey}\\Uninstall`,
+      instancesKey: `${rootKey}\\Instances`
+    };
+    const installA = join(directory, 'A');
+    const installB = join(directory, 'B');
+
+    try {
+      await writeInstalledArtifacts(installA);
+      await writeInstalledArtifacts(installB);
+
+      await writeRegistration(installA, fixture, 'A');
+      await runRegistry('installed', installA, fixture);
+      await runRegistry('prepare', installB, fixture);
+      await writeRegistration(installB, fixture, 'B');
+      await runRegistry('installed', installB, fixture);
+
+      expect(await readInstanceSnapshot(installA, fixture)).not.toBeNull();
+      expect(await readInstanceSnapshot(installB, fixture)).not.toBeNull();
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: installB,
+        displayVersion: 'B',
+        estimatedSize: 321
+      });
+
+      await removeSingletonRegistration(fixture);
+      await runRegistry('uninstalled', installA, fixture);
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: installB,
+        displayVersion: 'B',
+        estimatedSize: 321
+      });
+      expect(await readInstanceSnapshot(installA, fixture)).toBeNull();
+      expect(await readInstanceSnapshot(installB, fixture)).not.toBeNull();
+
+      await removeSingletonRegistration(fixture);
+      await runRegistry('uninstalled', installB, fixture);
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: null,
+        displayVersion: null,
+        estimatedSize: null
+      });
+      expect(await readInstanceSnapshot(installB, fixture)).toBeNull();
+    } finally {
+      await cleanupRegistry(fixture);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it('restores A when the installer registration exists but committed artifacts are missing', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
