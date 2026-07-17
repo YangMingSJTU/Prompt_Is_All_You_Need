@@ -387,6 +387,8 @@ if ($Action -eq 'prepare') {
 }
 
 if ($Action -eq 'installed') {
+  $targetInstancePath = "$InstancesKeyPath\$targetId"
+  $targetInstanceBeforeInstall = Get-RegistrySnapshot $targetInstancePath
   try {
     Assert-InstalledArtifacts
     $activeLocation = Get-ActiveInstallLocation
@@ -405,7 +407,11 @@ if ($Action -eq 'installed') {
   } catch {
     $installFailure = $_
     try {
-      Remove-RegistryTree "$InstancesKeyPath\$targetId"
+      if ($targetInstanceBeforeInstall.exists) {
+        Restore-RegistrySnapshot $targetInstancePath $targetInstanceBeforeInstall
+      } else {
+        Remove-RegistryTree $targetInstancePath
+      }
       Restore-LatestRegistration
     } catch {
       throw "Validating the installation failed and the previous registration could not be restored: $($installFailure.Exception.Message); rollback: $($_.Exception.Message)"

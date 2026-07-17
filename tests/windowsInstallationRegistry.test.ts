@@ -99,6 +99,34 @@ async function writeRegistration(
   );
 }
 
+async function writePartialUpgradeRegistration(
+  installPath: string,
+  fixture: RegistryFixture
+): Promise<void> {
+  await runPowerShell(
+    [
+      '-Command',
+      [
+        '$install = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($env:TEST_INSTALL_KEY)',
+        'try {',
+        '  $install.SetValue("InstallLocation", $env:TEST_INSTALL_PATH, [Microsoft.Win32.RegistryValueKind]::String)',
+        '} finally { $install.Dispose() }',
+        '[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($env:TEST_UNINSTALL_KEY, $false)',
+        '$uninstall = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($env:TEST_UNINSTALL_KEY)',
+        'try {',
+        '  $uninstall.SetValue("DisplayVersion", "partial-upgrade", [Microsoft.Win32.RegistryValueKind]::String)',
+        '} finally { $uninstall.Dispose() }'
+      ].join('; ')
+    ],
+    {
+      ...process.env,
+      TEST_INSTALL_KEY: fixture.installKey,
+      TEST_UNINSTALL_KEY: fixture.uninstallKey,
+      TEST_INSTALL_PATH: installPath
+    }
+  );
+}
+
 async function removeSingletonRegistration(fixture: RegistryFixture): Promise<void> {
   await runPowerShell(
     [
@@ -185,6 +213,78 @@ async function readRegistration(fixture: RegistryFixture): Promise<{
     displayVersion: string | null;
     estimatedSize: number | null;
   };
+}
+
+async function readInstanceSnapshot(
+  installPath: string,
+  fixture: RegistryFixture
+): Promise<{
+  installLocation: string;
+  installValues: string;
+  uninstallValues: string;
+  updatedAt: string;
+} | null> {
+  const output = await runPowerShell(
+    [
+      '-Command',
+      [
+        '$instance = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($env:TEST_INSTANCE_KEY)',
+        'if ($null -eq $instance) { "null"; return }',
+        'try {',
+        '  [pscustomobject]@{',
+        '    installLocation = [string]$instance.GetValue("InstallLocation", "")',
+        '    installValues = [string]$instance.GetValue("InstallValues", "")',
+        '    uninstallValues = [string]$instance.GetValue("UninstallValues", "")',
+        '    updatedAt = ([long]$instance.GetValue("UpdatedAt", 0)).ToString()',
+        '  } | ConvertTo-Json -Compress',
+        '} finally { $instance.Dispose() }'
+      ].join('\n')
+    ],
+    {
+      ...process.env,
+      TEST_INSTANCE_KEY: `${fixture.instancesKey}\\${getInstanceId(installPath)}`
+    }
+  );
+  return JSON.parse(output) as {
+    installLocation: string;
+    installValues: string;
+    uninstallValues: string;
+    updatedAt: string;
+  } | null;
+}
+
+async function readSingletonSnapshot(fixture: RegistryFixture): Promise<string> {
+  return runPowerShell(
+    [
+      '-Command',
+      [
+        'function Read-KeyValues([string]$path) {',
+        '  $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($path)',
+        '  if ($null -eq $key) { return @() }',
+        '  try {',
+        '    $values = @()',
+        '    foreach ($name in @($key.GetValueNames() | Sort-Object)) {',
+        '      $values += [pscustomobject]@{',
+        '        name = $name',
+        '        kind = $key.GetValueKind($name).ToString()',
+        '        value = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)',
+        '      }',
+        '    }',
+        '    return $values',
+        '  } finally { $key.Dispose() }',
+        '}',
+        '[pscustomobject]@{',
+        '  installValues = @(Read-KeyValues $env:TEST_INSTALL_KEY)',
+        '  uninstallValues = @(Read-KeyValues $env:TEST_UNINSTALL_KEY)',
+        '} | ConvertTo-Json -Compress -Depth 5'
+      ].join('\n')
+    ],
+    {
+      ...process.env,
+      TEST_INSTALL_KEY: fixture.installKey,
+      TEST_UNINSTALL_KEY: fixture.uninstallKey
+    }
+  );
 }
 
 async function cleanupRegistry(fixture: RegistryFixture): Promise<void> {
@@ -321,6 +421,51 @@ describeWindows('Windows installation registry isolation', () => {
 
       await runRegistry('rollback', installB, fixture);
       expect((await readRegistration(fixture)).installLocation).toBe(installA);
+    } finally {
+      await cleanupRegistry(fixture);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('preserves a same-directory instance when an upgrade registration is partially written', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
+    const fixture = {
+      installKey: `${rootKey}\\Install`,
+      uninstallKey: `${rootKey}\\Uninstall`,
+      instancesKey: `${rootKey}\\Instances`
+    };
+    const installA = join(directory, 'A');
+
+    try {
+      await writeInstalledArtifacts(installA);
+      await writeRegistration(installA, fixture, 'A');
+      await runRegistry('installed', installA, fixture);
+      await runRegistry('prepare', installA, fixture);
+      const originalInstance = await readInstanceSnapshot(installA, fixture);
+      const originalSingleton = await readSingletonSnapshot(fixture);
+      expect(originalInstance).not.toBeNull();
+
+      await writePartialUpgradeRegistration(installA, fixture);
+      await expect(runRegistry('installed', installA, fixture)).rejects.toThrow(
+        /registration[\s\S]+incomplete/
+      );
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: installA,
+        displayVersion: 'A',
+        estimatedSize: 321
+      });
+      expect(await readInstanceSnapshot(installA, fixture)).toEqual(originalInstance);
+      expect(await readSingletonSnapshot(fixture)).toBe(originalSingleton);
+
+      await runRegistry('rollback', installA, fixture);
+      expect(await readRegistration(fixture)).toEqual({
+        installLocation: installA,
+        displayVersion: 'A',
+        estimatedSize: 321
+      });
+      expect(await readInstanceSnapshot(installA, fixture)).toEqual(originalInstance);
+      expect(await readSingletonSnapshot(fixture)).toBe(originalSingleton);
     } finally {
       await cleanupRegistry(fixture);
       await rm(directory, { recursive: true, force: true });
