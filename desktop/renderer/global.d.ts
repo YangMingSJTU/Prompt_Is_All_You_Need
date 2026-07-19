@@ -4,12 +4,18 @@ import type {
   SettingsUpdateResult,
 } from '../shared/settings';
 import type {
+  InstallSkillRequest,
+  InstallSkillResult,
+  PackageSkillRequest,
+  PackageSkillResult,
+  SkillLibraryState,
+  SkillScanResult
+} from '../shared/skillTypes';
+import type {
   Candidate,
   CandidatePromotionResult,
   FloatingWindowState,
   ScanRunRequest,
-  SkillPlatform,
-  SkillRecord,
   Spell,
   SpellCreateInput,
   SpellDeleteResult,
@@ -40,14 +46,13 @@ declare global {
         scannedPrompts: number;
         sourceFiles: SourceFileSummary[];
         candidates: Candidate[];
-        skills: SkillRecord[];
         warningCount: number;
       }>;
       getAnalytics(): Promise<UsageAnalytics>;
-      listSkills(): Promise<SkillRecord[]>;
-      scanSkills(): Promise<SkillRecord[]>;
-      packageSkill(skillId: string): Promise<{ path: string }>;
-      installSkill(skillId: string, targetPlatform: SkillPlatform): Promise<{ path: string; warning?: string }>;
+      getSkillLibraryState(): Promise<SkillLibraryState>;
+      scanSkills(): Promise<SkillScanResult>;
+      packageSkill(request: PackageSkillRequest): Promise<PackageSkillResult>;
+      installSkill(request: InstallSkillRequest): Promise<InstallSkillResult>;
       getSettings(): Promise<AppSettings>;
       getSettingsInfo(): Promise<SettingsInfo>;
       updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;

@@ -115,9 +115,7 @@ export function defaultScanSources(): ScanSourceConfig[] {
   const home = homedir();
   return [
     { provider: 'claude', target: 'spells', path: join(home, '.claude'), enabled: true },
-    { provider: 'codex', target: 'spells', path: join(home, '.codex'), enabled: true },
-    { provider: 'claude', target: 'skills', path: join(home, '.claude', 'skills'), enabled: true },
-    { provider: 'codex', target: 'skills', path: join(home, '.agents', 'skills'), enabled: true }
+    { provider: 'codex', target: 'spells', path: join(home, '.codex'), enabled: true }
   ];
 }
 
@@ -173,7 +171,7 @@ function isScanProvider(value: unknown): value is ScanProvider {
 }
 
 function isScanTarget(value: unknown): value is ScanTarget {
-  return value === 'spells' || value === 'skills';
+  return value === 'spells';
 }
 
 function scanSourceKey(provider: ScanProvider, target: ScanTarget): string {

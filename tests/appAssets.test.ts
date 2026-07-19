@@ -2,7 +2,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { getAppIconPath, getTrayIconPath } from '../desktop/main/services/appAssets';
+import {
+  getAppIconPath,
+  getSqlWasmPath,
+  getTrayIconPath,
+  resolveAppRoot
+} from '../desktop/main/services/appAssets';
 
 describe('app assets', () => {
   it('uses a Windows icon file for window and taskbar chrome', () => {
@@ -11,6 +16,34 @@ describe('app assets', () => {
     expect(normalize(iconPath)).toBe(normalize(join(process.cwd(), 'assets', 'icons', 'app-icon.ico')));
     expect(iconPath).not.toContain('docs');
     expect(existsSync(iconPath)).toBe(true);
+  });
+
+  it('resolves packaged external resources from the app installation root', () => {
+    const installRoot = join('C:\\Program Files', 'Spellbook');
+    const appRoot = resolveAppRoot({
+      isPackaged: true,
+      appPath: join(installRoot, 'resources', 'app.asar'),
+      resourcesPath: join(installRoot, 'resources')
+    });
+
+    expect(normalize(appRoot)).toBe(normalize(installRoot));
+    expect(normalize(getAppIconPath(appRoot, 'win32'))).toBe(
+      normalize(join(installRoot, 'assets', 'icons', 'app-icon.ico'))
+    );
+    expect(normalize(getSqlWasmPath(appRoot))).toBe(
+      normalize(join(installRoot, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'))
+    );
+  });
+
+  it('uses the explicit application path during development', () => {
+    const appPath = join('D:\\work', 'spellbook');
+    expect(
+      resolveAppRoot({
+        isPackaged: false,
+        appPath,
+        resourcesPath: join(appPath, 'resources')
+      })
+    ).toBe(appPath);
   });
 
   it('uses a separate transparent icon for the tray', () => {

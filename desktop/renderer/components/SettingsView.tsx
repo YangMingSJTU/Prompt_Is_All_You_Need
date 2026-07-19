@@ -10,8 +10,11 @@ import {
   type QuickPanelPlacement,
   type SettingsInfo
 } from '../../shared/settings';
-import type { Candidate, ScanProvider, ScanSourceConfig, ScanTarget, SkillRecord } from '../../shared/types';
-import type { TFunction } from '../i18n';
+import type { Candidate, ScanProvider, ScanSourceConfig } from '../../shared/types';
+import {
+  translateForLocalePreference,
+  type TFunction
+} from '../i18n';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
@@ -52,14 +55,6 @@ const PLACEMENT_OPTIONS: Array<{
   { value: 'mouse', labelKey: 'settings.placement.mouse' }
 ];
 
-const SCAN_TARGET_OPTIONS: Array<{
-  value: ScanTarget;
-  labelKey: 'settings.scanTarget.spells' | 'settings.scanTarget.skills';
-}> = [
-  { value: 'spells', labelKey: 'settings.scanTarget.spells' },
-  { value: 'skills', labelKey: 'settings.scanTarget.skills' }
-];
-
 const SCAN_PROVIDERS: ScanProvider[] = ['claude', 'codex'];
 
 export function SettingsView({
@@ -74,10 +69,8 @@ export function SettingsView({
   const [saving, setSaving] = useState(false);
   const [recordingShortcut, setRecordingShortcut] = useState(false);
   const [shortcutError, setShortcutError] = useState<string | null>(null);
-  const [scanTarget, setScanTarget] = useState<ScanTarget>('spells');
   const [selectedProviders, setSelectedProviders] = useState<ScanProvider[]>(['claude', 'codex']);
   const [scanCandidates, setScanCandidates] = useState<Candidate[]>([]);
-  const [scanSkills, setScanSkills] = useState<SkillRecord[]>([]);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [runningScan, setRunningScan] = useState(false);
   const [addingCandidates, setAddingCandidates] = useState(false);
@@ -101,7 +94,12 @@ export function SettingsView({
     try {
       const result = await window.spellbook.updateSettings(patch);
       onSettingsChanged(result.settings);
-      showToast(result.warning ?? t('settings.saved'), {
+      const savedMessage = translateForLocalePreference(
+        result.settings.language,
+        globalThis.navigator?.language,
+        'settings.saved'
+      );
+      showToast(result.warning ?? savedMessage, {
         variant: result.warning ? 'warning' : 'success'
       });
     } finally {
@@ -208,23 +206,6 @@ export function SettingsView({
 
         {activeTab === 'localData' ? (
           <SettingsSection title={t('settings.localData')} icon={Database} fill>
-            <SettingRow label={t('settings.scanTarget')}>
-              <div className="settings-segmented">
-                {SCAN_TARGET_OPTIONS.map((option) => (
-                  <button
-                    className={scanTarget === option.value ? 'active' : ''}
-                    key={option.value}
-                    onClick={() => {
-                      setScanTarget(option.value);
-                      setSelectedCandidateIds([]);
-                    }}
-                    type="button"
-                  >
-                    {t(option.labelKey)}
-                  </button>
-                ))}
-              </div>
-            </SettingRow>
             <SettingRow label={t('settings.scanProvider')}>
               <div className="settings-segmented">
                 {SCAN_PROVIDERS.map((provider) => (
@@ -241,7 +222,6 @@ export function SettingsView({
             </SettingRow>
             <div className="scan-source-list">
               {activeScanSources
-                .filter((source) => source.target === scanTarget)
                 .map((source) => (
                   <div className="scan-source-row" key={`${source.provider}:${source.target}`}>
                     <span>{source.provider === 'claude' ? 'Claude' : 'Codex'}</span>
@@ -280,8 +260,7 @@ export function SettingsView({
                 {runningScan ? t('scanner.running') : t('scanner.run')}
               </button>
             </div>
-            {scanTarget === 'spells' ? (
-              <div className="candidate-results">
+            <div className="candidate-results">
                 <div className="section-heading compact">
                   <h3>{t('library.candidates')}</h3>
                   <div className="button-row">
@@ -324,18 +303,7 @@ export function SettingsView({
                   })}
                   {scanCandidates.length === 0 ? <div className="empty-state">{t('scanner.noCandidates')}</div> : null}
                 </div>
-              </div>
-            ) : (
-              <div className="skill-scan-results">
-                {scanSkills.map((skill) => (
-                  <div className="settings-info-row" key={skill.id}>
-                    <span>{skill.name}</span>
-                    <code title={skill.rootPath}>{skill.rootPath}</code>
-                  </div>
-                ))}
-                {scanSkills.length === 0 ? <div className="empty-state">{t('skill.empty')}</div> : null}
-              </div>
-            )}
+            </div>
           </SettingsSection>
         ) : null}
       </div>
@@ -423,18 +391,13 @@ export function SettingsView({
     setRunningScan(true);
     try {
       const result = await window.spellbook.runScan({
-        target: scanTarget,
+        target: 'spells',
         providers: selectedProviders,
         scanSources: activeScanSources
       });
       setScanCandidates(result.candidates);
-      setScanSkills(result.skills);
       setSelectedCandidateIds([]);
-      showToast(
-        scanTarget === 'spells'
-          ? `${t('status.scanFinished')}: ${result.candidates.length}`
-          : `${t('status.skillScanFinished')}: ${result.skills.length}`
-      );
+      showToast(`${t('status.scanFinished')}: ${result.candidates.length}`);
       await onChanged();
     } finally {
       setRunningScan(false);

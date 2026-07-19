@@ -23,7 +23,6 @@ import type {
   ScanProvider,
   ScanRunRequest,
   ScanSourceConfig,
-  SkillPlatform,
   SpellCreateInput,
   SpellStatePatch,
   SpellUpdatePatch
@@ -46,7 +45,20 @@ import {
 import { createSettingsService, defaultScanSources, type SettingsService } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
 import { createSpellbookPaths } from './services/spellbookPaths';
-import { getAppIconPath, getTrayIconPath } from './services/appAssets';
+import {
+  getAppIconPath,
+  getSqlWasmPath,
+  getTrayIconPath,
+  resolveAppRoot
+} from './services/appAssets';
+import { runAppPreflight, runAppStartup } from './services/appStartup';
+import { configureElectronStorage } from './services/electronStorage';
+import {
+  createAppReadinessBarrier,
+  createWindowRestorer,
+  registerSingleInstanceLifecycle
+} from './services/appLifecycle';
+import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -59,18 +71,27 @@ let mainWindowCompact = false;
 let mainWindowExpandedWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 let mainWindowRecommendationDelta = SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA;
 let restoreMainWindowMaximized = false;
+const spellbookPaths = createSpellbookPaths();
 
-async function createWindow(): Promise<void> {
+function getRuntimeAppRoot(): string {
+  return resolveAppRoot({
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  });
+}
+
+async function createWindow(): Promise<BrowserWindow> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
     height: MAIN_WINDOW_DEFAULT_HEIGHT,
     minWidth: MAIN_WINDOW_MIN_WIDTH,
     minHeight: MAIN_WINDOW_MIN_HEIGHT,
     useContentSize: true,
     title: appName,
-    icon: getAppIconPath(),
+    icon: getAppIconPath(getRuntimeAppRoot()),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#0f1115',
@@ -87,12 +108,26 @@ async function createWindow(): Promise<void> {
     }
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+  mainWindow = window;
+  window.once('ready-to-show', () => {
+    if (!window.isDestroyed()) {
+      window.show();
+    }
+  });
+  window.on('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
   });
 
-  await loadRenderer(mainWindow, 'main');
+  await loadRenderer(window, 'main');
+  return window;
 }
+
+const restoreMainWindow = createWindowRestorer<BrowserWindow>({
+  getWindow: () => mainWindow,
+  createWindow
+});
 
 async function createFloatingWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
@@ -105,7 +140,7 @@ async function createFloatingWindow(): Promise<void> {
     maxWidth: FLOATING_WINDOW_MAX_WIDTH,
     maxHeight: FLOATING_WINDOW_MAX_HEIGHT,
     title: appName,
-    icon: getAppIconPath(),
+    icon: getAppIconPath(getRuntimeAppRoot()),
     show: false,
     frame: false,
     resizable: true,
@@ -144,9 +179,11 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 }
 
 async function bootstrap(): Promise<void> {
-  const spellbookPaths = createSpellbookPaths();
   databasePath = spellbookPaths.databasePath;
-  const db = await openAppDatabase(databasePath);
+  const db = await openAppDatabase(
+    databasePath,
+    getSqlWasmPath(getRuntimeAppRoot())
+  );
   const spellService = createSpellService(db);
   const skillService = createSkillService(db, {
     roots: defaultSkillRoots(),
@@ -191,12 +228,7 @@ async function bootstrap(): Promise<void> {
     spellService.promoteCandidates(candidateIds)
   );
   ipcMain.handle('analytics:get', () => spellService.getAnalytics());
-  ipcMain.handle('skills:list', () => skillService.listSkills());
-  ipcMain.handle('skills:scan', () => skillService.scanSkills());
-  ipcMain.handle('skills:package', (_event, skillId: string) => skillService.packageSkill(skillId));
-  ipcMain.handle('skills:install', (_event, skillId: string, targetPlatform: SkillPlatform) =>
-    skillService.installSkill(skillId, targetPlatform)
-  );
+  registerSkillHandlers(ipcMain, skillService);
   ipcMain.handle('settings:get', () => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
@@ -205,8 +237,7 @@ async function bootstrap(): Promise<void> {
   });
   ipcMain.handle('settings:info', () => ({
     defaultScanSources: defaultScanSources(),
-    historyRoots: defaultHistoryRoots(),
-    skillRoots: skillService.getSkillRoots()
+    historyRoots: defaultHistoryRoots()
   }));
   ipcMain.handle(
     'window:setRecommendationPanelOpen',
@@ -269,21 +300,6 @@ async function bootstrap(): Promise<void> {
         source.target === scanRequest.target &&
         scanRequest.providers.includes(source.provider)
     );
-    if (scanRequest.target === 'skills') {
-      const skills = await skillService.scanSkills(
-        roots.map((root) => ({ platform: root.provider, path: root.path }))
-      );
-      return {
-        id: randomUUID(),
-        target: scanRequest.target,
-        scannedPrompts: 0,
-        sourceFiles: [],
-        candidates: await spellService.listCandidates(),
-        skills,
-        warningCount: 0
-      };
-    }
-
     const summaries = [];
     const allPrompts = [];
 
@@ -305,7 +321,6 @@ async function bootstrap(): Promise<void> {
       scannedPrompts: allPrompts.length,
       sourceFiles: summaries,
       candidates: await spellService.listCandidates(),
-      skills: await skillService.listSkills(),
       warningCount: summaries.reduce((total, source) => total + source.warningCount, 0)
     };
   });
@@ -339,7 +354,9 @@ function registerDesktopControls(): void {
     registerQuickPanelShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut);
   }
 
-  const trayIcon = nativeImage.createFromPath(getTrayIconPath()).resize({ width: 16, height: 16 });
+  const trayIcon = nativeImage
+    .createFromPath(getTrayIconPath(getRuntimeAppRoot()))
+    .resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
   tray.setToolTip(getCurrentAppName());
   tray.setContextMenu(
@@ -367,7 +384,7 @@ function applyAppIdentity(): void {
 }
 
 function normalizeScanRunRequest(request: ScanRunRequest, fallbackSources: ScanSourceConfig[]): ScanRunRequest {
-  const target = request?.target === 'skills' ? 'skills' : 'spells';
+  const target = 'spells';
   const providers = Array.isArray(request?.providers)
     ? request.providers.filter((provider): provider is ScanProvider => provider === 'claude' || provider === 'codex')
     : [];
@@ -388,7 +405,7 @@ function isScanSourceConfig(value: unknown): value is ScanSourceConfig {
   const source = value as Record<string, unknown>;
   return (
     (source.provider === 'claude' || source.provider === 'codex') &&
-    (source.target === 'spells' || source.target === 'skills') &&
+    source.target === 'spells' &&
     typeof source.path === 'string' &&
     typeof source.enabled === 'boolean'
   );
@@ -506,13 +523,68 @@ function setMainWindowRecommendationPanelOpen(
   });
 }
 
-app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
-  await bootstrap();
-  await createWindow();
-  await createFloatingWindow();
-  registerDesktopControls();
+const preflightResult = runAppPreflight({
+  prepare() {
+    if (process.platform === 'win32') {
+      configureElectronStorage(app, spellbookPaths);
+    }
+  },
+  showFailure(feedback) {
+    dialog.showErrorBox(feedback.title, feedback.message);
+  },
+  exit(code) {
+    app.exit(code);
+  }
 });
+
+const appReadiness = createAppReadinessBarrier({
+  async startApplication() {
+    await app.whenReady();
+    return runAppStartup({
+      async initialize() {
+        Menu.setApplicationMenu(null);
+        await bootstrap();
+      },
+      async createWindows() {
+        await restoreMainWindow();
+        await createFloatingWindow();
+        registerDesktopControls();
+      },
+      showFailure(feedback) {
+        dialog.showErrorBox(feedback.title, feedback.message);
+      },
+      quit() {
+        app.quit();
+      }
+    });
+  },
+  restorePrimaryWindow: restoreMainWindow
+});
+
+const instanceRole =
+  preflightResult === 'ready'
+    ? registerSingleInstanceLifecycle({
+        requestLock: () => app.requestSingleInstanceLock(),
+        onSecondInstance(handler) {
+          app.on('second-instance', () => handler());
+        },
+        async restorePrimaryWindow() {
+          await appReadiness.restorePrimaryWindow();
+        },
+        reportRestoreFailure(error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          dialog.showErrorBox(
+            'Spellbook could not restore its window',
+            `The existing Spellbook process is still running, but its window could not be restored.\n\nDetails: ${detail}`
+          );
+        },
+        quitSecondary: () => app.quit()
+      })
+    : 'secondary';
+
+if (preflightResult === 'ready' && instanceRole === 'primary') {
+  void appReadiness.start();
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -521,8 +593,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', async () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    await createWindow();
+  if (!(await appReadiness.restorePrimaryWindow())) {
+    return;
+  }
+  if (!floatingWindow || floatingWindow.isDestroyed()) {
     await createFloatingWindow();
   }
 });

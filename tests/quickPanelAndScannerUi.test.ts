@@ -18,7 +18,6 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).not.toContain("labelKey: 'settings.scanner'");
     expect(settings).not.toContain("activeTab === 'scanner'");
     expect(settings).not.toContain('<ScannerView');
-    expect(settings).toContain('scanTarget');
     expect(settings).toContain('selectedProviders');
     expect(settings).toContain('scanSources');
     expect(settings).toContain('activeScanSources');
@@ -30,6 +29,13 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).not.toContain("t('metric.score')");
     expect(settings).toContain('selectDirectory');
     expect(settings).toContain('chooseScanSourceDirectory');
+    expect(settings).toContain("target: 'spells'");
+    expect(settings).not.toContain('scanTarget');
+    expect(settings).not.toContain('scanSkills');
+    expect(settings).not.toContain('settings.scanTarget.skills');
+    expect(readFileSync('desktop/renderer/i18n.ts', 'utf8')).not.toContain(
+      'settings.scanTarget.skills'
+    );
     expect(settings).not.toContain('settings.scanSources\n                .filter');
     expect(settings).not.toContain('sourceFiles');
     expect(settings).not.toContain('source-table');
@@ -40,7 +46,9 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(app).toContain('activeTab={settingsTab}');
     expect(settings).toContain('activeTab: SettingsTab');
     expect(settings).toContain('onTabChange(tab: SettingsTab): void');
-    expect(settings).toContain("useState<ScanTarget>('spells')");
+    expect(readFileSync('desktop/main/index.ts', 'utf8')).not.toContain(
+      "scanRequest.target === 'skills'"
+    );
     expect(library).toContain('onClick={onOpenRecommendationDiscovery}');
     expect(library).toContain("t('library.find')");
   });

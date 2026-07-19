@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
 
 export interface AppDatabase {
@@ -10,15 +11,43 @@ export interface AppDatabase {
   save(): Promise<void>;
 }
 
-let sqlModulePromise: Promise<SqlJsStatic> | null = null;
-
-export async function createTestDatabase(): Promise<AppDatabase> {
-  const SQL = await getSqlModule();
-  return wrapDatabase(new SQL.Database(), null);
+export interface DatabaseWriteOperations {
+  createParentDirectory(filePath: string): Promise<void>;
+  writeFile(filePath: string, bytes: Uint8Array): Promise<void>;
 }
 
-export async function openAppDatabase(filePath: string): Promise<AppDatabase> {
+export interface TestDatabaseOptions {
+  filePath?: string;
+  writeOperations?: DatabaseWriteOperations;
+}
+
+const sqlModulePromises = new Map<string, Promise<SqlJsStatic>>();
+
+const nodeDatabaseWriteOperations: DatabaseWriteOperations = {
+  async createParentDirectory(filePath) {
+    await mkdir(dirname(filePath), { recursive: true });
+  },
+  async writeFile(filePath, bytes) {
+    await writeFile(filePath, bytes);
+  }
+};
+
+export async function createTestDatabase(
+  options: TestDatabaseOptions = {}
+): Promise<AppDatabase> {
   const SQL = await getSqlModule();
+  return wrapDatabase(
+    new SQL.Database(),
+    options.filePath ?? null,
+    options.writeOperations ?? nodeDatabaseWriteOperations
+  );
+}
+
+export async function openAppDatabase(
+  filePath: string,
+  sqlWasmPath?: string
+): Promise<AppDatabase> {
+  const SQL = await getSqlModule(sqlWasmPath);
   let db: SqlJsDatabase;
   try {
     const bytes = await readFile(filePath);
@@ -26,18 +55,29 @@ export async function openAppDatabase(filePath: string): Promise<AppDatabase> {
   } catch {
     db = new SQL.Database();
   }
-  return wrapDatabase(db, filePath);
+  return wrapDatabase(db, filePath, nodeDatabaseWriteOperations);
 }
 
-async function getSqlModule(): Promise<SqlJsStatic> {
-  sqlModulePromise ??= initSqlJs({
-    locateFile: (file) => join(process.cwd(), 'node_modules', 'sql.js', 'dist', file)
-  });
-  return sqlModulePromise;
+async function getSqlModule(sqlWasmPath = resolveInstalledSqlWasmPath()): Promise<SqlJsStatic> {
+  let modulePromise = sqlModulePromises.get(sqlWasmPath);
+  if (!modulePromise) {
+    modulePromise = initSqlJs({ locateFile: () => sqlWasmPath });
+    sqlModulePromises.set(sqlWasmPath, modulePromise);
+  }
+  return modulePromise;
 }
 
-function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
+function resolveInstalledSqlWasmPath(): string {
+  return fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
+}
+
+function wrapDatabase(
+  db: SqlJsDatabase,
+  filePath: string | null,
+  writeOperations: DatabaseWriteOperations
+): AppDatabase {
   createSchema(db);
+  let pendingSave = Promise.resolve();
   return {
     run(sql: string, params: unknown[] = []) {
       db.run(sql, params as never[]);
@@ -65,8 +105,15 @@ function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
       if (!filePath) {
         return;
       }
-      await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, db.export());
+      const bytes = db.export();
+      const save = pendingSave
+        .catch(() => undefined)
+        .then(async () => {
+          await writeOperations.createParentDirectory(filePath);
+          await writeOperations.writeFile(filePath, bytes);
+        });
+      pendingSave = save;
+      await save;
     }
   };
 }
@@ -170,6 +217,15 @@ function createSchema(db: SqlJsDatabase): void {
       UNIQUE(platform, root_path)
     );
 
+    CREATE TABLE IF NOT EXISTS skill_scan_sources (
+      platform TEXT PRIMARY KEY CHECK (platform IN ('claude', 'codex')),
+      root_path TEXT NOT NULL,
+      last_attempt_status TEXT NOT NULL,
+      last_attempt_at TEXT NOT NULL,
+      last_success_at TEXT,
+      last_error_code TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -179,7 +235,7 @@ function createSchema(db: SqlJsDatabase): void {
   `);
 
   ensureColumn(db, 'spells', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
-  db.exec('PRAGMA user_version = 9;');
+  db.exec('PRAGMA user_version = 10;');
 }
 
 function ensureColumn(

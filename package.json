@@ -10,6 +10,7 @@
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
+    "test:nsis-integration": "vitest run --config vitest.nsis.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "@types/sql.js": "latest",
     "@types/three": "^0.185.1",
     "electron": "latest",
+    "jsdom": "^29.1.1",
     "typescript": "latest",
     "vite": "^7.3.6",
     "vitest": "latest"

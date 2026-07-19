@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { createTranslator, detectLocale, resolveLocalePreference } from '../desktop/renderer/i18n';
+import {
+  createTranslator,
+  detectLocale,
+  resolveLocalePreference,
+  translateForLocalePreference
+} from '../desktop/renderer/i18n';
 
 describe('i18n', () => {
+  it('uses the saved language for feedback shown immediately after switching', () => {
+    expect(translateForLocalePreference('en', 'zh-CN', 'settings.saved')).toBe(
+      'Settings saved'
+    );
+    expect(translateForLocalePreference('zh', 'en-US', 'settings.saved')).toBe(
+      '设置已保存'
+    );
+  });
+
   it('uses Chinese for zh local language', () => {
     const t = createTranslator(detectLocale('zh-CN'));
 
@@ -161,6 +175,38 @@ describe('i18n', () => {
     expect(en('spell.delete')).toBe('Delete');
     expect(en('spell.deleteConfirm')).toBe('Confirm delete');
     expect(en('spell.bulkDeleted')).toBe('Selected spells deleted');
+  });
+
+  it('provides complete local skill library copy in both languages', () => {
+    const zh = createTranslator(detectLocale('zh-CN'));
+    const en = createTranslator(detectLocale('en-US'));
+
+    expect(zh('skill.findLocal')).toBe('寻找技能');
+    expect(en('skill.findLocal')).toBe('Find skills');
+    expect(zh('skill.findLocal.aria')).toBe('寻找本机技能，仅扫描 Claude 和 Codex 目录');
+    expect(en('skill.findLocal.aria')).toBe(
+      'Find local skills in the Claude and Codex folders'
+    );
+    expect(zh('skill.search.placeholder')).toBe('搜索技能');
+    expect(en('skill.search.placeholder')).toBe('Search skills');
+    expect(zh('skill.filter.clearAll')).toBe('清除筛选');
+    expect(en('skill.filter.clearAll')).toBe('Clear filters');
+    expect(zh('skill.group.bundled')).toBe('随书 {count}');
+    expect(en('skill.group.bundled')).toBe('Bundled {count}');
+    expect(zh('skill.bundled.promptRefiner.name')).toBe('提示词优化');
+    expect(en('skill.bundled.promptRefiner.name')).toBe('Prompt Refiner');
+    expect(zh('skill.scan.stale')).toBe('上次扫描结果');
+    expect(en('skill.scan.stale')).toBe('Previous scan result');
+    expect(zh('skill.install.conflict')).toBe('已存在：{path}。未修改文件。');
+    expect(en('skill.install.conflict')).toBe(
+      'Already exists: {path}. No files changed.'
+    );
+    expect(zh('skill.bundled.promptRefiner.description')).toBe(
+      '整理模糊需求，生成结构清晰的提示词。'
+    );
+    expect(en('skill.bundled.promptRefiner.description')).toBe(
+      'Turn vague requests into clear prompts.'
+    );
   });
 
   it('uses recommendation copy for candidate batch saving in both languages', () => {
