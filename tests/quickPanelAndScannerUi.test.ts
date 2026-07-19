@@ -171,7 +171,7 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).toContain('quickPanelPinned: boolean;');
     expect(settings).toContain('quickPanelPinned: false');
     expect(settingsService).toContain("quickPanelPinned: normalizePinned(values.get('quickPanelPinned'))");
-    expect(settingsService).toContain("writeSetting(db, 'quickPanelPinned', String(next.quickPanelPinned), now)");
+    expect(settingsService).toContain("['quickPanelPinned', String(next.quickPanelPinned)]");
 
     expect(preload).toContain("ipcRenderer.invoke('floating:getState')");
     expect(preload).toContain("ipcRenderer.invoke('floating:setPinned', pinned)");

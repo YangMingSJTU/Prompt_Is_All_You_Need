@@ -1,14 +1,30 @@
-import { Database, FolderOpen, Keyboard, Languages, RotateCw } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Database,
+  FolderOpen,
+  Keyboard,
+  Languages,
+  RotateCw,
+  X,
+  XCircle
+} from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_APP_SETTINGS,
-  formatShortcutDisplay,
+  getShortcutAccessibleText,
+  getShortcutKeycaps,
   shortcutFromKeyInput,
   type AppLanguage,
   type AppSettings,
+  type AppSettingsPatch,
+  type QuickPanelShortcutState,
   type QuickPanelPlacement,
-  type SettingsInfo
+  type SettingsInfo,
+  type ShortcutPlatform,
+  type ShortcutUpdateRequest,
+  type ShortcutUpdateResult
 } from '../../shared/settings';
 import type { Candidate, ScanProvider, ScanSourceConfig, ScanTarget, SkillRecord } from '../../shared/types';
 import type { TFunction } from '../i18n';
@@ -72,8 +88,12 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [info, setInfo] = useState<SettingsInfo | null>(null);
   const [saving, setSaving] = useState(false);
+  const [shortcutState, setShortcutState] = useState<QuickPanelShortcutState | null>(null);
+  const [shortcutSaving, setShortcutSaving] = useState(false);
   const [recordingShortcut, setRecordingShortcut] = useState(false);
   const [shortcutError, setShortcutError] = useState<string | null>(null);
+  const [shortcutCandidate, setShortcutCandidate] = useState<string | null>(null);
+  const [modifierPreview, setModifierPreview] = useState<string[]>([]);
   const [scanTarget, setScanTarget] = useState<ScanTarget>('spells');
   const [selectedProviders, setSelectedProviders] = useState<ScanProvider[]>(['claude', 'codex']);
   const [scanCandidates, setScanCandidates] = useState<Candidate[]>([]);
@@ -82,6 +102,8 @@ export function SettingsView({
   const [runningScan, setRunningScan] = useState(false);
   const [addingCandidates, setAddingCandidates] = useState(false);
   const shortcutButtonRef = useRef<HTMLButtonElement>(null);
+  const shortcutSettingRef = useRef<HTMLDivElement>(null);
+  const shortcutCaptureTokenRef = useRef<string | null>(null);
   const { showToast } = useFeedbackToast();
   const scanSources = Array.isArray(settings.scanSources) ? settings.scanSources : [];
   const activeScanSources = scanSources.length ? scanSources : info?.defaultScanSources ?? [];
@@ -91,19 +113,48 @@ export function SettingsView({
   }, []);
 
   useEffect(() => {
+    if (activeTab === 'shortcut') {
+      void window.spellbook.getQuickPanelShortcutState().then(setShortcutState);
+    } else {
+      void cancelShortcutCapture(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    return () => {
+      const sessionToken = shortcutCaptureTokenRef.current;
+      shortcutCaptureTokenRef.current = null;
+      if (sessionToken) {
+        void window.spellbook.endShortcutCapture(sessionToken);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!recordingShortcut) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!shortcutSettingRef.current?.contains(event.target as Node)) {
+        void cancelShortcutCapture(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [recordingShortcut]);
+
+  useEffect(() => {
     if (recordingShortcut) {
       shortcutButtonRef.current?.focus();
     }
   }, [recordingShortcut]);
 
-  async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
+  async function updateSettings(patch: AppSettingsPatch): Promise<void> {
     setSaving(true);
     try {
       const result = await window.spellbook.updateSettings(patch);
       onSettingsChanged(result.settings);
-      showToast(result.warning ?? t('settings.saved'), {
-        variant: result.warning ? 'warning' : 'success'
-      });
+      showToast(t('settings.saved'), { variant: 'success' });
     } finally {
       setSaving(false);
     }
@@ -152,58 +203,140 @@ export function SettingsView({
         ) : null}
 
         {activeTab === 'shortcut' ? (
-          <SettingsSection title={t('settings.shortcut')} icon={Keyboard}>
-            <SettingRow label={t('settings.quickPanelShortcut')}>
-              <div className="shortcut-editor">
-                <button
-                  aria-label={t('settings.shortcut.change')}
-                  className={
-                    recordingShortcut ? 'shortcut-capture recording' : 'shortcut-capture'
-                  }
-                  disabled={saving}
-                  onClick={startRecordingShortcut}
-                  onKeyDown={handleShortcutKeyDown}
-                  ref={shortcutButtonRef}
-                  title={formatShortcutDisplay(settings.quickPanelShortcut)}
-                  type="button"
-                >
-                  <span>
-                    {recordingShortcut
-                      ? t('settings.shortcut.recording')
-                      : formatShortcutDisplay(settings.quickPanelShortcut)}
-                  </span>
-                  {recordingShortcut ? <small>{t('settings.shortcut.recordingHint')}</small> : null}
-                </button>
-                <button
-                  className="secondary-button shortcut-reset"
-                  disabled={
-                    saving ||
-                    settings.quickPanelShortcut === DEFAULT_APP_SETTINGS.quickPanelShortcut
-                  }
-                  onClick={() => void updateShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut)}
-                  type="button"
-                >
-                  {t('settings.shortcut.reset')}
-                </button>
-                {shortcutError ? <span className="settings-error">{shortcutError}</span> : null}
-              </div>
-            </SettingRow>
-            <SettingRow label={t('settings.quickPanelPlacement')}>
-              <div className="settings-segmented placement-options">
-                {PLACEMENT_OPTIONS.map((option) => (
+          <div className="settings-shortcut-page">
+            <SettingsSection title={t('settings.shortcut.globalSection')} icon={Keyboard}>
+              <div
+                aria-busy={shortcutSaving}
+                className="shortcut-setting"
+                id="quick-panel-shortcut-setting"
+                ref={shortcutSettingRef}
+              >
+                <div className="shortcut-setting-copy">
+                  <div className="shortcut-setting-title">
+                    <strong>{t('settings.quickPanelShortcut')}</strong>
+                    <span className="shortcut-scope">{t('settings.shortcut.scopeGlobal')}</span>
+                  </div>
+                  <p>{t('settings.shortcut.quickPanelDescription')}</p>
+                  {shortcutState ? <ShortcutStatus state={shortcutState} t={t} /> : null}
+                </div>
+                <div className="shortcut-editor">
                   <button
-                    className={settings.quickPanelPlacement === option.value ? 'active' : ''}
-                    disabled={saving}
-                    key={option.value}
-                    onClick={() => void updateSettings({ quickPanelPlacement: option.value })}
+                    aria-describedby={shortcutError ? 'shortcut-inline-error' : undefined}
+                    aria-label={shortcutButtonLabel(shortcutState, t)}
+                    aria-pressed={recordingShortcut}
+                    className={
+                      recordingShortcut ? 'shortcut-capture recording' : 'shortcut-capture'
+                    }
+                    disabled={saving || shortcutSaving || !shortcutState}
+                    onClick={() => void startRecordingShortcut()}
+                    onKeyDown={handleShortcutKeyDown}
+                    ref={shortcutButtonRef}
                     type="button"
                   >
-                    {t(option.labelKey)}
+                    <span className="shortcut-capture-value">
+                      {recordingShortcut ? (
+                        modifierPreview.length ? (
+                          <ShortcutPreview labels={modifierPreview} />
+                        ) : (
+                          t('settings.shortcut.recording')
+                        )
+                      ) : shortcutCandidate && shortcutState ? (
+                        <ShortcutKeycaps
+                          accelerator={shortcutCandidate}
+                          platform={shortcutState.platform}
+                        />
+                      ) : shortcutState?.activeAccelerator ? (
+                        <ShortcutKeycaps
+                          accelerator={shortcutState.activeAccelerator}
+                          platform={shortcutState.platform}
+                        />
+                      ) : (
+                        t('settings.shortcut.set')
+                      )}
+                    </span>
+                    <small>
+                      {shortcutSaving
+                        ? t('settings.shortcut.applying')
+                        : recordingShortcut
+                          ? t('settings.shortcut.recordingHint')
+                          : t('settings.shortcut.change')}
+                    </small>
                   </button>
-                ))}
+                  <button
+                    className="secondary-button shortcut-reset"
+                    disabled={
+                      saving ||
+                      shortcutSaving ||
+                      !shortcutState ||
+                      shortcutState.configuredAccelerator ===
+                        DEFAULT_APP_SETTINGS.quickPanelShortcut
+                    }
+                    onClick={() => void resetShortcut()}
+                    type="button"
+                  >
+                    {t('settings.shortcut.reset')}
+                  </button>
+                  {shortcutState?.activeAccelerator ? (
+                    <span className="shortcut-kind">
+                      {shortcutState.activeAccelerator === DEFAULT_APP_SETTINGS.quickPanelShortcut
+                        ? t('settings.shortcut.default')
+                        : t('settings.shortcut.custom')}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            </SettingRow>
-          </SettingsSection>
+              {shortcutState?.startupNotice ? (
+                <InlineNotice
+                  dismissLabel={t('settings.shortcut.dismissNotice')}
+                  onDismiss={() => void dismissShortcutNotice()}
+                  variant="warning"
+                >
+                  {shortcutNoticeText(shortcutState, t)}
+                </InlineNotice>
+              ) : null}
+              {shortcutError ? (
+                <InlineNotice id="shortcut-inline-error" role="alert" variant="error">
+                  {shortcutError}
+                </InlineNotice>
+              ) : null}
+            </SettingsSection>
+
+            <SettingsSection title={t('settings.shortcut.internalSection')} icon={Keyboard}>
+              <div className="shortcut-fixed-description">
+                {t('settings.shortcut.internalDescription')}
+              </div>
+              <ShortcutHintRow
+                label={t('settings.shortcut.selectResult')}
+                keys={['↑', '↓']}
+              />
+              <ShortcutHintRow
+                label={t('settings.shortcut.copyResult')}
+                keys={[shortcutState?.platform === 'darwin' ? '↩ Return' : 'Enter']}
+              />
+              <ShortcutHintRow
+                label={t('settings.shortcut.closePanel')}
+                keys={[shortcutState?.platform === 'darwin' ? 'esc' : 'Esc']}
+              />
+            </SettingsSection>
+
+            <SettingsSection title={t('settings.quickPanelPlacement')} icon={Keyboard}>
+              <SettingRow label={t('settings.quickPanelPlacement')}>
+                <div className="settings-segmented placement-options">
+                  {PLACEMENT_OPTIONS.map((option) => (
+                    <button
+                      className={settings.quickPanelPlacement === option.value ? 'active' : ''}
+                      disabled={saving}
+                      key={option.value}
+                      onClick={() => void updateSettings({ quickPanelPlacement: option.value })}
+                      type="button"
+                    >
+                      {t(option.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              </SettingRow>
+            </SettingsSection>
+          </div>
         ) : null}
 
         {activeTab === 'localData' ? (
@@ -343,8 +476,27 @@ export function SettingsView({
     </section>
   );
 
-  function startRecordingShortcut(): void {
-    setShortcutError(null);
+  async function startRecordingShortcut(preserveError = false): Promise<void> {
+    if (shortcutCaptureTokenRef.current) {
+      return;
+    }
+    if (!preserveError) {
+      setShortcutError(null);
+    }
+    setModifierPreview([]);
+    const result = await window.spellbook.beginShortcutCapture();
+    setShortcutState(result.state);
+    if (!result.ok) {
+      setShortcutError(
+        t(
+          result.error === 'busy'
+            ? 'settings.shortcut.busy'
+            : 'settings.shortcut.captureFailed'
+        )
+      );
+      return;
+    }
+    shortcutCaptureTokenRef.current = result.sessionToken;
     setRecordingShortcut(true);
   }
 
@@ -352,38 +504,126 @@ export function SettingsView({
     if (!recordingShortcut) {
       return;
     }
+
+    if (
+      event.key === 'Tab' &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      void cancelShortcutCapture(false);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
 
     if (event.key === 'Escape') {
-      setRecordingShortcut(false);
-      setShortcutError(null);
+      void cancelShortcutCapture(true);
       return;
     }
     if (event.key === 'Control' || event.key === 'Shift' || event.key === 'Alt' || event.key === 'Meta') {
+      if (shortcutState) {
+        setModifierPreview(shortcutModifierPreview(event, shortcutState.platform));
+      }
       return;
     }
 
-    const shortcut = shortcutFromKeyInput({
-      key: event.key,
-      code: event.code,
-      ctrlKey: event.ctrlKey,
-      metaKey: event.metaKey,
-      altKey: event.altKey,
-      shiftKey: event.shiftKey
-    });
+    if (!shortcutState) {
+      return;
+    }
+
+    const shortcut = shortcutFromKeyInput(
+      {
+        key: event.key,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey
+      },
+      shortcutState.platform
+    );
     if (!shortcut) {
       setShortcutError(t('settings.shortcut.invalid'));
       return;
     }
 
     setRecordingShortcut(false);
+    setModifierPreview([]);
     setShortcutError(null);
-    void updateShortcut(shortcut.accelerator);
+    setShortcutCandidate(shortcut.accelerator);
+    void applyCapturedShortcut(shortcut.accelerator);
   }
 
-  async function updateShortcut(accelerator: string): Promise<void> {
-    await updateSettings({ quickPanelShortcut: accelerator });
+  async function applyCapturedShortcut(accelerator: string): Promise<void> {
+    await endShortcutCapture();
+    await updateShortcut({ intent: 'set', accelerator });
+  }
+
+  async function resetShortcut(): Promise<void> {
+    await cancelShortcutCapture(true);
+    setShortcutCandidate(DEFAULT_APP_SETTINGS.quickPanelShortcut);
+    await updateShortcut({ intent: 'reset' });
+  }
+
+  async function updateShortcut(request: ShortcutUpdateRequest): Promise<void> {
+    setShortcutSaving(true);
+    let restartCapture = false;
+    try {
+      const result = await window.spellbook.updateQuickPanelShortcut(request);
+      applyShortcutResult(result);
+      if (result.ok) {
+        setShortcutError(null);
+        showToast(
+          t(
+            result.change === 'reset'
+              ? 'settings.shortcut.resetDone'
+              : 'settings.shortcut.updated'
+          ),
+          { variant: 'success' }
+        );
+      } else {
+        setShortcutError(shortcutErrorText(result.error, t));
+        restartCapture = request.intent === 'set' && result.error !== 'busy';
+      }
+    } finally {
+      setShortcutCandidate(null);
+      setShortcutSaving(false);
+    }
+    if (restartCapture) {
+      await startRecordingShortcut(true);
+    }
+  }
+
+  function applyShortcutResult(result: ShortcutUpdateResult): void {
+    setShortcutState(result.state);
+    onSettingsChanged({
+      ...settings,
+      quickPanelShortcut: result.state.configuredAccelerator
+    });
+  }
+
+  async function endShortcutCapture(): Promise<void> {
+    const sessionToken = shortcutCaptureTokenRef.current;
+    shortcutCaptureTokenRef.current = null;
+    if (sessionToken) {
+      setShortcutState(await window.spellbook.endShortcutCapture(sessionToken));
+    }
+  }
+
+  async function cancelShortcutCapture(clearError: boolean): Promise<void> {
+    setRecordingShortcut(false);
+    setModifierPreview([]);
+    setShortcutCandidate(null);
+    if (clearError) {
+      setShortcutError(null);
+    }
+    await endShortcutCapture();
+  }
+
+  async function dismissShortcutNotice(): Promise<void> {
+    setShortcutState(await window.spellbook.dismissShortcutStartupNotice());
   }
 
   function toggleProvider(provider: ScanProvider): void {
@@ -472,6 +712,150 @@ export function SettingsView({
       setAddingCandidates(false);
     }
   }
+}
+
+function ShortcutKeycaps({
+  accelerator,
+  platform
+}: {
+  accelerator: string;
+  platform: ShortcutPlatform;
+}) {
+  const keycaps = getShortcutKeycaps(accelerator, platform);
+  return (
+    <span className="shortcut-keycaps" aria-label={getShortcutAccessibleText(accelerator, platform)}>
+      {keycaps.map((keycap, index) => (
+        <kbd aria-hidden key={`${keycap.key}-${index}`}>
+          {keycap.label}
+        </kbd>
+      ))}
+    </span>
+  );
+}
+
+function ShortcutPreview({ labels }: { labels: string[] }) {
+  return (
+    <span className="shortcut-keycaps shortcut-keycaps-preview">
+      {labels.map((label) => (
+        <kbd aria-hidden key={label}>
+          {label}
+        </kbd>
+      ))}
+    </span>
+  );
+}
+
+function ShortcutStatus({
+  state,
+  t
+}: {
+  state: QuickPanelShortcutState;
+  t: TFunction;
+}) {
+  const enabled = state.status !== 'disabled';
+  const Icon = enabled ? CheckCircle2 : XCircle;
+  return (
+    <span className={enabled ? 'shortcut-status enabled' : 'shortcut-status disabled'}>
+      <Icon aria-hidden size={13} />
+      {t(enabled ? 'settings.shortcut.enabled' : 'settings.shortcut.disabled')}
+    </span>
+  );
+}
+
+function InlineNotice({
+  children,
+  dismissLabel,
+  id,
+  onDismiss,
+  role,
+  variant
+}: {
+  children: ReactNode;
+  dismissLabel?: string;
+  id?: string;
+  onDismiss?: () => void;
+  role?: 'alert' | 'status';
+  variant: 'warning' | 'error';
+}) {
+  return (
+    <div className={`shortcut-inline-notice ${variant}`} id={id} role={role}>
+      {variant === 'warning' ? <AlertTriangle aria-hidden size={15} /> : <XCircle aria-hidden size={15} />}
+      <span>{children}</span>
+      {onDismiss ? (
+        <button aria-label={dismissLabel} onClick={onDismiss} type="button">
+          <X aria-hidden size={14} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ShortcutHintRow({ label, keys }: { label: string; keys: string[] }) {
+  return (
+    <div className="shortcut-hint-row">
+      <span>{label}</span>
+      <span className="shortcut-keycaps">
+        {keys.map((key) => (
+          <kbd key={key}>{key}</kbd>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function shortcutButtonLabel(
+  state: QuickPanelShortcutState | null,
+  t: TFunction
+): string {
+  if (!state?.activeAccelerator) {
+    return t('settings.shortcut.set');
+  }
+  return `${t('settings.shortcut.change')}: ${getShortcutAccessibleText(
+    state.activeAccelerator,
+    state.platform
+  )}`;
+}
+
+function shortcutNoticeText(state: QuickPanelShortcutState, t: TFunction): string {
+  const key = state.startupNotice;
+  if (key === 'custom_unavailable_fallback_applied') {
+    return t('settings.shortcut.fallbackApplied');
+  }
+  if (key === 'fallback_persist_failed') {
+    return t('settings.shortcut.fallbackPersistFailed');
+  }
+  return t('settings.shortcut.allUnavailable');
+}
+
+function shortcutErrorText(
+  error: Extract<ShortcutUpdateResult, { ok: false }>['error'],
+  t: TFunction
+): string {
+  const keys = {
+    invalid: 'settings.shortcut.invalid',
+    conflict: 'settings.shortcut.conflict',
+    persist_failed: 'settings.shortcut.persistFailed',
+    busy: 'settings.shortcut.busy',
+    recovery_failed: 'settings.shortcut.recoveryFailed'
+  } as const;
+  return t(keys[error]);
+}
+
+function shortcutModifierPreview(
+  event: KeyboardEvent<HTMLButtonElement>,
+  platform: ShortcutPlatform
+): string[] {
+  const labels: string[] = [];
+  if (platform === 'darwin') {
+    if (event.metaKey) labels.push('⌘');
+    if (event.ctrlKey) labels.push('⌃');
+  } else {
+    if (event.ctrlKey) labels.push('Ctrl');
+    if (event.metaKey) labels.push('Win');
+  }
+  if (event.altKey) labels.push(platform === 'darwin' ? '⌥' : 'Alt');
+  if (event.shiftKey) labels.push(platform === 'darwin' ? '⇧' : 'Shift');
+  return labels;
 }
 
 function SettingsSection({

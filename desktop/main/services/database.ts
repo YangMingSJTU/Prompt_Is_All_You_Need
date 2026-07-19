@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
 
@@ -10,23 +11,52 @@ export interface AppDatabase {
   save(): Promise<void>;
 }
 
+export interface DatabaseFileOperations {
+  read(path: string): Promise<Uint8Array>;
+  makeDirectory(path: string): Promise<void>;
+  write(path: string, bytes: Uint8Array): Promise<void>;
+  replace(sourcePath: string, targetPath: string): Promise<void>;
+  remove(path: string): Promise<void>;
+}
+
+const DEFAULT_FILE_OPERATIONS: DatabaseFileOperations = {
+  async read(path) {
+    return readFile(path);
+  },
+  async makeDirectory(path) {
+    await mkdir(path, { recursive: true });
+  },
+  async write(path, bytes) {
+    await writeFile(path, bytes);
+  },
+  async replace(sourcePath, targetPath) {
+    await rename(sourcePath, targetPath);
+  },
+  async remove(path) {
+    await rm(path, { force: true });
+  }
+};
+
 let sqlModulePromise: Promise<SqlJsStatic> | null = null;
 
 export async function createTestDatabase(): Promise<AppDatabase> {
   const SQL = await getSqlModule();
-  return wrapDatabase(new SQL.Database(), null);
+  return wrapDatabase(new SQL.Database(), null, DEFAULT_FILE_OPERATIONS);
 }
 
-export async function openAppDatabase(filePath: string): Promise<AppDatabase> {
+export async function openAppDatabase(
+  filePath: string,
+  fileOperations: DatabaseFileOperations = DEFAULT_FILE_OPERATIONS
+): Promise<AppDatabase> {
   const SQL = await getSqlModule();
   let db: SqlJsDatabase;
   try {
-    const bytes = await readFile(filePath);
+    const bytes = await fileOperations.read(filePath);
     db = new SQL.Database(bytes);
   } catch {
     db = new SQL.Database();
   }
-  return wrapDatabase(db, filePath);
+  return wrapDatabase(db, filePath, fileOperations);
 }
 
 async function getSqlModule(): Promise<SqlJsStatic> {
@@ -36,7 +66,11 @@ async function getSqlModule(): Promise<SqlJsStatic> {
   return sqlModulePromise;
 }
 
-function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
+function wrapDatabase(
+  db: SqlJsDatabase,
+  filePath: string | null,
+  fileOperations: DatabaseFileOperations
+): AppDatabase {
   createSchema(db);
   return {
     run(sql: string, params: unknown[] = []) {
@@ -65,8 +99,14 @@ function wrapDatabase(db: SqlJsDatabase, filePath: string | null): AppDatabase {
       if (!filePath) {
         return;
       }
-      await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, db.export());
+      await fileOperations.makeDirectory(dirname(filePath));
+      const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+      try {
+        await fileOperations.write(temporaryPath, db.export());
+        await fileOperations.replace(temporaryPath, filePath);
+      } finally {
+        await fileOperations.remove(temporaryPath).catch(() => undefined);
+      }
     }
   };
 }

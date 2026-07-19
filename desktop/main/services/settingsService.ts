@@ -5,6 +5,7 @@ import {
   DEFAULT_APP_SETTINGS,
   type AppLanguage,
   type AppSettings,
+  type AppSettingsPatch,
   isAppLanguage,
   isQuickPanelPlacement,
   normalizeShortcutAccelerator,
@@ -19,9 +20,14 @@ interface SettingRow {
   value: string;
 }
 
+interface StoredSettingRow extends SettingRow {
+  updated_at: string;
+}
+
 export interface SettingsService {
   getSettings(): AppSettings;
-  updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  updateSettings(patch: AppSettingsPatch): Promise<AppSettings>;
+  updateQuickPanelShortcut(shortcut: ShortcutAccelerator): Promise<AppSettings>;
 }
 
 export function createSettingsService(db: AppDatabase): SettingsService {
@@ -41,16 +47,16 @@ export function createSettingsService(db: AppDatabase): SettingsService {
       };
     },
     async updateSettings(patch) {
+      if ('quickPanelShortcut' in (patch as Record<string, unknown>)) {
+        throw new Error('quickPanelShortcut must be updated through the shortcut controller');
+      }
       const current = this.getSettings();
       const next: AppSettings = {
         language:
           patch.language === undefined
             ? current.language
             : normalizeLanguage(patch.language),
-        quickPanelShortcut:
-          patch.quickPanelShortcut === undefined
-            ? current.quickPanelShortcut
-            : normalizeShortcut(patch.quickPanelShortcut),
+        quickPanelShortcut: current.quickPanelShortcut,
         quickPanelPlacement:
           patch.quickPanelPlacement === undefined
             ? current.quickPanelPlacement
@@ -68,15 +74,22 @@ export function createSettingsService(db: AppDatabase): SettingsService {
             ? current.scanSources
             : normalizeScanSources(patch.scanSources)
       };
-      const now = new Date().toISOString();
-      writeSetting(db, 'language', next.language, now);
-      writeSetting(db, 'quickPanelShortcut', next.quickPanelShortcut, now);
-      writeSetting(db, 'quickPanelPlacement', next.quickPanelPlacement, now);
-      writeSetting(db, 'quickPanelPinned', String(next.quickPanelPinned), now);
-      writeSetting(db, 'recommendationPanelOpen', String(next.recommendationPanelOpen), now);
-      writeSetting(db, 'scanSources', JSON.stringify(next.scanSources), now);
-      await db.save();
+      await persistSettings(db, [
+        ['language', next.language],
+        ['quickPanelPlacement', next.quickPanelPlacement],
+        ['quickPanelPinned', String(next.quickPanelPinned)],
+        ['recommendationPanelOpen', String(next.recommendationPanelOpen)],
+        ['scanSources', JSON.stringify(next.scanSources)]
+      ]);
       return next;
+    },
+    async updateQuickPanelShortcut(shortcut) {
+      const normalized = normalizeShortcutAccelerator(shortcut);
+      if (!normalized) {
+        throw new Error('Invalid quick panel shortcut');
+      }
+      await persistSettings(db, [['quickPanelShortcut', normalized]]);
+      return this.getSettings();
     }
   };
 }
@@ -191,4 +204,38 @@ function writeSetting(db: AppDatabase, key: keyof AppSettings, value: string, up
     `,
     [key, value, updatedAt]
   );
+}
+
+async function persistSettings(
+  db: AppDatabase,
+  entries: Array<[keyof AppSettings, string]>
+): Promise<void> {
+  const snapshots = new Map<keyof AppSettings, StoredSettingRow | null>();
+  for (const [key] of entries) {
+    snapshots.set(
+      key,
+      db.get<StoredSettingRow>(
+        'SELECT key, value, updated_at FROM app_settings WHERE key = ?',
+        [key]
+      )
+    );
+  }
+
+  const now = new Date().toISOString();
+  for (const [key, value] of entries) {
+    writeSetting(db, key, value, now);
+  }
+
+  try {
+    await db.save();
+  } catch (error) {
+    for (const [key, snapshot] of snapshots) {
+      if (snapshot) {
+        writeSetting(db, key, snapshot.value, snapshot.updated_at);
+      } else {
+        db.run('DELETE FROM app_settings WHERE key = ?', [key]);
+      }
+    }
+    throw error;
+  }
 }
