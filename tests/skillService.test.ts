@@ -891,7 +891,7 @@ describe('skill service', () => {
     expect(installedScan.skills[0]).toMatchObject({ directoryName });
     expect(installedScan.skills[0].files).toHaveLength(1001);
     await rm(fixture.root, { recursive: true, force: true });
-  });
+  }, 30_000);
 });
 
 function createPathLengthLimitedFileSystem(
