@@ -1,5 +1,3 @@
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import type {
   InstallSkillRequest,
   InstallSkillResult,
@@ -12,7 +10,6 @@ import type {
   SkillPlatform,
   SkillScanResult
 } from '../../shared/skillTypes';
-import { createSpellbookPaths } from './spellbookPaths';
 import { getBundledSkill, listBundledSkills } from './bundledSkillCatalog';
 import {
   nodeSkillFileSystem,
@@ -34,12 +31,18 @@ import {
 } from './skillScanner';
 import type { AppDatabase } from './database';
 
+import {
+  nativePlatformPathContext,
+  type PlatformPathContext,
+  type PlatformPaths
+} from './platformPaths';
 export type { SkillRoot } from './skillScanner';
 
 export interface SkillServiceOptions {
-  roots?: SkillRoot[];
-  packageDirectory?: string;
+  roots: SkillRoot[];
+  packageDirectory: string;
   fs?: SkillFileSystem;
+  pathContext?: PlatformPathContext;
 }
 
 export interface SkillService {
@@ -49,33 +52,29 @@ export interface SkillService {
   packageSkill(request: PackageSkillRequest): Promise<PackageSkillResult>;
 }
 
-export function defaultSkillRoots(): SkillRoot[] {
-  const home = homedir();
-  return [
-    { platform: 'claude', path: join(home, '.claude', 'skills') },
-    { platform: 'codex', path: join(home, '.agents', 'skills') }
-  ];
+export function defaultSkillRoots(paths: Pick<PlatformPaths, 'skillRoots'>): SkillRoot[] {
+  return paths.skillRoots;
 }
 
 export function createSkillService(
   db: AppDatabase,
-  options: SkillServiceOptions = {}
+  options: SkillServiceOptions
 ): SkillService {
-  const roots = options.roots ?? defaultSkillRoots();
-  const packageDirectory =
-    options.packageDirectory ?? createSpellbookPaths().packageDirectory;
+  const roots = options.roots;
+  const packageDirectory = options.packageDirectory;
   const fs = options.fs ?? nodeSkillFileSystem;
+  const pathContext = options.pathContext ?? nativePlatformPathContext;
   const repository = createSkillRepository(db);
   let scanInFlight: Promise<SkillScanResult> | null = null;
   const operationKeys = new Set<string>();
 
   async function getLibraryState(): Promise<SkillLibraryState> {
-    return composeLibraryState(repository, roots, fs);
+    return composeLibraryState(repository, roots, fs, pathContext);
   }
 
   async function runScan(): Promise<SkillScanResult> {
     const scanResults = await Promise.all(
-      roots.map((root) => scanSkillRoot(root, fs))
+      roots.map((root) => scanSkillRoot(root, fs, pathContext))
     );
     const sources = await repository.commitScan(scanResults);
     const successfulSources = sources.filter((source) => source.refreshed);
@@ -127,7 +126,7 @@ export function createSkillService(
       }
       operationKeys.add(operationKey);
       try {
-        const source = resolveContentSource(request.skillId, repository, fs);
+        const source = resolveContentSource(request.skillId, repository, fs, pathContext);
         if (!source) {
           return operationFailure(
             request.skillId,
@@ -140,7 +139,8 @@ export function createSkillService(
           source,
           platform: request.platform,
           targetRoot,
-          fs
+          fs,
+          pathContext
         });
         if (!result.ok) {
           return {
@@ -186,7 +186,7 @@ export function createSkillService(
       }
       operationKeys.add(operationKey);
       try {
-        const source = resolveContentSource(request.skillId, repository, fs);
+        const source = resolveContentSource(request.skillId, repository, fs, pathContext);
         if (!source) {
           return {
             ok: false,
@@ -197,7 +197,8 @@ export function createSkillService(
         const result = await packageSkillContent({
           source,
           packageDirectory,
-          fs
+          fs,
+          pathContext
         });
         return result.ok
           ? { ok: true, skillId: request.skillId, outputPath: result.outputPath }
@@ -216,7 +217,8 @@ export function createSkillService(
 async function composeLibraryState(
   repository: SkillRepository,
   roots: SkillRoot[],
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext
 ): Promise<SkillLibraryState> {
   let localSkills: LocalSkillSnapshot[] = [];
   let sourceStates;
@@ -271,7 +273,7 @@ async function composeLibraryState(
   const items = await Promise.all(
     baseItems.map(async (item): Promise<SkillLibraryItem> => ({
       ...item,
-      installation: await probeInstallationMatrix(item.directoryName, roots, fs)
+      installation: await probeInstallationMatrix(item.directoryName, roots, fs, pathContext)
     }))
   );
   return {
@@ -284,11 +286,12 @@ async function composeLibraryState(
 async function probeInstallationMatrix(
   directoryName: string,
   roots: SkillRoot[],
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext
 ): Promise<Record<SkillPlatform, SkillInstallation>> {
   const [claude, codex] = await Promise.all([
-    probeSkillInstallation(directoryName, rootForPlatform(roots, 'claude'), fs),
-    probeSkillInstallation(directoryName, rootForPlatform(roots, 'codex'), fs)
+    probeSkillInstallation(directoryName, rootForPlatform(roots, 'claude'), fs, pathContext),
+    probeSkillInstallation(directoryName, rootForPlatform(roots, 'codex'), fs, pathContext)
   ]);
   return { claude, codex };
 }
@@ -296,7 +299,8 @@ async function probeInstallationMatrix(
 function resolveContentSource(
   skillId: string,
   repository: SkillRepository,
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext = nativePlatformPathContext
 ): SkillContentSource | null {
   const bundled = getBundledSkill(skillId);
   if (bundled) {
@@ -326,7 +330,7 @@ function resolveContentSource(
       if (!local.files.includes(portablePath)) {
         throw new SkillSourceError('source_missing', portablePath);
       }
-      const sourcePath = resolveInside(local.rootPath, portablePath);
+      const sourcePath = resolveInside(local.rootPath, portablePath, pathContext);
       if (!sourcePath) {
         throw new SkillSourceError('unsupported_entry', portablePath);
       }
@@ -337,7 +341,7 @@ function resolveContentSource(
         }
         let currentPath = local.rootPath;
         for (const segment of portablePath.split('/').slice(0, -1)) {
-          currentPath = join(currentPath, segment);
+          currentPath = pathContext.path.join(currentPath, segment);
           const directoryStats = await fs.lstat(currentPath);
           if (directoryStats.isSymbolicLink() || !directoryStats.isDirectory()) {
             throw new SkillSourceError('unsupported_entry', currentPath);
@@ -366,10 +370,11 @@ function resolveContentSource(
 }
 
 function rootForPlatform(roots: SkillRoot[], platform: SkillPlatform): string {
-  return (
-    roots.find((root) => root.platform === platform)?.path ??
-    defaultSkillRoots().find((root) => root.platform === platform)!.path
-  );
+  const root = roots.find((candidate) => candidate.platform === platform);
+  if (!root) {
+    throw new Error(`Missing skill root for ${platform}`);
+  }
+  return root.path;
 }
 
 function operationFailure(

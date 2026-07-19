@@ -38,4 +38,13 @@ describe('settings shortcuts', () => {
     expect(isShortcutAccelerator('P')).toBe(false);
     expect(isShortcutAccelerator('CommandOrControl+Alt+P')).toBe(true);
   });
+
+  it('uses macOS modifier names in visible shortcut text', () => {
+    expect(formatShortcutDisplay('CommandOrControl+Alt+Space', 'darwin')).toBe(
+      'Cmd Option Space'
+    );
+    expect(shortcutFromKeyInput({ key: 'k', metaKey: true }, 'darwin')).toEqual({
+      accelerator: 'CommandOrControl+K', display: 'Cmd K'
+    });
+  });
 });

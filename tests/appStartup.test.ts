@@ -2,12 +2,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  getAppIconPath,
-  getSqlWasmPath,
-  resolveAppRoot
-} from '../desktop/main/services/appAssets';
 import { runAppPreflight, runAppStartup } from '../desktop/main/services/appStartup';
 import { openAppDatabase } from '../desktop/main/services/database';
 
@@ -18,7 +14,7 @@ afterEach(() => {
 });
 
 describe('app startup', () => {
-  it('starts with real packaged resources when the process cwd is unrelated', async () => {
+  it('starts with the installed SQL resource when the process cwd is unrelated', async () => {
     const fixture = await mkdtemp(join(tmpdir(), 'spellbook-startup-cwd-'));
     const unrelatedCwd = join(fixture, 'other-cwd');
     const databasePath = join(fixture, 'user-data', 'index.sqlite');
@@ -30,13 +26,9 @@ describe('app startup', () => {
     try {
       const result = await runAppStartup({
         async initialize() {
-          const appRoot = resolveAppRoot({
-            isPackaged: true,
-            appPath: join(originalCwd, 'resources', 'app.asar'),
-            resourcesPath: join(originalCwd, 'resources')
-          });
-          expect(existsSync(getAppIconPath(appRoot, 'win32'))).toBe(true);
-          const db = await openAppDatabase(databasePath, getSqlWasmPath(appRoot));
+          const sqlWasmPath = fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
+          expect(existsSync(sqlWasmPath)).toBe(true);
+          const db = await openAppDatabase(databasePath, sqlWasmPath);
           db.run(
             "INSERT INTO app_settings (key, value, updated_at) VALUES ('cwd', 'independent', 'now')"
           );

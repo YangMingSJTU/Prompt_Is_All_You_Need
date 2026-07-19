@@ -162,13 +162,13 @@ export function SettingsView({
                   onClick={startRecordingShortcut}
                   onKeyDown={handleShortcutKeyDown}
                   ref={shortcutButtonRef}
-                  title={formatShortcutDisplay(settings.quickPanelShortcut)}
+                  title={formatShortcutDisplay(settings.quickPanelShortcut, info?.platform ?? 'win32')}
                   type="button"
                 >
                   <span>
                     {recordingShortcut
                       ? t('settings.shortcut.recording')
-                      : formatShortcutDisplay(settings.quickPanelShortcut)}
+                      : formatShortcutDisplay(settings.quickPanelShortcut, info?.platform ?? 'win32')}
                   </span>
                   {recordingShortcut ? <small>{t('settings.shortcut.recordingHint')}</small> : null}
                 </button>
@@ -338,7 +338,7 @@ export function SettingsView({
       metaKey: event.metaKey,
       altKey: event.altKey,
       shiftKey: event.shiftKey
-    });
+    }, info?.platform ?? 'win32');
     if (!shortcut) {
       setShortcutError(t('settings.shortcut.invalid'));
       return;

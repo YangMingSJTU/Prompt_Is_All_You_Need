@@ -13,16 +13,6 @@ files:
   - node_modules/sql.js/**/*
   - "!**/*.map"
 
-extraFiles:
-  - from: assets/icons
-    to: assets/icons
-    filter:
-      - "**/*"
-  - from: node_modules/sql.js/dist
-    to: node_modules/sql.js/dist
-    filter:
-      - sql-wasm.wasm
-
 win:
   target:
     - target: nsis
@@ -31,6 +21,12 @@ win:
   icon: assets/icons/app-icon.ico
   artifactName: Spellbook-${version}-win-${arch}-setup.${ext}
   requestedExecutionLevel: asInvoker
+
+mac:
+  target: dir
+  icon: assets/icons/app-icon.png
+  category: public.app-category.productivity
+  identity: null
 
 nsis:
   oneClick: false

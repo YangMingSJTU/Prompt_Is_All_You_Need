@@ -340,7 +340,7 @@ Expected: FAIL because scanner functions are missing.
 
 - [ ] **Step 3: Implement scanner**
 
-Implement direct file scanning and default source discovery for `%USERPROFILE%\.claude` and `%USERPROFILE%\.codex`, skipping disallowed path segments.
+Implement direct file scanning and default source discovery for `CLAUDE_CONFIG_DIR`/`~/.claude` and `CODEX_HOME`/`~/.codex`, using the current OS path rules and skipping disallowed path segments.
 
 - [ ] **Step 4: Run scanner tests and verify GREEN**
 

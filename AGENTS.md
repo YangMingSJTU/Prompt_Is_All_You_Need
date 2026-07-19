@@ -31,6 +31,17 @@ Use Markdown for docs. Keep headings descriptive, paragraphs short, and examples
 
 Follow the existing TypeScript and React style. Keep UI state local unless it is shared state, and prefer small reusable components over repeated JSX. Support Windows and macOS: use cross-platform path handling, avoid hardcoded separators or shell-specific commands, and document OS-specific setup.
 
+## Cross-platform contracts
+
+Spellbook desktop supports Windows and macOS. `docs/cross-platform-compatibility.md` is the source of truth for platform paths and release acceptance.
+
+- Build native paths with injected `node:path/win32` or `node:path/posix` operations. Do not hard-code separators, drive letters, or platform shell commands.
+- Keep OS-native absolute paths separate from `/`-separated portable skill and ZIP paths.
+- Do not locate runtime resources through `process.cwd()`. Import packaged resources at build time or resolve them from an explicit Electron path.
+- Read `process.platform`, the home directory, environment overrides, and Electron user-data paths in the startup composition layer, then inject the resulting context into services.
+- Make platform branches injectable so Windows and macOS behavior can be tested from either host.
+- Non-trivial platform changes require native Windows and macOS test, build, directory-package, and packaged-smoke evidence. A cross-host build does not replace native smoke.
+
 ## UI Interaction Guidance
 
 For click-triggered result feedback such as copy, save, scan, package, or install, use a window-top centered Toast. Do not use Tooltip or persistent topbar/global status text for routine confirmations. Reserve Tooltip for hover detail and inline messages for actionable errors, validation problems, or required warnings.

@@ -199,19 +199,13 @@ describe('skill staging', () => {
 });
 
 describe('skill service', () => {
-  it('uses official user skill roots for Claude and Codex', () => {
-    expect(defaultSkillRoots()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          platform: 'claude',
-          path: expect.stringContaining(join('.claude', 'skills'))
-        }),
-        expect.objectContaining({
-          platform: 'codex',
-          path: expect.stringContaining(join('.agents', 'skills'))
-        })
-      ])
-    );
+  it('uses the injected official user skill roots for Claude and Codex', () => {
+    const skillRoots = [
+      { platform: 'claude' as const, path: 'C:\\Users\\Test\\.claude\\skills' },
+      { platform: 'codex' as const, path: 'C:\\Users\\Test\\.agents\\skills' }
+    ];
+
+    expect(defaultSkillRoots({ skillRoots })).toEqual(skillRoots);
   });
 
   it('always exposes exactly two bundled skills without creating platform roots', async () => {

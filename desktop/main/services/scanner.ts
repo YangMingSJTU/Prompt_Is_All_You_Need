@@ -1,7 +1,11 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join, normalize } from 'node:path';
-import type { ExtractedPrompt, ScanSummary, SourceFileSummary, SourceTool } from '../../shared/types';
+import type {
+  ExtractedPrompt,
+  ScanSummary,
+  SourceFileSummary,
+  SourceTool
+} from '../../shared/types';
 import { extractPromptsFromJsonl } from './parser';
 
 const SKIPPED_SEGMENTS = [
@@ -14,7 +18,20 @@ const SKIPPED_SEGMENTS = [
   'backups'
 ];
 
-export async function scanJsonlFiles(files: string[], sourceTool: SourceTool): Promise<ScanSummary> {
+export interface HistoryDiscoveryError {
+  code: 'permission_denied' | 'io_error';
+  path: string;
+  retryable: true;
+}
+
+export type HistoryDiscoveryResult =
+  | { status: 'success' | 'missing'; files: string[] }
+  | { status: 'unreadable' | 'failed'; files: []; error: HistoryDiscoveryError };
+
+export async function scanJsonlFiles(
+  files: string[],
+  sourceTool: SourceTool
+): Promise<ScanSummary> {
   const prompts: ExtractedPrompt[] = [];
   const sourceFiles: SourceFileSummary[] = [];
   let warningCount = 0;
@@ -60,7 +77,10 @@ export function hasSuccessfulSourceScan(sourceFiles: SourceFileSummary[]): boole
   return sourceFiles.some((sourceFile) => sourceFile.status === 'scanned');
 }
 
-export async function discoverJsonlFiles(root: string, limit = 500): Promise<string[]> {
+export async function discoverJsonlFiles(
+  root: string,
+  limit = 500
+): Promise<HistoryDiscoveryResult> {
   const files: string[] = [];
 
   async function walk(directory: string): Promise<void> {
@@ -68,13 +88,7 @@ export async function discoverJsonlFiles(root: string, limit = 500): Promise<str
       return;
     }
 
-    let entries;
-    try {
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
+    const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       if (files.length >= limit) {
         return;
@@ -93,28 +107,50 @@ export async function discoverJsonlFiles(root: string, limit = 500): Promise<str
 
   try {
     const rootStat = await stat(root);
-    if (rootStat.isFile() && root.toLowerCase().endsWith('.jsonl')) {
-      return [root];
+    if (rootStat.isFile()) {
+      return {
+        status: 'success',
+        files: root.toLowerCase().endsWith('.jsonl') ? [root] : []
+      };
     }
     if (rootStat.isDirectory()) {
       await walk(root);
     }
-  } catch {
-    return [];
+    return { status: 'success', files };
+  } catch (error) {
+    const code = nodeErrorCode(error);
+    if (code === 'ENOENT') {
+      return { status: 'missing', files: [] };
+    }
+    const errorPath = nodeErrorPath(error) ?? root;
+    if (code === 'EACCES' || code === 'EPERM') {
+      return {
+        status: 'unreadable',
+        files: [],
+        error: { code: 'permission_denied', path: errorPath, retryable: true }
+      };
+    }
+    return {
+      status: 'failed',
+      files: [],
+      error: { code: 'io_error', path: errorPath, retryable: true }
+    };
   }
-
-  return files;
-}
-
-export function defaultHistoryRoots(): Array<{ sourceTool: SourceTool; path: string }> {
-  const home = homedir();
-  return [
-    { sourceTool: 'claude', path: process.env.CLAUDE_CONFIG_DIR ?? join(home, '.claude') },
-    { sourceTool: 'codex', path: process.env.CODEX_HOME ?? join(home, '.codex') }
-  ];
 }
 
 export function isSkippedPath(path: string): boolean {
   const normalized = normalize(path).toLowerCase();
-  return SKIPPED_SEGMENTS.some((segment) => normalized.includes(`${segment.toLowerCase()}`));
+  return SKIPPED_SEGMENTS.some((segment) => normalized.includes(segment.toLowerCase()));
+}
+
+function nodeErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
+}
+
+function nodeErrorPath(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'path' in error
+    ? String((error as { path?: unknown }).path)
+    : undefined;
 }

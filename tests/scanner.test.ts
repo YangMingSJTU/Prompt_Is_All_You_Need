@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  discoverJsonlFiles,
   hasSuccessfulSourceScan,
   scanJsonlFiles
 } from '../desktop/main/services/scanner';
@@ -29,10 +30,37 @@ describe('scanner', () => {
   });
 
   it('does not treat unreadable history files as a successful refresh', async () => {
-    const result = await scanJsonlFiles([join(tmpdir(), 'missing-spell-history.jsonl')], 'codex');
+    const result = await scanJsonlFiles(
+      [join(tmpdir(), 'missing-spell-history.jsonl')],
+      'codex'
+    );
 
     expect(result.sourceFiles).toHaveLength(1);
     expect(result.sourceFiles[0].status).toBe('skipped');
     expect(hasSuccessfulSourceScan(result.sourceFiles)).toBe(false);
+  });
+
+  it('distinguishes missing roots from successful empty scans', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'spellbook-discovery-'));
+    try {
+      await expect(discoverJsonlFiles(join(root, 'missing'))).resolves.toEqual({
+        status: 'missing',
+        files: []
+      });
+      await expect(discoverJsonlFiles(root)).resolves.toEqual({
+        status: 'success',
+        files: []
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports I/O failures instead of an empty success', async () => {
+    await expect(discoverJsonlFiles('\u0000')).resolves.toMatchObject({
+      status: 'failed',
+      files: [],
+      error: { code: 'io_error' }
+    });
   });
 });

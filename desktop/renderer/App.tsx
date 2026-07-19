@@ -9,6 +9,7 @@ import {
   MAIN_WINDOW_MIN_WIDTH
 } from '../shared/layout';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings';
+import type { DesktopPlatform } from '../shared/platform';
 import type { Candidate, Spell, UsageAnalytics } from '../shared/types';
 import appIconUrl from '../../assets/icons/app-icon.png';
 import { AnalyticsView } from './components/AnalyticsView';
@@ -41,6 +42,7 @@ const APP_FRAME_BASE_STYLE = {
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [desktopPlatform, setDesktopPlatform] = useState<DesktopPlatform>('win32');
   const t = useMemo(
     () => createTranslator(resolveLocalePreference(settings.language, globalThis.navigator?.language)),
     [settings.language]
@@ -77,6 +79,10 @@ export function App() {
 
   useEffect(() => {
     void window.spellbook.getSettings().then(setSettings);
+  }, []);
+
+  useEffect(() => {
+    void window.spellbook.getSettingsInfo().then((info) => setDesktopPlatform(info.platform));
   }, []);
 
   useEffect(() => {
@@ -143,7 +149,10 @@ export function App() {
 
   return (
     <FeedbackToastProvider>
-      <div className="app-frame" style={appFrameStyle}>
+      <div
+        className={`app-frame platform-${desktopPlatform}`}
+        style={appFrameStyle}
+      >
         <header className="app-titlebar">
           <div className="titlebar-brand">
             <img alt="" src={appIconUrl} />

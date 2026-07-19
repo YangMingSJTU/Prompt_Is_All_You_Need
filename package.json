@@ -11,16 +11,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
     "test:nsis-integration": "vitest run --config vitest.nsis.config.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "package:win": "npm run build && electron-builder --win dir --x64",
+    "package:mac": "npm run build && electron-builder --mac dir",
+    "smoke:packaged:win": "node scripts/packaged-smoke.mjs --platform win32",
+    "smoke:packaged:mac": "node scripts/packaged-smoke.mjs --platform darwin"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^5.1.2",
-    "electron-vite": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "sql.js": "latest",
-    "three": "^0.185.1"
+    "sql.js": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
@@ -28,8 +26,15 @@
     "@types/react-dom": "latest",
     "@types/sql.js": "latest",
     "@types/three": "^0.185.1",
+    "@vitejs/plugin-react": "^5.1.2",
     "electron": "latest",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "latest",
     "jsdom": "^29.1.1",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "three": "^0.185.1",
     "typescript": "latest",
     "vite": "^7.3.6",
     "vitest": "latest"
