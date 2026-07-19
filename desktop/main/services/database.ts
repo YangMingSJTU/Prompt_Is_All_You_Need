@@ -52,7 +52,10 @@ export async function openAppDatabase(
   try {
     const bytes = await readFile(filePath);
     db = new SQL.Database(bytes);
-  } catch {
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') {
+      throw error;
+    }
     db = new SQL.Database();
   }
   return wrapDatabase(db, filePath, nodeDatabaseWriteOperations);
@@ -258,4 +261,10 @@ function getUserVersion(db: SqlJsDatabase): number {
   const result = db.exec('PRAGMA user_version;')[0];
   const value = result?.values?.[0]?.[0];
   return typeof value === 'number' ? value : 0;
+}
+
+function nodeErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
 }

@@ -37,7 +37,9 @@ describe('scanner placement and floating quick panel UI', () => {
       'settings.scanTarget.skills'
     );
     expect(settings).not.toContain('settings.scanSources\n                .filter');
-    expect(settings).not.toContain('sourceFiles');
+    expect(settings).not.toContain('providers: selectedProviders,\n        scanSources:');
+    expect(settings).toContain('summarizeScanFeedback(result.sourceFiles)');
+    expect(settings).toContain("feedback.kind === 'partial' ? 'warning' : 'error'");
     expect(settings).not.toContain('source-table');
     expect(settings).not.toContain('settings.databasePath');
     expect(settings).not.toContain('function InfoRow');
@@ -65,6 +67,9 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(main).toContain('showOpenDialog');
     expect(main).toContain("'openDirectory'");
     expect(main).toContain('if (hasSuccessfulSourceScan(summaries))');
+    expect(main).toContain("ipcMain.handle('scanner:run', async (_event, request: unknown)");
+    expect(main).toContain('resolveScanRequest(');
+    expect(main).toContain('settingsService.getSettings().scanSources');
 
     expect(preload).toContain('selectDirectory');
     expect(preload).toContain("ipcRenderer.invoke('dialog:selectDirectory'");

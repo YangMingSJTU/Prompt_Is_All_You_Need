@@ -1,4 +1,5 @@
 import type { ScanSourceConfig } from './types';
+import type { DesktopPlatform } from './platform';
 
 export type AppLanguage = 'system' | 'zh' | 'en';
 
@@ -37,6 +38,7 @@ export interface ShortcutKeyInput {
 export interface SettingsInfo {
   defaultScanSources: ScanSourceConfig[];
   historyRoots: Array<{ sourceTool: 'claude' | 'codex'; path: string }>;
+  platform: DesktopPlatform;
 }
 
 export const DEFAULT_QUICK_PANEL_SHORTCUT = 'CommandOrControl+Shift+Space';
@@ -107,28 +109,40 @@ export function normalizeShortcutAccelerator(value: unknown): ShortcutAccelerato
   return [...MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier)), mainKey].join('+');
 }
 
-export function getShortcutDefinition(accelerator: unknown): ShortcutDefinition {
+export function getShortcutDefinition(
+  accelerator: unknown,
+  platform: DesktopPlatform = 'win32'
+): ShortcutDefinition {
   const normalized = normalizeShortcutAccelerator(accelerator) ?? DEFAULT_QUICK_PANEL_SHORTCUT;
   return {
     accelerator: normalized,
-    display: formatShortcutDisplay(normalized)
+    display: formatShortcutDisplay(normalized, platform)
   };
 }
 
-export function formatShortcutDisplay(accelerator: unknown): string {
+export function formatShortcutDisplay(
+  accelerator: unknown,
+  platform: DesktopPlatform = 'win32'
+): string {
   const normalized = normalizeShortcutAccelerator(accelerator) ?? DEFAULT_QUICK_PANEL_SHORTCUT;
   return normalized
     .split('+')
     .map((token) => {
       if (token === 'CommandOrControl') {
-        return 'Ctrl';
+        return platform === 'darwin' ? 'Cmd' : 'Ctrl';
+      }
+      if (token === 'Alt') {
+        return platform === 'darwin' ? 'Option' : 'Alt';
       }
       return displayMainKey(token);
     })
     .join(' ');
 }
 
-export function shortcutFromKeyInput(input: ShortcutKeyInput): ShortcutDefinition | null {
+export function shortcutFromKeyInput(
+  input: ShortcutKeyInput,
+  platform: DesktopPlatform = 'win32'
+): ShortcutDefinition | null {
   const mainKey = normalizeKeyInputMainKey(input);
   if (!mainKey) {
     return null;
@@ -148,7 +162,7 @@ export function shortcutFromKeyInput(input: ShortcutKeyInput): ShortcutDefinitio
     return null;
   }
 
-  return getShortcutDefinition([...modifiers, mainKey].join('+'));
+  return getShortcutDefinition([...modifiers, mainKey].join('+'), platform);
 }
 
 function normalizeModifier(token: string): ShortcutModifier | null {

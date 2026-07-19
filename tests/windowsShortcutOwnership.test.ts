@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -80,7 +80,7 @@ async function readShortcutTarget(shortcutPath: string): Promise<string> {
 
 describeWindows('Windows desktop shortcut ownership', () => {
   it('honors --no-desktop-shortcut without creating ownership state', async () => {
-    const fixture = await mkdtemp(join(tmpdir(), 'spellbook-shortcut-none-'));
+    const fixture = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-shortcut-none-')));
     const paths = {
       shortcut: join(fixture, 'desktop', 'Spellbook.lnk'),
       target: join(fixture, 'custom install', 'Spellbook.exe'),
@@ -100,7 +100,7 @@ describeWindows('Windows desktop shortcut ownership', () => {
   }, 60_000);
 
   it('preserves a same-name shortcut owned by an existing installation', async () => {
-    const fixture = await mkdtemp(join(tmpdir(), 'spellbook-shortcut-existing-'));
+    const fixture = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-shortcut-existing-')));
     const oldTarget = join(fixture, 'existing 0.1.0.61', 'Spellbook.exe');
     const paths = {
       shortcut: join(fixture, 'desktop', 'Spellbook.lnk'),
@@ -130,7 +130,7 @@ describeWindows('Windows desktop shortcut ownership', () => {
   }, 60_000);
 
   it('tracks custom-directory upgrades and isolates side-by-side uninstall', async () => {
-    const fixture = await mkdtemp(join(tmpdir(), 'spellbook-shortcut-owned-'));
+    const fixture = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-shortcut-owned-')));
     const shortcut = join(fixture, 'desktop', 'Spellbook.lnk');
     const first = {
       shortcut,

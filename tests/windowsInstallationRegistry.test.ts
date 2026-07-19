@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -346,7 +346,7 @@ async function cleanupRegistry(fixture: RegistryFixture): Promise<void> {
 
 describeWindows('Windows installation registry isolation', () => {
   it('preserves A while installing B and restores A when B is uninstalled first', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-install-registry-')));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
     const fixture = {
       installKey: `${rootKey}\\Install`,
@@ -406,7 +406,7 @@ describeWindows('Windows installation registry isolation', () => {
   }, 90_000);
 
   it('preserves active B and removes only inactive A when A is uninstalled first', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-install-registry-')));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
     const fixture = {
       installKey: `${rootKey}\\Install`,
@@ -459,7 +459,7 @@ describeWindows('Windows installation registry isolation', () => {
   }, 90_000);
 
   it('authorizes only an exact registered uninstall target without mutating rejected paths', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'spellbook-uninstall-preflight-'));
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-uninstall-preflight-')));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
     const fixture = {
       installKey: `${rootKey}\\Install`,
@@ -556,7 +556,7 @@ describeWindows('Windows installation registry isolation', () => {
   }, 90_000);
 
   it('restores A when the installer registration exists but committed artifacts are missing', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-install-registry-')));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
     const fixture = {
       installKey: `${rootKey}\\Install`,
@@ -589,7 +589,7 @@ describeWindows('Windows installation registry isolation', () => {
   }, 90_000);
 
   it('restores the original singleton registration after a partial prepare write', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-install-registry-')));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
     const fixture = {
       installKey: `${rootKey}\\Install`,
@@ -622,7 +622,7 @@ describeWindows('Windows installation registry isolation', () => {
   }, 90_000);
 
   it('preserves a same-directory instance when an upgrade registration is partially written', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'spellbook-install-registry-'));
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'spellbook-install-registry-')));
     const rootKey = `Software\\SpellbookTests\\${randomUUID()}`;
     const fixture = {
       installKey: `${rootKey}\\Install`,

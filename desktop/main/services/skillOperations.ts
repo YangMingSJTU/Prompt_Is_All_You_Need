@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {
   SkillInstallation,
@@ -8,11 +7,16 @@ import type {
 } from '../../shared/skillTypes';
 import type { SkillFileSystem } from './skillFileSystem';
 import {
+  hasPortablePathCollision,
   isPortableRelativePath,
   isSafeDirectoryName,
   resolveDirectoryInside,
   resolveInside
 } from './skillPath';
+import {
+  nativePlatformPathContext,
+  type PlatformPathContext
+} from './platformPaths';
 import { writeZipFile } from './zipWriter';
 
 export interface SkillContentSource {
@@ -34,14 +38,15 @@ export class SkillSourceError extends Error {
 export async function probeSkillInstallation(
   directoryName: string,
   targetRoot: string,
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext = nativePlatformPathContext
 ): Promise<SkillInstallation> {
-  const targetPath = resolveDirectoryInside(targetRoot, directoryName);
+  const targetPath = resolveDirectoryInside(targetRoot, directoryName, pathContext);
   if (!targetPath) {
     return { state: 'failed', targetPath: targetRoot, errorCode: 'io_error' };
   }
   try {
-    await assertSafeTargetRoot(targetRoot, fs);
+    await assertSafeTargetRoot(targetRoot, fs, pathContext);
   } catch (error) {
     return {
       state: 'failed',
@@ -59,7 +64,7 @@ export async function probeSkillInstallation(
     if (targetStats.isSymbolicLink() || !targetStats.isDirectory()) {
       return { state: 'conflict', targetPath, errorCode: 'target_conflict' };
     }
-    const entryPath = join(targetPath, 'SKILL.md');
+    const entryPath = pathContext.path.join(targetPath, 'SKILL.md');
     const entryStats = await fs.lstat(entryPath);
     if (entryStats.isSymbolicLink() || !entryStats.isFile()) {
       return { state: 'conflict', targetPath, errorCode: 'target_conflict' };
@@ -88,13 +93,15 @@ export async function installSkillContent(options: {
   platform: SkillPlatform;
   targetRoot: string;
   fs: SkillFileSystem;
+  pathContext?: PlatformPathContext;
 }): Promise<{ ok: true; targetPath: string } | { ok: false; error: SkillOperationError }> {
   const { source, targetRoot, fs } = options;
-  const targetPath = resolveDirectoryInside(targetRoot, source.directoryName);
+  const pathContext = options.pathContext ?? nativePlatformPathContext;
+  const targetPath = resolveDirectoryInside(targetRoot, source.directoryName, pathContext);
   if (
     !targetPath ||
     !isSafeDirectoryName(source.directoryName) ||
-    !source.files.every(isPortableRelativePath)
+    !source.files.every(isPortableRelativePath) || hasPortablePathCollision(source.files)
   ) {
     return {
       ok: false,
@@ -108,8 +115,9 @@ export async function installSkillContent(options: {
     };
   }
 
+  let safeTargetBoundary: string;
   try {
-    await assertSafeTargetRoot(targetRoot, fs);
+    safeTargetBoundary = await assertSafeTargetRoot(targetRoot, fs, pathContext);
   } catch (error) {
     return {
       ok: false,
@@ -124,7 +132,7 @@ export async function installSkillContent(options: {
 
   try {
     await fs.mkdir(targetRoot, { recursive: true });
-    await assertSafeTargetRoot(targetRoot, fs);
+    await assertSafeTargetRoot(targetRoot, fs, pathContext, safeTargetBoundary);
   } catch (error) {
     return {
       ok: false,
@@ -138,11 +146,13 @@ export async function installSkillContent(options: {
     stagingPath = await createStagingDirectory(
       targetRoot,
       source.directoryName,
-      fs
+      fs,
+      randomUUID,
+      pathContext
     );
     let writtenCount = 0;
     for (const portablePath of source.files) {
-      const stagingFile = resolveInside(stagingPath, portablePath);
+      const stagingFile = resolveInside(stagingPath, portablePath, pathContext);
       if (!stagingFile) {
         throw new InstallFailure({
           code: 'invalid_request',
@@ -157,7 +167,7 @@ export async function installSkillContent(options: {
         throw new InstallFailure(mapSourceError(error));
       }
       try {
-        await fs.mkdir(dirname(stagingFile), { recursive: true });
+        await fs.mkdir(pathContext.path.dirname(stagingFile), { recursive: true });
         await fs.writeFile(stagingFile, data);
         writtenCount += 1;
       } catch (error) {
@@ -165,7 +175,7 @@ export async function installSkillContent(options: {
       }
     }
 
-    const stagedEntry = resolveInside(stagingPath, 'SKILL.md');
+    const stagedEntry = resolveInside(stagingPath, 'SKILL.md', pathContext);
     if (!stagedEntry || writtenCount !== source.files.length) {
       throw new InstallFailure({ code: 'copy_failed', path: stagingPath, retryable: true });
     }
@@ -174,12 +184,12 @@ export async function installSkillContent(options: {
       throw new InstallFailure({ code: 'copy_failed', path: stagedEntry, retryable: true });
     }
 
-    await assertSafeTargetRoot(targetRoot, fs);
+    await assertSafeTargetRoot(targetRoot, fs, pathContext, safeTargetBoundary);
     // POSIX rename replaces an empty directory, so an exclusive reservation closes the
     // no-replace race there. Windows directory rename already refuses an existing target.
     // Do not create and immediately remove a Windows reservation: the deleted directory can
     // remain pending briefly and make the following rename fail with EACCES/EPERM.
-    if (process.platform !== 'win32') {
+    if (pathContext.platform !== 'win32') {
       try {
         await fs.mkdir(targetPath);
         targetReserved = true;
@@ -195,7 +205,7 @@ export async function installSkillContent(options: {
         throw new InstallFailure(mapTargetWriteError(error, targetPath, 'commit_failed'));
       }
     }
-    await commitStagingDirectory(stagingPath, targetPath, fs);
+    await commitStagingDirectory(stagingPath, targetPath, fs, pathContext);
     targetReserved = false;
     return { ok: true, targetPath };
   } catch (error) {
@@ -220,7 +230,8 @@ const WINDOWS_COMMIT_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800];
 async function commitStagingDirectory(
   stagingPath: string,
   targetPath: string,
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext
 ): Promise<void> {
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -235,7 +246,7 @@ async function commitStagingDirectory(
           retryable: true
         });
       }
-      if (process.platform === 'win32' && (code === 'EACCES' || code === 'EPERM')) {
+      if (pathContext.platform === 'win32' && (code === 'EACCES' || code === 'EPERM')) {
         const existing = await inspectExistingTarget(targetPath, fs);
         if (existing) {
           throw new InstallFailure(existing.error);
@@ -278,7 +289,8 @@ export async function createStagingDirectory(
   targetRoot: string,
   targetDirectoryName: string,
   fs: SkillFileSystem,
-  createToken: () => string = randomUUID
+  createToken: () => string = randomUUID,
+  pathContext: PlatformPathContext = nativePlatformPathContext
 ): Promise<string> {
   for (let attempt = 0; attempt < 64; attempt += 1) {
     // Keep the temporary path component no longer than the final directory name.
@@ -287,7 +299,7 @@ export async function createStagingDirectory(
       targetDirectoryName,
       createToken()
     );
-    const candidate = join(targetRoot, stagingName);
+    const candidate = pathContext.path.join(targetRoot, stagingName);
     try {
       await fs.mkdir(candidate);
       return candidate;
@@ -307,14 +319,16 @@ export async function packageSkillContent(options: {
   source: SkillContentSource;
   packageDirectory: string;
   fs: SkillFileSystem;
+  pathContext?: PlatformPathContext;
 }): Promise<{ ok: true; outputPath: string } | { ok: false; error: SkillOperationError }> {
   const { source, packageDirectory, fs } = options;
+  const pathContext = options.pathContext ?? nativePlatformPathContext;
   if (source.files.length === 0) {
     return { ok: false, error: { code: 'empty_skill', retryable: false } };
   }
   if (
     !isSafeDirectoryName(source.directoryName) ||
-    !source.files.every(isPortableRelativePath)
+    !source.files.every(isPortableRelativePath) || hasPortablePathCollision(source.files)
   ) {
     return { ok: false, error: { code: 'invalid_request', retryable: false } };
   }
@@ -332,7 +346,7 @@ export async function packageSkillContent(options: {
   }
 
   const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
-  const outputPath = join(
+  const outputPath = pathContext.path.join(
     packageDirectory,
     `${sanitizeFileName(source.directoryName)}-${suffix}.zip`
   );
@@ -351,30 +365,69 @@ export async function packageSkillContent(options: {
   }
 }
 
-async function assertSafeTargetRoot(targetRoot: string, fs: SkillFileSystem): Promise<void> {
-  let existingPath = resolve(targetRoot);
+async function assertSafeTargetRoot(
+  targetRoot: string,
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext,
+  requiredBoundary?: string
+): Promise<string> {
+  let candidatePath = pathContext.path.resolve(targetRoot);
+  const directParent = pathContext.path.dirname(candidatePath);
+  const boundary = requiredBoundary
+    ? pathContext.path.resolve(requiredBoundary)
+    : directParent;
+  if (
+    requiredBoundary &&
+    !isPathInsideOrEqual(candidatePath, boundary, pathContext)
+  ) {
+    throw unsafeTargetError(candidatePath);
+  }
+  let reachedDirectParent = pathsEqual(candidatePath, directParent, pathContext);
   while (true) {
     try {
-      const stats = await fs.lstat(existingPath);
+      const stats = await fs.lstat(candidatePath);
       if (stats.isSymbolicLink() || !stats.isDirectory()) {
-        throw unsafeTargetError(existingPath);
+        throw unsafeTargetError(candidatePath);
       }
-      const canonicalPath = await fs.realpath(existingPath);
-      if (normalizeComparablePath(canonicalPath) !== normalizeComparablePath(existingPath)) {
-        throw unsafeTargetError(existingPath);
+      if (
+        (requiredBoundary && pathsEqual(candidatePath, boundary, pathContext)) ||
+        (!requiredBoundary && reachedDirectParent)
+      ) {
+        return candidatePath;
       }
-      return;
     } catch (error) {
       if (nodeErrorCode(error) !== 'ENOENT') {
         throw error;
       }
-      const parent = dirname(existingPath);
-      if (parent === existingPath) {
-        throw error;
-      }
-      existingPath = parent;
     }
+    const parent = pathContext.path.dirname(candidatePath);
+    if (parent === candidatePath) {
+      throw unsafeTargetError(candidatePath);
+    }
+    candidatePath = parent;
+    reachedDirectParent =
+      reachedDirectParent || pathsEqual(candidatePath, directParent, pathContext);
   }
+}
+
+function isPathInsideOrEqual(
+  path: string,
+  root: string,
+  pathContext: PlatformPathContext
+): boolean {
+  const relative = pathContext.path.relative(root, path);
+  return (
+    relative === '' ||
+    (relative !== '..' &&
+      !relative.startsWith(`..${pathContext.path.sep}`) &&
+      !pathContext.path.isAbsolute(relative))
+  );
+}
+function pathsEqual(left: string, right: string, pathContext: PlatformPathContext): boolean {
+  const normalize = (value: string) => pathContext.path.resolve(value);
+  return pathContext.caseInsensitive
+    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
+    : normalize(left) === normalize(right);
 }
 
 function unsafeTargetError(path: string): Error {
@@ -382,11 +435,6 @@ function unsafeTargetError(path: string): Error {
     code: 'ELOOP',
     path
   });
-}
-
-function normalizeComparablePath(path: string): string {
-  const normalized = resolve(path);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 function mapUnsafeTargetError(error: unknown, fallbackPath: string): SkillOperationError {

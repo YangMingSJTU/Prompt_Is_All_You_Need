@@ -15,6 +15,7 @@ import {
   translateForLocalePreference,
   type TFunction
 } from '../i18n';
+import { summarizeScanFeedback } from '../scanFeedback';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
@@ -162,13 +163,13 @@ export function SettingsView({
                   onClick={startRecordingShortcut}
                   onKeyDown={handleShortcutKeyDown}
                   ref={shortcutButtonRef}
-                  title={formatShortcutDisplay(settings.quickPanelShortcut)}
+                  title={formatShortcutDisplay(settings.quickPanelShortcut, info?.platform ?? 'win32')}
                   type="button"
                 >
                   <span>
                     {recordingShortcut
                       ? t('settings.shortcut.recording')
-                      : formatShortcutDisplay(settings.quickPanelShortcut)}
+                      : formatShortcutDisplay(settings.quickPanelShortcut, info?.platform ?? 'win32')}
                   </span>
                   {recordingShortcut ? <small>{t('settings.shortcut.recordingHint')}</small> : null}
                 </button>
@@ -338,7 +339,7 @@ export function SettingsView({
       metaKey: event.metaKey,
       altKey: event.altKey,
       shiftKey: event.shiftKey
-    });
+    }, info?.platform ?? 'win32');
     if (!shortcut) {
       setShortcutError(t('settings.shortcut.invalid'));
       return;
@@ -393,12 +394,27 @@ export function SettingsView({
       const result = await window.spellbook.runScan({
         target: 'spells',
         providers: selectedProviders,
-        scanSources: activeScanSources
       });
       setScanCandidates(result.candidates);
       setSelectedCandidateIds([]);
-      showToast(`${t('status.scanFinished')}: ${result.candidates.length}`);
+      const feedback = summarizeScanFeedback(result.sourceFiles);
+      if (feedback.kind === 'success') {
+        showToast(`${t('status.scanFinished')}: ${result.candidates.length}`);
+      } else {
+        const displayedPaths = feedback.paths.slice(0, 2).join(', ');
+        const remaining = feedback.paths.length - 2;
+        const suffix = remaining > 0 ? ` (+${remaining})` : '';
+        showToast(
+          `${t(feedback.kind === 'partial' ? 'status.scanPartial' : 'status.scanFailed')}: ${displayedPaths}${suffix}`,
+          { variant: feedback.kind === 'partial' ? 'warning' : 'error' }
+        );
+      }
       await onChanged();
+    } catch (error) {
+      const detail = error instanceof Error && error.message
+        ? error.message
+        : t('status.scanFailed');
+      showToast(`${t('status.scanFailed')}: ${detail}`, { variant: 'error' });
     } finally {
       setRunningScan(false);
     }

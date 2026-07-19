@@ -2,14 +2,11 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  getAppIconPath,
-  getSqlWasmPath,
-  resolveAppRoot
-} from '../desktop/main/services/appAssets';
 import { runAppPreflight, runAppStartup } from '../desktop/main/services/appStartup';
 import { openAppDatabase } from '../desktop/main/services/database';
+import { createPlatformPaths } from '../desktop/main/services/platformPaths';
 
 const originalCwd = process.cwd();
 
@@ -18,7 +15,7 @@ afterEach(() => {
 });
 
 describe('app startup', () => {
-  it('starts with real packaged resources when the process cwd is unrelated', async () => {
+  it('starts with the installed SQL resource when the process cwd is unrelated', async () => {
     const fixture = await mkdtemp(join(tmpdir(), 'spellbook-startup-cwd-'));
     const unrelatedCwd = join(fixture, 'other-cwd');
     const databasePath = join(fixture, 'user-data', 'index.sqlite');
@@ -30,13 +27,9 @@ describe('app startup', () => {
     try {
       const result = await runAppStartup({
         async initialize() {
-          const appRoot = resolveAppRoot({
-            isPackaged: true,
-            appPath: join(originalCwd, 'resources', 'app.asar'),
-            resourcesPath: join(originalCwd, 'resources')
-          });
-          expect(existsSync(getAppIconPath(appRoot, 'win32'))).toBe(true);
-          const db = await openAppDatabase(databasePath, getSqlWasmPath(appRoot));
+          const sqlWasmPath = fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
+          expect(existsSync(sqlWasmPath)).toBe(true);
+          const db = await openAppDatabase(databasePath, sqlWasmPath);
           db.run(
             "INSERT INTO app_settings (key, value, updated_at) VALUES ('cwd', 'independent', 'now')"
           );
@@ -90,6 +83,41 @@ describe('app startup', () => {
       expect.objectContaining({
         title: 'Spellbook failed to start',
         message: expect.stringContaining('sql-wasm.wasm is missing')
+      })
+    ]);
+  });
+
+  it('reports an invalid platform override before creating a window', async () => {
+    const feedback: Array<{ title: string; message: string }> = [];
+    let windowsCreated = 0;
+    let quitCalls = 0;
+
+    const result = await runAppStartup({
+      async initialize() {
+        createPlatformPaths({
+          platform: 'darwin',
+          homeDirectory: '/Users/Ada',
+          userDataDirectory: '/Users/Ada/Library/Application Support/Spellbook',
+          env: { CODEX_HOME: '../relative-codex-home' }
+        });
+      },
+      async createWindows() {
+        windowsCreated += 1;
+      },
+      showFailure(value) {
+        feedback.push(value);
+      },
+      quit() {
+        quitCalls += 1;
+      }
+    });
+
+    expect(result).toBe('failed');
+    expect(windowsCreated).toBe(0);
+    expect(quitCalls).toBe(1);
+    expect(feedback).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining('CODEX_HOME must be an absolute darwin path')
       })
     ]);
   });

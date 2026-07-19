@@ -1,5 +1,4 @@
 import type { Dirent, Stats } from 'node:fs';
-import { basename, join, relative, resolve } from 'node:path';
 import type {
   SkillPlatform,
   SkillScanError,
@@ -8,9 +7,15 @@ import type {
 import type { SkillFileSystem } from './skillFileSystem';
 import {
   createLocalSkillId,
+  hasPortablePathCollision,
   isPortableRelativePath,
-  isSafeDirectoryName
+  isSafeDirectoryName,
+  nativePathToPortableRelative
 } from './skillPath';
+import {
+  nativePlatformPathContext,
+  type PlatformPathContext
+} from './platformPaths';
 
 export interface SkillRoot {
   platform: SkillPlatform;
@@ -46,7 +51,8 @@ export type SkillRootScanResult =
 
 export async function scanSkillRoot(
   root: SkillRoot,
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext = nativePlatformPathContext
 ): Promise<SkillRootScanResult> {
   let rootStats: Stats;
   try {
@@ -80,7 +86,7 @@ export async function scanSkillRoot(
     const entries = await fs.readdir(root.path);
     const skills: LocalSkillSnapshot[] = [];
     for (const entry of sortEntries(entries)) {
-      const entryPath = join(root.path, entry.name);
+      const entryPath = pathContext.path.join(root.path, entry.name);
       if (!isSafeDirectoryName(entry.name)) {
         throw new ScanFailure('unsupported_entry', entryPath);
       }
@@ -94,7 +100,7 @@ export async function scanSkillRoot(
         continue;
       }
 
-      const entryFilePath = join(entryPath, 'SKILL.md');
+      const entryFilePath = pathContext.path.join(entryPath, 'SKILL.md');
       let entryStats: Stats;
       try {
         entryStats = await fs.lstat(entryFilePath);
@@ -108,7 +114,10 @@ export async function scanSkillRoot(
         throw new ScanFailure('unsupported_entry', entryFilePath);
       }
 
-      const fileEntries = await collectFiles(entryPath, fs);
+      const fileEntries = await collectFiles(entryPath, fs, pathContext);
+      if (hasPortablePathCollision(fileEntries.map((file) => file.path))) {
+        throw new ScanFailure('unsupported_entry', entryPath);
+      }
       const manifest = readSkillManifest(
         (await fs.readFile(entryFilePath)).toString('utf8')
       );
@@ -118,13 +127,13 @@ export async function scanSkillRoot(
       );
       const files = fileEntries.map((file) => file.path);
       skills.push({
-        id: createLocalSkillId(root.platform, entryPath),
+        id: createLocalSkillId(root.platform, entryPath, pathContext),
         platform: root.platform,
-        directoryName: basename(entryPath),
+        directoryName: pathContext.path.basename(entryPath),
         name: manifest.name ?? entry.name,
         description: manifest.description ?? '',
-        rootPath: resolve(entryPath),
-        entryFilePath: resolve(entryFilePath),
+        rootPath: pathContext.path.resolve(entryPath),
+        entryFilePath: pathContext.path.resolve(entryFilePath),
         files,
         updatedAt: new Date(latestMtime || Date.now()).toISOString(),
         packageable: files.length > 0
@@ -149,14 +158,15 @@ export async function scanSkillRoot(
 
 async function collectFiles(
   rootPath: string,
-  fs: SkillFileSystem
+  fs: SkillFileSystem,
+  pathContext: PlatformPathContext
 ): Promise<Array<{ path: string; stats: Stats }>> {
   const result: Array<{ path: string; stats: Stats }> = [];
 
   async function walk(currentPath: string): Promise<void> {
     const entries = await fs.readdir(currentPath);
     for (const entry of sortEntries(entries)) {
-      const absolutePath = join(currentPath, entry.name);
+      const absolutePath = pathContext.path.join(currentPath, entry.name);
       if (entry.isSymbolicLink()) {
         throw new ScanFailure('unsupported_entry', absolutePath);
       }
@@ -171,8 +181,12 @@ async function collectFiles(
       if (!stats.isFile()) {
         throw new ScanFailure('unsupported_entry', absolutePath);
       }
-      const portablePath = relative(rootPath, absolutePath).replaceAll('\\', '/');
-      if (!isPortableRelativePath(portablePath)) {
+      const portablePath = nativePathToPortableRelative(
+        rootPath,
+        absolutePath,
+        pathContext
+      );
+      if (!portablePath || !isPortableRelativePath(portablePath)) {
         throw new ScanFailure('path_escape', absolutePath);
       }
       result.push({ path: portablePath, stats });
