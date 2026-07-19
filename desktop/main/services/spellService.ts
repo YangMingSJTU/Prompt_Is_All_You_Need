@@ -75,24 +75,25 @@ const STARTER_SPELLS: Array<
 export function createSpellService(db: AppDatabase) {
   return {
     async seedStarterSpells(): Promise<void> {
-      const now = new Date().toISOString();
-      for (const spell of STARTER_SPELLS) {
-        db.run(
-          `INSERT OR IGNORE INTO spells
-            (id, name, body, tags, source, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            randomUUID(),
-            spell.name,
-            spell.body,
-            JSON.stringify(spell.tags),
-            spell.source,
-            now,
-            now
-          ]
-        );
-      }
-      await db.save();
+      await db.transaction(() => {
+        const now = new Date().toISOString();
+        for (const spell of STARTER_SPELLS) {
+          db.run(
+            `INSERT OR IGNORE INTO spells
+              (id, name, body, tags, source, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              randomUUID(),
+              spell.name,
+              spell.body,
+              JSON.stringify(spell.tags),
+              spell.source,
+              now,
+              now
+            ]
+          );
+        }
+      });
     },
 
     async searchSpells(query: string): Promise<Spell[]> {
@@ -139,85 +140,87 @@ export function createSpellService(db: AppDatabase) {
     },
 
     async copySpell(spellId: string): Promise<Spell> {
-      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!row) {
-        throw new Error(`Spell not found: ${spellId}`);
-      }
-      db.run(
-        'INSERT INTO usage_events (id, spell_id, action, created_at) VALUES (?, ?, ?, ?)',
-        [randomUUID(), spellId, 'copy', new Date().toISOString()]
-      );
-      await db.save();
-      return rowToSpell(row);
+      return db.transaction(() => {
+        const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (!row) {
+          throw new Error(`Spell not found: ${spellId}`);
+        }
+        db.run(
+          'INSERT INTO usage_events (id, spell_id, action, created_at) VALUES (?, ?, ?, ?)',
+          [randomUUID(), spellId, 'copy', new Date().toISOString()]
+        );
+        return rowToSpell(row);
+      });
     },
 
     async createSpell(input: SpellCreateInput): Promise<Spell> {
-      const row = insertSpell(db, input, 'manual');
-      await db.save();
-      return rowToSpell(row);
+      return db.transaction(() => rowToSpell(insertSpell(db, input, 'manual')));
     },
 
     async createSpellFromCandidate(
       candidateId: string,
       input: SpellCreateInput
     ): Promise<Spell> {
-      const candidate = db.get<CandidateRow>(
-        "SELECT * FROM candidates WHERE id = ? AND status = 'pending'",
-        [candidateId]
-      );
-      if (!candidate) {
-        throw new Error(`Pending candidate not found: ${candidateId}`);
-      }
-      const now = new Date().toISOString();
-      const row = insertSpell(db, input, 'candidate', now);
-      db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', [
-        'saved',
-        now,
-        candidateId
-      ]);
-      await db.save();
-      return rowToSpell(row);
+      return db.transaction(() => {
+        const candidate = db.get<CandidateRow>(
+          "SELECT * FROM candidates WHERE id = ? AND status = 'pending'",
+          [candidateId]
+        );
+        if (!candidate) {
+          throw new Error(`Pending candidate not found: ${candidateId}`);
+        }
+        const now = new Date().toISOString();
+        const row = insertSpell(db, input, 'candidate', now);
+        db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', [
+          'saved',
+          now,
+          candidateId
+        ]);
+        return rowToSpell(row);
+      });
     },
 
     async updateSpell(spellId: string, patch: SpellUpdatePatch): Promise<Spell> {
-      const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!current) {
-        throw new Error(`Spell not found: ${spellId}`);
-      }
-      const body = patch.body ?? current.body;
-      if (!body.trim()) {
-        throw new Error('Spell body cannot be empty');
-      }
-      const name = patch.name === undefined ? current.name : patch.name.trim();
-      const tags = patch.tags === undefined ? parseTags(current.tags) : validateTags(patch.tags);
-      const now = new Date().toISOString();
-      db.run(
-        `UPDATE spells
-         SET name = ?, body = ?, tags = ?, updated_at = ?
-         WHERE id = ?`,
-        [name, body, JSON.stringify(tags), now, spellId]
-      );
-      await db.save();
-      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!row) {
-        throw new Error(`Updated spell not found: ${spellId}`);
-      }
-      return rowToSpell(row);
+      return db.transaction(() => {
+        const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (!current) {
+          throw new Error(`Spell not found: ${spellId}`);
+        }
+        const body = patch.body ?? current.body;
+        if (!body.trim()) {
+          throw new Error('Spell body cannot be empty');
+        }
+        const name = patch.name === undefined ? current.name : patch.name.trim();
+        const tags = patch.tags === undefined ? parseTags(current.tags) : validateTags(patch.tags);
+        const now = new Date().toISOString();
+        db.run(
+          `UPDATE spells
+           SET name = ?, body = ?, tags = ?, updated_at = ?
+           WHERE id = ?`,
+          [name, body, JSON.stringify(tags), now, spellId]
+        );
+        const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (!row) {
+          throw new Error(`Updated spell not found: ${spellId}`);
+        }
+        return rowToSpell(row);
+      });
     },
 
     async updateSpellState(spellId: string, patch: SpellStatePatch): Promise<Spell> {
-      const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!current) {
-        throw new Error(`Spell not found: ${spellId}`);
-      }
-      const isFavorite = patch.isFavorite ?? Boolean(current.is_favorite);
-      db.run('UPDATE spells SET is_favorite = ? WHERE id = ?', [Number(isFavorite), spellId]);
-      await db.save();
-      const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-      if (!row) {
-        throw new Error(`Updated spell not found: ${spellId}`);
-      }
-      return rowToSpell(row);
+      return db.transaction(() => {
+        const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (!current) {
+          throw new Error(`Spell not found: ${spellId}`);
+        }
+        const isFavorite = patch.isFavorite ?? Boolean(current.is_favorite);
+        db.run('UPDATE spells SET is_favorite = ? WHERE id = ?', [Number(isFavorite), spellId]);
+        const row = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+        if (!row) {
+          throw new Error(`Updated spell not found: ${spellId}`);
+        }
+        return rowToSpell(row);
+      });
     },
 
     async deleteSpell(spellId: string): Promise<void> {
@@ -228,54 +231,32 @@ export function createSpellService(db: AppDatabase) {
     },
 
     async deleteSpells(spellIds: string[]): Promise<SpellDeleteResult> {
-      const deletedIds: string[] = [];
-      const missingIds: string[] = [];
-      for (const spellId of normalizeIds(spellIds)) {
-        const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
-        if (!current) {
-          missingIds.push(spellId);
-          continue;
+      return db.transaction(() => {
+        const deletedIds: string[] = [];
+        const missingIds: string[] = [];
+        for (const spellId of normalizeIds(spellIds)) {
+          const current = db.get<SpellRow>('SELECT * FROM spells WHERE id = ?', [spellId]);
+          if (!current) {
+            missingIds.push(spellId);
+            continue;
+          }
+          db.run('DELETE FROM usage_events WHERE spell_id = ?', [spellId]);
+          db.run('DELETE FROM spells WHERE id = ?', [spellId]);
+          deletedIds.push(spellId);
         }
-        db.run('DELETE FROM usage_events WHERE spell_id = ?', [spellId]);
-        db.run('DELETE FROM spells WHERE id = ?', [spellId]);
-        deletedIds.push(spellId);
-      }
-      await db.save();
-      return { deletedIds, missingIds };
+        return { deletedIds, missingIds };
+      });
     },
 
     async saveCandidates(candidates: Candidate[]): Promise<void> {
-      for (const candidate of candidates) {
-        const existing = db.get<CandidateRow>('SELECT * FROM candidates WHERE slug = ?', [candidate.slug]);
-        const status =
-          existing?.status === 'saved' || findSpellByBody(db, candidate.template)
-            ? 'saved'
-            : candidate.status;
-        db.run(
-          `INSERT OR REPLACE INTO candidates
-            (id, slug, title, description, template, candidate_type, source_count, status, examples, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            existing?.id ?? candidate.id,
-            candidate.slug,
-            candidate.title,
-            candidate.description,
-            candidate.template,
-            candidate.candidateType,
-            candidate.sourceCount,
-            status,
-            JSON.stringify(candidate.examples),
-            existing?.created_at ?? candidate.createdAt,
-            candidate.updatedAt
-          ]
-        );
-      }
-      await db.save();
+      await db.transaction(() => writeCandidates(db, candidates));
     },
 
     async replaceCandidates(candidates: Candidate[]): Promise<void> {
-      db.run('DELETE FROM candidates');
-      await this.saveCandidates(candidates);
+      await db.transaction(() => {
+        db.run('DELETE FROM candidates');
+        writeCandidates(db, candidates);
+      });
     },
 
     async listCandidates(): Promise<Candidate[]> {
@@ -287,35 +268,36 @@ export function createSpellService(db: AppDatabase) {
     },
 
     async promoteCandidates(candidateIds: string[]): Promise<CandidatePromotionResult> {
-      const now = new Date().toISOString();
-      const result: CandidatePromotionResult = { created: [], skipped: [] };
-      for (const candidateId of normalizeIds(candidateIds)) {
-        const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
-        if (!candidate) {
-          result.skipped.push({ candidateId, reason: 'missing' });
-          continue;
-        }
-        const existing = findSpellByBody(db, candidate.template);
-        if (existing) {
+      return db.transaction(() => {
+        const now = new Date().toISOString();
+        const result: CandidatePromotionResult = { created: [], skipped: [] };
+        for (const candidateId of normalizeIds(candidateIds)) {
+          const candidate = db.get<CandidateRow>('SELECT * FROM candidates WHERE id = ?', [candidateId]);
+          if (!candidate) {
+            result.skipped.push({ candidateId, reason: 'missing' });
+            continue;
+          }
+          const existing = findSpellByBody(db, candidate.template);
+          if (existing) {
+            db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
+            result.skipped.push({ candidateId, reason: 'duplicate' });
+            continue;
+          }
+          const row = insertSpell(
+            db,
+            {
+              name: deriveSpellName(candidate.template, candidate.title),
+              body: candidate.template,
+              tags: []
+            },
+            'candidate',
+            now
+          );
           db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
-          result.skipped.push({ candidateId, reason: 'duplicate' });
-          continue;
+          result.created.push(rowToSpell(row));
         }
-        const row = insertSpell(
-          db,
-          {
-            name: deriveSpellName(candidate.template, candidate.title),
-            body: candidate.template,
-            tags: []
-          },
-          'candidate',
-          now
-        );
-        db.run('UPDATE candidates SET status = ?, updated_at = ? WHERE id = ?', ['saved', now, candidateId]);
-        result.created.push(rowToSpell(row));
-      }
-      await db.save();
-      return result;
+        return result;
+      });
     },
 
     async getAnalytics(): Promise<UsageAnalytics> {
@@ -343,6 +325,34 @@ export function createSpellService(db: AppDatabase) {
       };
     }
   };
+}
+
+function writeCandidates(db: AppDatabase, candidates: Candidate[]): void {
+  for (const candidate of candidates) {
+    const existing = db.get<CandidateRow>('SELECT * FROM candidates WHERE slug = ?', [candidate.slug]);
+    const status =
+      existing?.status === 'saved' || findSpellByBody(db, candidate.template)
+        ? 'saved'
+        : candidate.status;
+    db.run(
+      `INSERT OR REPLACE INTO candidates
+        (id, slug, title, description, template, candidate_type, source_count, status, examples, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        existing?.id ?? candidate.id,
+        candidate.slug,
+        candidate.title,
+        candidate.description,
+        candidate.template,
+        candidate.candidateType,
+        candidate.sourceCount,
+        status,
+        JSON.stringify(candidate.examples),
+        existing?.created_at ?? candidate.createdAt,
+        candidate.updatedAt
+      ]
+    );
+  }
 }
 
 function rowToSpell(row: SpellRow): Spell {

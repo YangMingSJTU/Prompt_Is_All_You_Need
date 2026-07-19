@@ -101,6 +101,17 @@ async function createWindow(): Promise<void> {
   mainWindow.webContents.on('destroyed', () => {
     shortcutController?.forceEndCapture();
   });
+  mainWindow.on('blur', () => {
+    const controller = shortcutController;
+    if (!controller?.getState().captureActive) {
+      return;
+    }
+    const result = controller.forceEndCapture();
+    const captureWindow = mainWindow;
+    if (captureWindow && !captureWindow.isDestroyed()) {
+      captureWindow.webContents.send('shortcut:capture-ended', result);
+    }
+  });
   mainWindow.on('closed', () => {
     shortcutController?.forceEndCapture();
     mainWindow = null;

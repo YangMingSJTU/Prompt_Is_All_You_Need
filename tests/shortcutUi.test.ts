@@ -23,6 +23,8 @@ describe('shortcut IPC and renderer UI', () => {
     expect(main).not.toContain('globalShortcut.register(');
     expect(main).toContain("mainWindow.webContents.on('render-process-gone'");
     expect(main).toContain("mainWindow.webContents.on('destroyed'");
+    expect(main).toContain("mainWindow.on('blur'");
+    expect(main).toContain("captureWindow.webContents.send('shortcut:capture-ended'");
 
     expect(controller).toContain('this.registerOwned(candidate)');
     expect(controller).toContain('await this.settingsService.updateQuickPanelShortcut(candidate)');
@@ -34,8 +36,10 @@ describe('shortcut IPC and renderer UI', () => {
     expect(preload).toContain("ipcRenderer.invoke('shortcut:update', request)");
     expect(preload).toContain("ipcRenderer.invoke('shortcut:beginCapture')");
     expect(preload).toContain("ipcRenderer.invoke('shortcut:endCapture', sessionToken)");
+    expect(preload).toContain("ipcRenderer.on('shortcut:capture-ended'");
     expect(globals).toContain('getQuickPanelShortcutState(): Promise<QuickPanelShortcutState>');
     expect(globals).toContain('updateQuickPanelShortcut(request: ShortcutUpdateRequest)');
+    expect(globals).toContain('onShortcutCaptureEnded(');
   });
 
   it('renders authoritative active/fallback/disabled state with accessible capture lifecycle', () => {
@@ -50,7 +54,10 @@ describe('shortcut IPC and renderer UI', () => {
     expect(component).toContain("event.key === 'Escape'");
     expect(component).toContain("role=\"alert\"");
     expect(component).toContain('aria-busy={shortcutSaving}');
-    expect(component).toContain('aria-describedby={shortcutError');
+    expect(component).toContain('aria-disabled={saving || shortcutSaving || !shortcutState}');
+    expect(component).toContain("'shortcut-capture-description shortcut-inline-error'");
+    expect(component).toContain('shortcutButtonPresentation.label');
+    expect(component).toContain('restoreShortcutButtonFocus');
     expect(component).toContain('getShortcutAccessibleText');
     expect(component).toContain('dismissShortcutStartupNotice()');
     expect(component).toContain("t('settings.shortcut.internalDescription')");

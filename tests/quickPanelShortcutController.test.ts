@@ -171,16 +171,151 @@ describe('quick panel shortcut controller', () => {
     expect(events).toContain('suspended:false');
   });
 
-  it('clears a capture session even when Electron fails to resume listeners', async () => {
+  it('keeps a newer capture active when blur cleanup races stale renderer cleanup', async () => {
     const globalShortcut = new FakeGlobalShortcut([]);
-    const controller = createController(globalShortcut, new FakeSettings(DEFAULT, []));
+    let tokenNumber = 0;
+    const controller = createController(
+      globalShortcut,
+      new FakeSettings(DEFAULT, []),
+      () => undefined,
+      () => `session-${++tokenNumber}`
+    );
+    await controller.initialize();
+
+    const first = controller.beginCapture();
+    expect(first).toMatchObject({ ok: true, sessionToken: 'session-1' });
+    expect(controller.forceEndCapture()).toMatchObject({
+      ok: true,
+      state: { captureActive: false }
+    });
+    const second = controller.beginCapture();
+    expect(second).toMatchObject({ ok: true, sessionToken: 'session-2' });
+
+    expect(controller.endCapture('session-1')).toMatchObject({
+      ok: true,
+      state: { captureActive: true }
+    });
+    expect(globalShortcut.suspended).toBe(true);
+    expect(controller.forceEndCapture()).toMatchObject({
+      ok: true,
+      state: { captureActive: false }
+    });
+    expect(controller.endCapture('session-2')).toMatchObject({
+      ok: true,
+      state: { captureActive: false }
+    });
+    expect(globalShortcut.suspended).toBe(false);
+  });
+
+  it('disables the authoritative state when Electron repeatedly fails to resume listeners', async () => {
+    const globalShortcut = new FakeGlobalShortcut([]);
+    let toggles = 0;
+    const controller = createController(globalShortcut, new FakeSettings(DEFAULT, []), () => {
+      toggles += 1;
+    });
     await controller.initialize();
     expect(controller.beginCapture().ok).toBe(true);
     globalShortcut.failResume = true;
 
-    expect(() => controller.forceEndCapture()).not.toThrow();
-    expect(controller.getState().captureActive).toBe(false);
+    expect(controller.forceEndCapture()).toMatchObject({
+      ok: false,
+      error: 'recovery_failed',
+      state: { captureActive: false, activeAccelerator: null, status: 'disabled' }
+    });
+    expect(globalShortcut.suspended).toBe(true);
+    globalShortcut.invoke(DEFAULT);
+    expect(toggles).toBe(0);
   });
+
+  it('retries a transient listener resume failure before reporting active', async () => {
+    const globalShortcut = new FakeGlobalShortcut([]);
+    const controller = createController(globalShortcut, new FakeSettings(DEFAULT, []));
+    await controller.initialize();
+    expect(controller.beginCapture().ok).toBe(true);
+    globalShortcut.resumeFailuresRemaining = 1;
+
+    expect(controller.forceEndCapture()).toMatchObject({
+      ok: true,
+      state: { activeAccelerator: DEFAULT, status: 'active', captureActive: false }
+    });
+    expect(globalShortcut.suspended).toBe(false);
+  });
+
+  it.each(['noop', 'throw'] as const)(
+    'disables all callbacks when candidate rollback unregister is a %s',
+    async (failureMode) => {
+      const globalShortcut = new FakeGlobalShortcut([]);
+      const settings = new FakeSettings(DEFAULT, []);
+      let toggles = 0;
+      const controller = createController(globalShortcut, settings, () => {
+        toggles += 1;
+      });
+      await controller.initialize();
+      settings.failPersistence = true;
+      globalShortcut.unregisterFailures.set(CUSTOM, failureMode);
+
+      await expect(
+        controller.update({ intent: 'set', accelerator: CUSTOM })
+      ).resolves.toMatchObject({
+        ok: false,
+        error: 'recovery_failed',
+        state: { activeAccelerator: null, status: 'disabled' }
+      });
+      globalShortcut.invoke(DEFAULT);
+      globalShortcut.invoke(CUSTOM);
+      expect(toggles).toBe(0);
+    }
+  );
+
+  it.each(['noop', 'throw'] as const)(
+    'disables all callbacks when final old-key release is a %s',
+    async (failureMode) => {
+      const globalShortcut = new FakeGlobalShortcut([]);
+      const settings = new FakeSettings(DEFAULT, []);
+      let toggles = 0;
+      const controller = createController(globalShortcut, settings, () => {
+        toggles += 1;
+      });
+      await controller.initialize();
+      globalShortcut.unregisterFailures.set(DEFAULT, failureMode);
+
+      await expect(
+        controller.update({ intent: 'set', accelerator: CUSTOM })
+      ).resolves.toMatchObject({
+        ok: false,
+        error: 'recovery_failed',
+        state: { configuredAccelerator: CUSTOM, activeAccelerator: null, status: 'disabled' }
+      });
+      globalShortcut.invoke(DEFAULT);
+      globalShortcut.invoke(CUSTOM);
+      expect(toggles).toBe(0);
+    }
+  );
+
+  it.each(['noop', 'throw'] as const)(
+    'contains %s unregister failures during dispose',
+    async (failureMode) => {
+      const globalShortcut = new FakeGlobalShortcut([]);
+      let toggles = 0;
+      const controller = createController(
+        globalShortcut,
+        new FakeSettings(DEFAULT, []),
+        () => {
+          toggles += 1;
+        }
+      );
+      await controller.initialize();
+      globalShortcut.unregisterFailures.set(DEFAULT, failureMode);
+
+      expect(() => controller.dispose()).not.toThrow();
+      globalShortcut.invoke(DEFAULT);
+      expect(toggles).toBe(0);
+      expect(controller.getState()).toMatchObject({
+        activeAccelerator: null,
+        status: 'disabled'
+      });
+    }
+  );
 
   it('reports recovery failure when neither compensation nor persisted recovery can register', async () => {
     const events: string[] = [];
@@ -209,8 +344,10 @@ class FakeGlobalShortcut implements GlobalShortcutAdapter {
   readonly callbacks = new Map<string, () => void>();
   readonly conflicts = new Set<string>();
   readonly registered = new Set<string>();
+  readonly unregisterFailures = new Map<string, 'noop' | 'throw'>();
   suspended = false;
   failResume = false;
+  resumeFailuresRemaining = 0;
 
   constructor(private readonly events: string[]) {}
 
@@ -226,6 +363,13 @@ class FakeGlobalShortcut implements GlobalShortcutAdapter {
 
   unregister(accelerator: string): void {
     this.events.push(`unregister:${accelerator}`);
+    const failure = this.unregisterFailures.get(accelerator);
+    if (failure === 'throw') {
+      throw new Error('injected unregister failure');
+    }
+    if (failure === 'noop') {
+      return;
+    }
     this.registered.delete(accelerator);
     this.callbacks.delete(accelerator);
   }
@@ -234,15 +378,23 @@ class FakeGlobalShortcut implements GlobalShortcutAdapter {
     return this.registered.has(accelerator);
   }
 
+  isSuspended(): boolean {
+    return this.suspended;
+  }
+
   setSuspended(suspended: boolean): void {
     this.events.push(`suspended:${suspended}`);
-    if (!suspended && this.failResume) {
+    if (!suspended && (this.failResume || this.resumeFailuresRemaining > 0)) {
+      this.resumeFailuresRemaining = Math.max(0, this.resumeFailuresRemaining - 1);
       throw new Error('injected resume failure');
     }
     this.suspended = suspended;
   }
 
   invoke(accelerator: string): void {
+    if (this.suspended) {
+      return;
+    }
     this.callbacks.get(accelerator)?.();
   }
 }
@@ -299,13 +451,14 @@ function createDeferred(): Deferred {
 function createController(
   globalShortcut: FakeGlobalShortcut,
   settingsService: FakeSettings,
-  onToggle: () => void = () => undefined
+  onToggle: () => void = () => undefined,
+  createSessionToken: () => string = () => 'session-token'
 ): QuickPanelShortcutController {
   return new QuickPanelShortcutController({
     platform: 'win32',
     globalShortcut,
     settingsService,
     onToggle,
-    createSessionToken: () => 'session-token'
+    createSessionToken
   });
 }

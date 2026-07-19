@@ -22,12 +22,18 @@ import {
   type QuickPanelShortcutState,
   type QuickPanelPlacement,
   type SettingsInfo,
+  type ShortcutCaptureEndResult,
   type ShortcutPlatform,
   type ShortcutUpdateRequest,
   type ShortcutUpdateResult
 } from '../../shared/settings';
 import type { Candidate, ScanProvider, ScanSourceConfig, ScanTarget, SkillRecord } from '../../shared/types';
 import type { TFunction } from '../i18n';
+import {
+  getShortcutButtonPresentation,
+  restoreShortcutButtonFocus,
+  type ShortcutFocusEvent
+} from '../shortcutCaptureUi';
 import { useFeedbackToast } from './FeedbackToast';
 
 interface SettingsViewProps {
@@ -107,6 +113,14 @@ export function SettingsView({
   const { showToast } = useFeedbackToast();
   const scanSources = Array.isArray(settings.scanSources) ? settings.scanSources : [];
   const activeScanSources = scanSources.length ? scanSources : info?.defaultScanSources ?? [];
+  const shortcutButtonPresentation = getShortcutButtonPresentation({
+    state: shortcutState,
+    recording: recordingShortcut,
+    applying: shortcutSaving,
+    candidate: shortcutCandidate,
+    modifierPreview,
+    t
+  });
 
   useEffect(() => {
     void window.spellbook.getSettingsInfo().then(setInfo);
@@ -129,6 +143,18 @@ export function SettingsView({
       }
     };
   }, []);
+
+  useEffect(
+    () =>
+      window.spellbook.onShortcutCaptureEnded((result) => {
+        shortcutCaptureTokenRef.current = null;
+        setRecordingShortcut(false);
+        setModifierPreview([]);
+        setShortcutCandidate(null);
+        applyShortcutCaptureEndResult(result);
+      }),
+    [t]
+  );
 
   useEffect(() => {
     if (!recordingShortcut) {
@@ -221,13 +247,18 @@ export function SettingsView({
                 </div>
                 <div className="shortcut-editor">
                   <button
-                    aria-describedby={shortcutError ? 'shortcut-inline-error' : undefined}
-                    aria-label={shortcutButtonLabel(shortcutState, t)}
+                    aria-describedby={
+                      shortcutError
+                        ? 'shortcut-capture-description shortcut-inline-error'
+                        : 'shortcut-capture-description'
+                    }
+                    aria-disabled={saving || shortcutSaving || !shortcutState}
+                    aria-label={shortcutButtonPresentation.label}
                     aria-pressed={recordingShortcut}
                     className={
                       recordingShortcut ? 'shortcut-capture recording' : 'shortcut-capture'
                     }
-                    disabled={saving || shortcutSaving || !shortcutState}
+                    disabled={!shortcutState}
                     onClick={() => void startRecordingShortcut()}
                     onKeyDown={handleShortcutKeyDown}
                     ref={shortcutButtonRef}
@@ -262,6 +293,9 @@ export function SettingsView({
                           : t('settings.shortcut.change')}
                     </small>
                   </button>
+                  <span className="sr-only" id="shortcut-capture-description">
+                    {shortcutButtonPresentation.description}
+                  </span>
                   <button
                     className="secondary-button shortcut-reset"
                     disabled={
@@ -477,7 +511,7 @@ export function SettingsView({
   );
 
   async function startRecordingShortcut(preserveError = false): Promise<void> {
-    if (shortcutCaptureTokenRef.current) {
+    if (saving || shortcutSaving || shortcutCaptureTokenRef.current) {
       return;
     }
     if (!preserveError) {
@@ -494,6 +528,7 @@ export function SettingsView({
             : 'settings.shortcut.captureFailed'
         )
       );
+      restoreShortcutButtonFocus('recovery_failed', shortcutButtonRef.current);
       return;
     }
     shortcutCaptureTokenRef.current = result.sessionToken;
@@ -501,6 +536,10 @@ export function SettingsView({
   }
 
   function handleShortcutKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
+    if (saving || shortcutSaving) {
+      event.preventDefault();
+      return;
+    }
     if (!recordingShortcut) {
       return;
     }
@@ -512,14 +551,14 @@ export function SettingsView({
       !event.altKey &&
       !event.shiftKey
     ) {
-      void cancelShortcutCapture(false);
+      void cancelShortcutCapture(false, 'tab');
       return;
     }
     event.preventDefault();
     event.stopPropagation();
 
     if (event.key === 'Escape') {
-      void cancelShortcutCapture(true);
+      void cancelShortcutCapture(true, 'escape');
       return;
     }
     if (event.key === 'Control' || event.key === 'Shift' || event.key === 'Alt' || event.key === 'Meta') {
@@ -570,10 +609,12 @@ export function SettingsView({
   async function updateShortcut(request: ShortcutUpdateRequest): Promise<void> {
     setShortcutSaving(true);
     let restartCapture = false;
+    let focusEvent: ShortcutFocusEvent = 'recovery_failed';
     try {
       const result = await window.spellbook.updateQuickPanelShortcut(request);
       applyShortcutResult(result);
       if (result.ok) {
+        focusEvent = 'success';
         setShortcutError(null);
         showToast(
           t(
@@ -584,6 +625,12 @@ export function SettingsView({
           { variant: 'success' }
         );
       } else {
+        focusEvent =
+          result.error === 'conflict' ||
+          result.error === 'persist_failed' ||
+          result.error === 'recovery_failed'
+            ? result.error
+            : 'recovery_failed';
         setShortcutError(shortcutErrorText(result.error, t));
         restartCapture = request.intent === 'set' && result.error !== 'busy';
       }
@@ -591,6 +638,7 @@ export function SettingsView({
       setShortcutCandidate(null);
       setShortcutSaving(false);
     }
+    restoreShortcutButtonFocus(focusEvent, shortcutButtonRef.current);
     if (restartCapture) {
       await startRecordingShortcut(true);
     }
@@ -608,11 +656,23 @@ export function SettingsView({
     const sessionToken = shortcutCaptureTokenRef.current;
     shortcutCaptureTokenRef.current = null;
     if (sessionToken) {
-      setShortcutState(await window.spellbook.endShortcutCapture(sessionToken));
+      applyShortcutCaptureEndResult(
+        await window.spellbook.endShortcutCapture(sessionToken)
+      );
     }
   }
 
-  async function cancelShortcutCapture(clearError: boolean): Promise<void> {
+  function applyShortcutCaptureEndResult(result: ShortcutCaptureEndResult): void {
+    setShortcutState(result.state);
+    if (!result.ok) {
+      setShortcutError(t('settings.shortcut.recoveryFailed'));
+    }
+  }
+
+  async function cancelShortcutCapture(
+    clearError: boolean,
+    focusEvent: ShortcutFocusEvent = 'outside'
+  ): Promise<void> {
     setRecordingShortcut(false);
     setModifierPreview([]);
     setShortcutCandidate(null);
@@ -620,6 +680,7 @@ export function SettingsView({
       setShortcutError(null);
     }
     await endShortcutCapture();
+    restoreShortcutButtonFocus(focusEvent, shortcutButtonRef.current);
   }
 
   async function dismissShortcutNotice(): Promise<void> {
@@ -801,19 +862,6 @@ function ShortcutHintRow({ label, keys }: { label: string; keys: string[] }) {
       </span>
     </div>
   );
-}
-
-function shortcutButtonLabel(
-  state: QuickPanelShortcutState | null,
-  t: TFunction
-): string {
-  if (!state?.activeAccelerator) {
-    return t('settings.shortcut.set');
-  }
-  return `${t('settings.shortcut.change')}: ${getShortcutAccessibleText(
-    state.activeAccelerator,
-    state.platform
-  )}`;
 }
 
 function shortcutNoticeText(state: QuickPanelShortcutState, t: TFunction): string {

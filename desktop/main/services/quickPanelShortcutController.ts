@@ -4,6 +4,7 @@ import {
   normalizeShortcutAccelerator,
   type QuickPanelShortcutState,
   type ShortcutAccelerator,
+  type ShortcutCaptureEndResult,
   type ShortcutCaptureResult,
   type ShortcutPlatform,
   type ShortcutUpdateRequest,
@@ -15,6 +16,7 @@ export interface GlobalShortcutAdapter {
   register(accelerator: string, callback: () => void): boolean;
   unregister(accelerator: string): void;
   isRegistered(accelerator: string): boolean;
+  isSuspended(): boolean;
   setSuspended(suspended: boolean): void;
 }
 
@@ -128,6 +130,16 @@ export class QuickPanelShortcutController {
     this.updating = true;
     const previous = this.getState();
     try {
+      const suspended = this.isSuspended();
+      if (suspended !== false && !this.resumeListeners()) {
+        this.disable(previous.configuredAccelerator);
+        return { ok: false, error: 'recovery_failed', state: this.getState() };
+      }
+      if (previous.status === 'disabled' && !this.cleanupOwned()) {
+        this.disable(previous.configuredAccelerator);
+        return { ok: false, error: 'recovery_failed', state: this.getState() };
+      }
+
       if (candidate === previous.activeAccelerator) {
         if (
           candidate === previous.configuredAccelerator &&
@@ -162,15 +174,22 @@ export class QuickPanelShortcutController {
       try {
         await this.settingsService.updateQuickPanelShortcut(candidate);
       } catch {
-        this.unregisterOwned(candidate);
-        if (!this.restorePreviousRegistration(previous)) {
+        const candidateReleased = this.unregisterOwned(candidate);
+        if (!candidateReleased || !this.restorePreviousRegistration(previous)) {
+          this.rebuildFromPersisted();
           return { ok: false, error: 'recovery_failed', state: this.getState() };
         }
         return { ok: false, error: 'persist_failed', state: this.getState() };
       }
 
-      if (previous.activeAccelerator) {
-        this.unregisterOwned(previous.activeAccelerator);
+      if (
+        previous.activeAccelerator &&
+        previous.activeAccelerator !== candidate &&
+        !this.unregisterOwned(previous.activeAccelerator)
+      ) {
+        if (!this.rebuildFromPersisted()) {
+          return { ok: false, error: 'recovery_failed', state: this.getState() };
+        }
       }
       if (!this.isRegistered(candidate) && !this.registerOwned(candidate)) {
         this.state = {
@@ -210,34 +229,38 @@ export class QuickPanelShortcutController {
     this.state = { ...this.state, captureActive: true };
     try {
       this.globalShortcut.setSuspended(true);
+      if (this.isSuspended() !== true) {
+        throw new Error('Global shortcut suspension could not be verified');
+      }
       return { ok: true, sessionToken, state: this.getState() };
     } catch {
       this.captureSessionToken = null;
       this.state = { ...this.state, captureActive: false };
+      if (!this.resumeListeners()) {
+        this.disable(this.state.configuredAccelerator);
+      }
       return { ok: false, error: 'failed', state: this.getState() };
     }
   }
 
-  endCapture(sessionToken: string): QuickPanelShortcutState {
+  endCapture(sessionToken: string): ShortcutCaptureEndResult {
     if (!this.captureSessionToken || sessionToken !== this.captureSessionToken) {
-      return this.getState();
+      return { ok: true, state: this.getState() };
     }
-    this.forceEndCapture();
-    return this.getState();
+    return this.forceEndCapture();
   }
 
-  forceEndCapture(): QuickPanelShortcutState {
-    if (this.captureSessionToken) {
-      try {
-        this.globalShortcut.setSuspended(false);
-      } catch {
-        // The guard is still cleared so a renderer crash cannot strand the capture session.
-      } finally {
-        this.captureSessionToken = null;
-        this.state = { ...this.state, captureActive: false };
-      }
+  forceEndCapture(): ShortcutCaptureEndResult {
+    if (!this.captureSessionToken) {
+      return { ok: true, state: this.getState() };
     }
-    return this.getState();
+    this.captureSessionToken = null;
+    this.state = { ...this.state, captureActive: false };
+    if (!this.resumeListeners()) {
+      this.disable(this.state.configuredAccelerator);
+      return { ok: false, error: 'recovery_failed', state: this.getState() };
+    }
+    return { ok: true, state: this.getState() };
   }
 
   dismissStartupNotice(): QuickPanelShortcutState {
@@ -246,11 +269,12 @@ export class QuickPanelShortcutController {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.forceEndCapture();
+    this.disable(this.state.configuredAccelerator);
     for (const accelerator of [...this.ownedAccelerators]) {
       this.unregisterOwned(accelerator);
     }
-    this.disposed = true;
   }
 
   private registerOwned(accelerator: ShortcutAccelerator): boolean {
@@ -259,46 +283,69 @@ export class QuickPanelShortcutController {
     }
     try {
       const registered = this.globalShortcut.register(accelerator, () => {
-        if (!this.captureSessionToken && !this.updating && !this.disposed) {
+        if (
+          !this.captureSessionToken &&
+          !this.updating &&
+          !this.disposed &&
+          this.state.status !== 'disabled' &&
+          this.state.activeAccelerator === accelerator
+        ) {
           this.onToggle();
         }
       });
-      if (!registered || !this.globalShortcut.isRegistered(accelerator)) {
-        if (registered) {
-          this.globalShortcut.unregister(accelerator);
-        }
+      if (!registered) {
         return false;
       }
       this.ownedAccelerators.add(accelerator);
+      if (this.isRegistered(accelerator) !== true) {
+        if (registered) {
+          this.unregisterOwned(accelerator);
+        }
+        return false;
+      }
       return true;
     } catch {
       return false;
     }
   }
 
-  private unregisterOwned(accelerator: ShortcutAccelerator): void {
+  private unregisterOwned(accelerator: ShortcutAccelerator): boolean {
     if (!this.ownedAccelerators.has(accelerator)) {
-      return;
+      return this.isRegistered(accelerator) === false;
     }
-    this.globalShortcut.unregister(accelerator);
+    try {
+      this.globalShortcut.unregister(accelerator);
+    } catch {
+      // Verification below is authoritative; exceptions alone do not prove cleanup.
+    }
+    if (this.isRegistered(accelerator) !== false) {
+      return false;
+    }
     this.ownedAccelerators.delete(accelerator);
+    return true;
   }
 
-  private isRegistered(accelerator: ShortcutAccelerator): boolean {
+  private isRegistered(accelerator: ShortcutAccelerator): boolean | null {
     try {
       return this.globalShortcut.isRegistered(accelerator);
     } catch {
-      return false;
+      return null;
     }
   }
 
   private restorePreviousRegistration(previous: QuickPanelShortcutState): boolean {
+    this.disable(previous.configuredAccelerator);
+    for (const accelerator of [...this.ownedAccelerators]) {
+      if (accelerator !== previous.activeAccelerator && !this.unregisterOwned(accelerator)) {
+        return false;
+      }
+    }
     if (!previous.activeAccelerator) {
       this.state = previous;
       return true;
     }
     if (
-      !this.isRegistered(previous.activeAccelerator) &&
+      this.isRegistered(previous.activeAccelerator) !== true &&
       !this.registerOwned(previous.activeAccelerator)
     ) {
       this.state = {
@@ -311,5 +358,69 @@ export class QuickPanelShortcutController {
     }
     this.state = previous;
     return true;
+  }
+
+  private cleanupOwned(): boolean {
+    let cleaned = true;
+    for (const accelerator of [...this.ownedAccelerators]) {
+      if (!this.unregisterOwned(accelerator)) {
+        cleaned = false;
+      }
+    }
+    return cleaned;
+  }
+
+  private rebuildFromPersisted(): boolean {
+    const configured =
+      normalizeShortcutAccelerator(
+        this.settingsService.getSettings().quickPanelShortcut,
+        this.platform
+      ) ?? DEFAULT_QUICK_PANEL_SHORTCUT;
+    this.disable(configured);
+    if (!this.cleanupOwned() || !this.registerOwned(configured)) {
+      this.disable(configured);
+      return false;
+    }
+    this.state = {
+      ...this.state,
+      configuredAccelerator: configured,
+      activeAccelerator: configured,
+      status: 'active',
+      startupNotice: null
+    };
+    return true;
+  }
+
+  private resumeListeners(): boolean {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        this.globalShortcut.setSuspended(false);
+      } catch {
+        // The postcondition decides whether retry/recovery succeeded.
+      }
+      if (this.isSuspended() === false) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isSuspended(): boolean | null {
+    try {
+      return this.globalShortcut.isSuspended();
+    } catch {
+      return null;
+    }
+  }
+
+  private disable(configuredAccelerator: ShortcutAccelerator): void {
+    this.state = {
+      ...this.state,
+      configuredAccelerator,
+      activeAccelerator: null,
+      status: 'disabled',
+      captureActive: false,
+      startupNotice: 'all_shortcuts_unavailable'
+    };
   }
 }

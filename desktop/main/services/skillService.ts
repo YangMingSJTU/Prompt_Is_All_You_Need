@@ -59,29 +59,30 @@ export function createSkillService(db: AppDatabase, options: SkillServiceOptions
         skills.push(...(await scanRoot(root)));
       }
 
-      db.run('DELETE FROM skills');
-      for (const skill of skills) {
-        db.run(
-          `INSERT OR REPLACE INTO skills
-            (id, platform, name, description, root_path, entry_file_path, file_count, files, updated_at, packageable, install_state)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            skill.id,
-            skill.platform,
-            skill.name,
-            skill.description,
-            skill.rootPath,
-            skill.entryFilePath,
-            skill.fileCount,
-            JSON.stringify(skill.files),
-            skill.updatedAt,
-            skill.packageable ? 1 : 0,
-            skill.installState
-          ]
-        );
-      }
-      await db.save();
-      return this.listSkills();
+      return db.transaction(() => {
+        db.run('DELETE FROM skills');
+        for (const skill of skills) {
+          db.run(
+            `INSERT OR REPLACE INTO skills
+              (id, platform, name, description, root_path, entry_file_path, file_count, files, updated_at, packageable, install_state)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              skill.id,
+              skill.platform,
+              skill.name,
+              skill.description,
+              skill.rootPath,
+              skill.entryFilePath,
+              skill.fileCount,
+              JSON.stringify(skill.files),
+              skill.updatedAt,
+              skill.packageable ? 1 : 0,
+              skill.installState
+            ]
+          );
+        }
+        return db.all<SkillRow>('SELECT * FROM skills ORDER BY platform ASC, name ASC').map(rowToSkill);
+      });
     },
 
     async listSkills(): Promise<SkillRecord[]> {

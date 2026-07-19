@@ -90,14 +90,14 @@ describe('settings service', () => {
     await workingService.updateQuickPanelShortcut('CommandOrControl+Alt+K');
     const failingService = createSettingsService({
       ...db,
-      async save() {
-        throw new Error('injected save failure');
+      async transaction<T>(_operation: () => T | Promise<T>): Promise<T> {
+        throw new Error('injected transaction failure');
       }
     });
 
     await expect(
       failingService.updateQuickPanelShortcut('CommandOrControl+Shift+P')
-    ).rejects.toThrow('injected save failure');
+    ).rejects.toThrow('injected transaction failure');
     expect(failingService.getSettings().quickPanelShortcut).toBe('CommandOrControl+Alt+K');
   });
 });

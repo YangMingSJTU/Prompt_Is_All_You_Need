@@ -8,7 +8,7 @@ export interface AppDatabase {
   all<T extends Record<string, unknown>>(sql: string, params?: unknown[]): T[];
   get<T extends Record<string, unknown>>(sql: string, params?: unknown[]): T | null;
   exportBytes(): Uint8Array;
-  save(): Promise<void>;
+  transaction<T>(operation: () => T | Promise<T>): Promise<T>;
 }
 
 export interface DatabaseFileOperations {
@@ -41,7 +41,7 @@ let sqlModulePromise: Promise<SqlJsStatic> | null = null;
 
 export async function createTestDatabase(): Promise<AppDatabase> {
   const SQL = await getSqlModule();
-  return wrapDatabase(new SQL.Database(), null, DEFAULT_FILE_OPERATIONS);
+  return wrapDatabase(SQL, new SQL.Database(), null, DEFAULT_FILE_OPERATIONS);
 }
 
 export async function openAppDatabase(
@@ -56,7 +56,7 @@ export async function openAppDatabase(
   } catch {
     db = new SQL.Database();
   }
-  return wrapDatabase(db, filePath, fileOperations);
+  return wrapDatabase(SQL, db, filePath, fileOperations);
 }
 
 async function getSqlModule(): Promise<SqlJsStatic> {
@@ -67,12 +67,30 @@ async function getSqlModule(): Promise<SqlJsStatic> {
 }
 
 function wrapDatabase(
-  db: SqlJsDatabase,
+  SQL: SqlJsStatic,
+  initialDatabase: SqlJsDatabase,
   filePath: string | null,
   fileOperations: DatabaseFileOperations
 ): AppDatabase {
+  let db = initialDatabase;
+  let transactionQueue = Promise.resolve();
   createSchema(db);
-  return {
+
+  async function persist(bytes: Uint8Array): Promise<void> {
+    if (!filePath) {
+      return;
+    }
+    await fileOperations.makeDirectory(dirname(filePath));
+    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await fileOperations.write(temporaryPath, bytes);
+      await fileOperations.replace(temporaryPath, filePath);
+    } finally {
+      await fileOperations.remove(temporaryPath).catch(() => undefined);
+    }
+  }
+
+  const appDatabase: AppDatabase = {
     run(sql: string, params: unknown[] = []) {
       db.run(sql, params as never[]);
     },
@@ -95,20 +113,28 @@ function wrapDatabase(
     exportBytes() {
       return db.export();
     },
-    async save() {
-      if (!filePath) {
-        return;
-      }
-      await fileOperations.makeDirectory(dirname(filePath));
-      const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-      try {
-        await fileOperations.write(temporaryPath, db.export());
-        await fileOperations.replace(temporaryPath, filePath);
-      } finally {
-        await fileOperations.remove(temporaryPath).catch(() => undefined);
-      }
+    transaction<T>(operation: () => T | Promise<T>): Promise<T> {
+      const execute = async (): Promise<T> => {
+        const snapshot = db.export();
+        try {
+          const result = await operation();
+          await persist(db.export());
+          return result;
+        } catch (error) {
+          db.close();
+          db = new SQL.Database(snapshot);
+          throw error;
+        }
+      };
+      const result = transactionQueue.then(execute, execute);
+      transactionQueue = result.then(
+        () => undefined,
+        () => undefined
+      );
+      return result;
     }
   };
+  return appDatabase;
 }
 
 function createSchema(db: SqlJsDatabase): void {

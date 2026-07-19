@@ -20,10 +20,6 @@ interface SettingRow {
   value: string;
 }
 
-interface StoredSettingRow extends SettingRow {
-  updated_at: string;
-}
-
 export interface SettingsService {
   getSettings(): AppSettings;
   updateSettings(patch: AppSettingsPatch): Promise<AppSettings>;
@@ -50,46 +46,50 @@ export function createSettingsService(db: AppDatabase): SettingsService {
       if ('quickPanelShortcut' in (patch as Record<string, unknown>)) {
         throw new Error('quickPanelShortcut must be updated through the shortcut controller');
       }
-      const current = this.getSettings();
-      const next: AppSettings = {
-        language:
-          patch.language === undefined
-            ? current.language
-            : normalizeLanguage(patch.language),
-        quickPanelShortcut: current.quickPanelShortcut,
-        quickPanelPlacement:
-          patch.quickPanelPlacement === undefined
-            ? current.quickPanelPlacement
-            : normalizePlacement(patch.quickPanelPlacement),
-        quickPanelPinned:
-          patch.quickPanelPinned === undefined
-            ? current.quickPanelPinned
-            : normalizePinned(patch.quickPanelPinned),
-        recommendationPanelOpen:
-          patch.recommendationPanelOpen === undefined
-            ? current.recommendationPanelOpen
-            : normalizeRecommendationPanelOpen(patch.recommendationPanelOpen),
-        scanSources:
-          patch.scanSources === undefined
-            ? current.scanSources
-            : normalizeScanSources(patch.scanSources)
-      };
-      await persistSettings(db, [
-        ['language', next.language],
-        ['quickPanelPlacement', next.quickPanelPlacement],
-        ['quickPanelPinned', String(next.quickPanelPinned)],
-        ['recommendationPanelOpen', String(next.recommendationPanelOpen)],
-        ['scanSources', JSON.stringify(next.scanSources)]
-      ]);
-      return next;
+      return db.transaction(() => {
+        const current = this.getSettings();
+        const next: AppSettings = {
+          language:
+            patch.language === undefined
+              ? current.language
+              : normalizeLanguage(patch.language),
+          quickPanelShortcut: current.quickPanelShortcut,
+          quickPanelPlacement:
+            patch.quickPanelPlacement === undefined
+              ? current.quickPanelPlacement
+              : normalizePlacement(patch.quickPanelPlacement),
+          quickPanelPinned:
+            patch.quickPanelPinned === undefined
+              ? current.quickPanelPinned
+              : normalizePinned(patch.quickPanelPinned),
+          recommendationPanelOpen:
+            patch.recommendationPanelOpen === undefined
+              ? current.recommendationPanelOpen
+              : normalizeRecommendationPanelOpen(patch.recommendationPanelOpen),
+          scanSources:
+            patch.scanSources === undefined
+              ? current.scanSources
+              : normalizeScanSources(patch.scanSources)
+        };
+        writeSettings(db, [
+          ['language', next.language],
+          ['quickPanelPlacement', next.quickPanelPlacement],
+          ['quickPanelPinned', String(next.quickPanelPinned)],
+          ['recommendationPanelOpen', String(next.recommendationPanelOpen)],
+          ['scanSources', JSON.stringify(next.scanSources)]
+        ]);
+        return next;
+      });
     },
     async updateQuickPanelShortcut(shortcut) {
       const normalized = normalizeShortcutAccelerator(shortcut);
       if (!normalized) {
         throw new Error('Invalid quick panel shortcut');
       }
-      await persistSettings(db, [['quickPanelShortcut', normalized]]);
-      return this.getSettings();
+      return db.transaction(() => {
+        writeSettings(db, [['quickPanelShortcut', normalized]]);
+        return this.getSettings();
+      });
     }
   };
 }
@@ -206,36 +206,12 @@ function writeSetting(db: AppDatabase, key: keyof AppSettings, value: string, up
   );
 }
 
-async function persistSettings(
+function writeSettings(
   db: AppDatabase,
   entries: Array<[keyof AppSettings, string]>
-): Promise<void> {
-  const snapshots = new Map<keyof AppSettings, StoredSettingRow | null>();
-  for (const [key] of entries) {
-    snapshots.set(
-      key,
-      db.get<StoredSettingRow>(
-        'SELECT key, value, updated_at FROM app_settings WHERE key = ?',
-        [key]
-      )
-    );
-  }
-
+): void {
   const now = new Date().toISOString();
   for (const [key, value] of entries) {
     writeSetting(db, key, value, now);
-  }
-
-  try {
-    await db.save();
-  } catch (error) {
-    for (const [key, snapshot] of snapshots) {
-      if (snapshot) {
-        writeSetting(db, key, snapshot.value, snapshot.updated_at);
-      } else {
-        db.run('DELETE FROM app_settings WHERE key = ?', [key]);
-      }
-    }
-    throw error;
   }
 }

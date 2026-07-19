@@ -75,6 +75,10 @@ export type ShortcutCaptureResult =
   | { ok: true; sessionToken: string; state: QuickPanelShortcutState }
   | { ok: false; error: 'busy' | 'failed'; state: QuickPanelShortcutState };
 
+export type ShortcutCaptureEndResult =
+  | { ok: true; state: QuickPanelShortcutState }
+  | { ok: false; error: 'recovery_failed'; state: QuickPanelShortcutState };
+
 export interface SettingsInfo {
   databasePath: string;
   defaultScanSources: ScanSourceConfig[];

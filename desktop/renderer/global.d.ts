@@ -4,6 +4,7 @@ import type {
   QuickPanelShortcutState,
   SettingsInfo,
   SettingsUpdateResult,
+  ShortcutCaptureEndResult,
   ShortcutCaptureResult,
   ShortcutUpdateRequest,
   ShortcutUpdateResult,
@@ -59,7 +60,10 @@ declare global {
       getQuickPanelShortcutState(): Promise<QuickPanelShortcutState>;
       updateQuickPanelShortcut(request: ShortcutUpdateRequest): Promise<ShortcutUpdateResult>;
       beginShortcutCapture(): Promise<ShortcutCaptureResult>;
-      endShortcutCapture(sessionToken: string): Promise<QuickPanelShortcutState>;
+      endShortcutCapture(sessionToken: string): Promise<ShortcutCaptureEndResult>;
+      onShortcutCaptureEnded(
+        callback: (result: ShortcutCaptureEndResult) => void
+      ): () => void;
       dismissShortcutStartupNotice(): Promise<QuickPanelShortcutState>;
       setRecommendationPanelWindowOpen(open: boolean, panelWidth?: number): Promise<void>;
       selectDirectory(defaultPath?: string): Promise<string | null>;

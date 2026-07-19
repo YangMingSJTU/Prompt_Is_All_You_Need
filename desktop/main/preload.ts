@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AppSettingsPatch,
   QuickPanelShortcutState,
+  ShortcutCaptureEndResult,
   ShortcutCaptureResult,
   ShortcutUpdateRequest,
   ShortcutUpdateResult
@@ -48,8 +49,14 @@ contextBridge.exposeInMainWorld('spellbook', {
     ipcRenderer.invoke('shortcut:update', request),
   beginShortcutCapture: (): Promise<ShortcutCaptureResult> =>
     ipcRenderer.invoke('shortcut:beginCapture'),
-  endShortcutCapture: (sessionToken: string): Promise<QuickPanelShortcutState> =>
+  endShortcutCapture: (sessionToken: string): Promise<ShortcutCaptureEndResult> =>
     ipcRenderer.invoke('shortcut:endCapture', sessionToken),
+  onShortcutCaptureEnded: (callback: (result: ShortcutCaptureEndResult) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, result: ShortcutCaptureEndResult) =>
+      callback(result);
+    ipcRenderer.on('shortcut:capture-ended', listener);
+    return () => ipcRenderer.removeListener('shortcut:capture-ended', listener);
+  },
   dismissShortcutStartupNotice: (): Promise<QuickPanelShortcutState> =>
     ipcRenderer.invoke('shortcut:dismissStartupNotice'),
   setRecommendationPanelWindowOpen: (open: boolean, panelWidth?: number): Promise<void> =>

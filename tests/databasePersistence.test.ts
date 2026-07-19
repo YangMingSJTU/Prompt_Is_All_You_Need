@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import {
   openAppDatabase,
   type DatabaseFileOperations
 } from '../desktop/main/services/database';
+import { createSettingsService } from '../desktop/main/services/settingsService';
 
 const temporaryDirectories: string[] = [];
 
@@ -25,12 +26,13 @@ describe('database persistence', () => {
     const operations = createTrackedOperations(calls);
     const db = await openAppDatabase(databasePath, operations);
 
-    db.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
-      'language',
-      'en',
-      '2026-07-19T00:00:00.000Z'
-    ]);
-    await db.save();
+    await db.transaction(() => {
+      db.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
+        'language',
+        'en',
+        '2026-07-19T00:00:00.000Z'
+      ]);
+    });
 
     expect(calls[0]).toBe('mkdir');
     expect(calls[1]).toMatch(/^write:spellbook\.db\..+\.tmp$/);
@@ -43,20 +45,27 @@ describe('database persistence', () => {
     const directory = await createTemporaryDirectory();
     const databasePath = join(directory, 'spellbook.db');
     const initial = await openAppDatabase(databasePath);
-    initial.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
-      'language',
-      'en',
-      '2026-07-19T00:00:00.000Z'
-    ]);
-    await initial.save();
+    await initial.transaction(() => {
+      initial.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
+        'language',
+        'en',
+        '2026-07-19T00:00:00.000Z'
+      ]);
+    });
     const originalBytes = await readFile(databasePath);
 
     const operations = createTrackedOperations([], 'replace');
     const db = await openAppDatabase(databasePath, operations);
-    db.run('UPDATE app_settings SET value = ? WHERE key = ?', ['zh', 'language']);
-
-    await expect(db.save()).rejects.toThrow('injected replace failure');
+    await expect(
+      db.transaction(() => {
+        db.run('UPDATE app_settings SET value = ? WHERE key = ?', ['zh', 'language']);
+      })
+    ).rejects.toThrow('injected replace failure');
     expect(await readFile(databasePath)).toEqual(originalBytes);
+    expect(
+      db.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', ['language'])
+        ?.value
+    ).toBe('en');
     expect(await readdir(directory)).toEqual(['spellbook.db']);
   });
 
@@ -64,13 +73,13 @@ describe('database persistence', () => {
     const directory = await createTemporaryDirectory();
     const databasePath = join(directory, 'spellbook.db');
     const initial = await openAppDatabase(databasePath);
-    await initial.save();
+    await initial.transaction(() => undefined);
     const originalBytes = await readFile(databasePath);
 
     const operations = createTrackedOperations([], 'write');
     const db = await openAppDatabase(databasePath, operations);
 
-    await expect(db.save()).rejects.toThrow('injected write failure');
+    await expect(db.transaction(() => undefined)).rejects.toThrow('injected write failure');
     expect(await readFile(databasePath)).toEqual(originalBytes);
     expect(await readdir(directory)).toEqual(['spellbook.db']);
   });
@@ -79,14 +88,16 @@ describe('database persistence', () => {
     const directory = await createTemporaryDirectory();
     const databasePath = join(directory, 'spellbook.db');
     const db = await openAppDatabase(databasePath);
-    db.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
-      'language',
-      'en',
-      '2026-07-19T00:00:00.000Z'
-    ]);
-    await db.save();
-    db.run('UPDATE app_settings SET value = ? WHERE key = ?', ['zh', 'language']);
-    await db.save();
+    await db.transaction(() => {
+      db.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
+        'language',
+        'en',
+        '2026-07-19T00:00:00.000Z'
+      ]);
+    });
+    await db.transaction(() => {
+      db.run('UPDATE app_settings SET value = ? WHERE key = ?', ['zh', 'language']);
+    });
 
     const reopened = await openAppDatabase(databasePath);
     expect(
@@ -95,6 +106,55 @@ describe('database persistence', () => {
       ])?.value
     ).toBe('zh');
     expect(await readdir(directory)).toEqual(['spellbook.db']);
+  });
+
+  it('rolls back a failed shortcut write before allowing another service write to persist', async () => {
+    const directory = await createTemporaryDirectory();
+    const databasePath = join(directory, 'spellbook.db');
+    const initial = await openAppDatabase(databasePath);
+    const initialSettings = createSettingsService(initial);
+    await initialSettings.updateQuickPanelShortcut('Alt+Space');
+
+    const deferred = createDeferredReplaceOperations({ failFirst: true });
+    const db = await openAppDatabase(databasePath, deferred.operations);
+    const settings = createSettingsService(db);
+    const shortcutWrite = settings.updateQuickPanelShortcut('Control+Space');
+    await deferred.firstReplaceStarted;
+    const languageWrite = settings.updateSettings({ language: 'zh' });
+
+    deferred.releaseFirstReplace();
+    await expect(shortcutWrite).rejects.toThrow('injected deferred replace failure');
+    await languageWrite;
+
+    expect(settings.getSettings().quickPanelShortcut).toBe('Alt+Space');
+    expect(settings.getSettings().language).toBe('zh');
+    const reopened = createSettingsService(await openAppDatabase(databasePath));
+    expect(reopened.getSettings().quickPanelShortcut).toBe('Alt+Space');
+    expect(reopened.getSettings().language).toBe('zh');
+  });
+
+  it('serializes successful replacements so a later snapshot cannot finish first', async () => {
+    const directory = await createTemporaryDirectory();
+    const databasePath = join(directory, 'spellbook.db');
+    const initial = await openAppDatabase(databasePath);
+    await initial.transaction(() => undefined);
+
+    const deferred = createDeferredReplaceOperations({ failFirst: false });
+    const db = await openAppDatabase(databasePath, deferred.operations);
+    const settings = createSettingsService(db);
+    const firstWrite = settings.updateSettings({ language: 'zh' });
+    await deferred.firstReplaceStarted;
+    const secondWrite = settings.updateSettings({ quickPanelPlacement: 'mouse' });
+
+    await Promise.resolve();
+    expect(deferred.replaceCount()).toBe(1);
+    deferred.releaseFirstReplace();
+    await Promise.all([firstWrite, secondWrite]);
+
+    const reopened = createSettingsService(await openAppDatabase(databasePath));
+    expect(reopened.getSettings().language).toBe('zh');
+    expect(reopened.getSettings().quickPanelPlacement).toBe('mouse');
+    expect(deferred.replaceCount()).toBe(2);
   });
 });
 
@@ -136,6 +196,55 @@ function createTrackedOperations(
     async remove(path) {
       calls.push(`remove:${path.split(/[\\/]/).at(-1)}`);
       await rm(path, { force: true });
+    }
+  };
+}
+
+function createDeferredReplaceOperations(options: { failFirst: boolean }): {
+  operations: DatabaseFileOperations;
+  firstReplaceStarted: Promise<void>;
+  releaseFirstReplace(): void;
+  replaceCount(): number;
+} {
+  let replaceCount = 0;
+  let markStarted: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const firstReplaceStarted = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const firstReplaceReleased = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    operations: {
+      async read(path) {
+        return readFile(path);
+      },
+      async makeDirectory() {},
+      async write(path, bytes) {
+        await writeFile(path, bytes);
+      },
+      async replace(sourcePath, targetPath) {
+        replaceCount += 1;
+        if (replaceCount === 1) {
+          markStarted();
+          await firstReplaceReleased;
+          if (options.failFirst) {
+            throw new Error('injected deferred replace failure');
+          }
+        }
+        await rename(sourcePath, targetPath);
+      },
+      async remove(path) {
+        await rm(path, { force: true });
+      }
+    },
+    firstReplaceStarted,
+    releaseFirstReplace() {
+      release();
+    },
+    replaceCount() {
+      return replaceCount;
     }
   };
 }
