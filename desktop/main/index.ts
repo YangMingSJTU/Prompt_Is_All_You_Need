@@ -21,9 +21,6 @@ import {
 } from '../shared/layout';
 import type {
   FloatingWindowState,
-  ScanProvider,
-  ScanRunRequest,
-  ScanSourceConfig,
   SourceFileSummary,
   SpellCreateInput,
   SpellStatePatch,
@@ -45,6 +42,7 @@ import {
   hasSuccessfulSourceScan,
   scanJsonlFiles
 } from './services/scanner';
+import { resolveScanRequest } from './services/scanRequest';
 import {
   areScanSourcesValid,
   createSettingsService,
@@ -324,36 +322,48 @@ async function bootstrap(): Promise<void> {
     applyAppIdentity();
     return { settings };
   });
-  ipcMain.handle('scanner:run', async (_event, request: ScanRunRequest) => {
+  ipcMain.handle('scanner:run', async (_event, request: unknown) => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
     }
-    const scanRequest = normalizeScanRunRequest(request, settingsService.getSettings().scanSources);
-    const roots = scanRequest.scanSources.filter(
-      (source) =>
-        source.enabled &&
-        source.target === scanRequest.target &&
-        scanRequest.providers.includes(source.provider)
+    const scanRequest = resolveScanRequest(
+      request,
+      settingsService.getSettings().scanSources,
+      platformPathContext
     );
+    const roots = scanRequest.scanSources;
     const summaries: SourceFileSummary[] = [];
     const allPrompts = [];
 
     for (const root of roots) {
-      const discovery = await discoverJsonlFiles(root.path);
-      if (discovery.status !== 'success') {
+      const discovery = await discoverJsonlFiles(root.path, { pathContext: platformPathContext });
+      if (discovery.status === 'missing') {
         summaries.push({
           id: `${root.provider}:${root.path}`,
           sourceTool: root.provider,
           path: root.path,
-          status: discovery.status,
+          status: 'missing',
           lineCount: 0,
           promptCount: 0,
-          warningCount: discovery.status === 'missing' ? 0 : 1,
+          warningCount: 0,
           scannedAt: new Date().toISOString()
         });
         continue;
       }
-      if (discovery.files.length === 0) {
+      discovery.errors.forEach((error, index) => {
+        summaries.push({
+          id: `${root.provider}:${error.path}:discovery:${index}`,
+          sourceTool: root.provider,
+          path: error.path,
+          status: error.code === 'permission_denied' ? 'unreadable' : 'failed',
+          lineCount: 0,
+          promptCount: 0,
+          warningCount: 1,
+          scannedAt: new Date().toISOString(),
+          error
+        });
+      });
+      if (discovery.files.length === 0 && discovery.errors.length === 0) {
         summaries.push({
           id: `${root.provider}:${root.path}`,
           sourceTool: root.provider,
@@ -365,7 +375,11 @@ async function bootstrap(): Promise<void> {
           scannedAt: new Date().toISOString()
         });
       }
-      const summary = await scanJsonlFiles(discovery.files, root.provider);
+      const summary = await scanJsonlFiles(
+        discovery.files,
+        root.provider,
+        { pathContext: platformPathContext }
+      );
       summaries.push(...summary.sourceFiles);
       allPrompts.push(...summary.prompts);
     }
@@ -462,33 +476,6 @@ function applyAppIdentity(): void {
   tray?.setToolTip(name);
 }
 
-function normalizeScanRunRequest(request: ScanRunRequest, fallbackSources: ScanSourceConfig[]): ScanRunRequest {
-  const target = 'spells';
-  const providers = Array.isArray(request?.providers)
-    ? request.providers.filter((provider): provider is ScanProvider => provider === 'claude' || provider === 'codex')
-    : [];
-  const scanSources = Array.isArray(request?.scanSources)
-    ? request.scanSources.filter(isScanSourceConfig)
-    : [];
-  return {
-    target,
-    providers: providers.length ? [...new Set(providers)] : ['claude', 'codex'],
-    scanSources: scanSources.length ? scanSources : fallbackSources
-  };
-}
-
-function isScanSourceConfig(value: unknown): value is ScanSourceConfig {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const source = value as Record<string, unknown>;
-  return (
-    (source.provider === 'claude' || source.provider === 'codex') &&
-    source.target === 'spells' &&
-    typeof source.path === 'string' &&
-    typeof source.enabled === 'boolean'
-  );
-}
 
 function registerQuickPanelShortcut(shortcut: ShortcutAccelerator): boolean {
   const accelerator = normalizeShortcutAccelerator(shortcut);
@@ -614,15 +601,15 @@ const preflightResult = runAppPreflight({
 
 const appReadiness = createAppReadinessBarrier({
   async startApplication() {
-    await app.whenReady();
-    platformPaths = createPlatformPaths({
-      platform: desktopPlatform,
-      homeDirectory: homedir(),
-      userDataDirectory: app.getPath('userData'),
-      env: process.env
-    });
     return runAppStartup({
       async initialize() {
+        await app.whenReady();
+        platformPaths = createPlatformPaths({
+          platform: desktopPlatform,
+          homeDirectory: homedir(),
+          userDataDirectory: app.getPath('userData'),
+          env: process.env
+        });
         await bootstrap();
       },
       async createWindows() {

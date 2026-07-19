@@ -76,7 +76,6 @@ export interface ScanSourceConfig {
 export interface ScanRunRequest {
   target: ScanTarget;
   providers: ScanProvider[];
-  scanSources: ScanSourceConfig[];
 }
 
 export interface Candidate {
@@ -93,6 +92,12 @@ export interface Candidate {
   updatedAt: string;
 }
 
+export interface ScanSourceError {
+  code: 'permission_denied' | 'io_error';
+  path: string;
+  retryable: true;
+}
+
 export interface SourceFileSummary {
   id: string;
   sourceTool: SourceTool;
@@ -102,6 +107,7 @@ export interface SourceFileSummary {
   promptCount: number;
   warningCount: number;
   scannedAt: string;
+  error?: ScanSourceError;
 }
 
 export interface ScanSummary {

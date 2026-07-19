@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runAppPreflight, runAppStartup } from '../desktop/main/services/appStartup';
 import { openAppDatabase } from '../desktop/main/services/database';
+import { createPlatformPaths } from '../desktop/main/services/platformPaths';
 
 const originalCwd = process.cwd();
 
@@ -82,6 +83,41 @@ describe('app startup', () => {
       expect.objectContaining({
         title: 'Spellbook failed to start',
         message: expect.stringContaining('sql-wasm.wasm is missing')
+      })
+    ]);
+  });
+
+  it('reports an invalid platform override before creating a window', async () => {
+    const feedback: Array<{ title: string; message: string }> = [];
+    let windowsCreated = 0;
+    let quitCalls = 0;
+
+    const result = await runAppStartup({
+      async initialize() {
+        createPlatformPaths({
+          platform: 'darwin',
+          homeDirectory: '/Users/Ada',
+          userDataDirectory: '/Users/Ada/Library/Application Support/Spellbook',
+          env: { CODEX_HOME: '../relative-codex-home' }
+        });
+      },
+      async createWindows() {
+        windowsCreated += 1;
+      },
+      showFailure(value) {
+        feedback.push(value);
+      },
+      quit() {
+        quitCalls += 1;
+      }
+    });
+
+    expect(result).toBe('failed');
+    expect(windowsCreated).toBe(0);
+    expect(quitCalls).toBe(1);
+    expect(feedback).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining('CODEX_HOME must be an absolute darwin path')
       })
     ]);
   });

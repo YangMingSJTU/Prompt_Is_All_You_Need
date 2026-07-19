@@ -68,6 +68,9 @@ describe('platform paths', () => {
 
     expect(isAbsolutePlatformPath('C:\\Users\\Ada\\history', windows)).toBe(true);
     expect(isAbsolutePlatformPath('\\\\server\\share\\history', windows)).toBe(true);
+    expect(isAbsolutePlatformPath('\\\\server', windows)).toBe(false);
+    expect(isAbsolutePlatformPath('\\\\.\\PhysicalDrive0', windows)).toBe(false);
+    expect(isAbsolutePlatformPath('\\\\?\\C:\\Users\\Ada\\history', windows)).toBe(false);
     expect(isAbsolutePlatformPath('/Users/Ada/history', windows)).toBe(false);
     expect(isAbsolutePlatformPath('/Users/Ada/history', mac)).toBe(true);
     expect(isAbsolutePlatformPath('C:\\Users\\Ada\\history', mac)).toBe(false);
@@ -92,5 +95,25 @@ describe('platform paths', () => {
         env: { CODEX_HOME: 'C:\\Users\\Ada\\.codex' }
       })
     ).toThrow('CODEX_HOME must be an absolute darwin path');
+  });
+
+  it('falls back to platform defaults for empty environment overrides', () => {
+    const windows = createPlatformPaths({
+      platform: 'win32',
+      homeDirectory: 'C:\\Users\\Ada',
+      userDataDirectory: 'C:\\Users\\Ada\\AppData\\Roaming\\Spellbook',
+      env: { CLAUDE_CONFIG_DIR: '  ', CODEX_HOME: '' }
+    });
+    const mac = createPlatformPaths({
+      platform: 'darwin',
+      homeDirectory: '/Users/Ada',
+      userDataDirectory: '/Users/Ada/Library/Application Support/Spellbook',
+      env: { CLAUDE_CONFIG_DIR: '', CODEX_HOME: '  ' }
+    });
+
+    expect(windows.historyRoots.map((root) => root.path)).toEqual([
+      'C:\\Users\\Ada\\.claude', 'C:\\Users\\Ada\\.codex'
+    ]);
+    expect(mac.historyRoots.map((root) => root.path)).toEqual(['/Users/Ada/.claude', '/Users/Ada/.codex']);
   });
 });

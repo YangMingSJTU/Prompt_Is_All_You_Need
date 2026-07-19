@@ -16,7 +16,7 @@ Electron startup creates one platform context from `process.platform`, `os.homed
 | Claude skills | `~\\.claude\\skills` | `~/.claude/skills` |
 | Codex skills | `~\\.agents\\skills` | `~/.agents/skills` |
 
-Persisted history overrides take precedence over defaults and must be absolute according to the current OS. Windows drive and UNC paths are valid on Windows. A path from the other OS and any relative path are rejected. Resetting a source restores the current platform/environment default. Skill roots remain fixed provider user directories.
+Persisted history overrides take precedence over defaults and must be absolute according to the current OS. Windows drive paths and complete `\\server\\share` UNC paths are valid on Windows; device namespaces such as `\\.\\` and `\\?\\`, incomplete UNC paths, paths from the other OS, and relative paths are rejected. Empty environment overrides use the provider default. Resetting a source restores the current platform/environment default. Skill roots remain fixed provider user directories.
 
 The app is in active development and has no online users. This change directly switches local app data to Electron user data. It does not migrate, delete, or silently reuse the old `~/.spellbook` directory.
 
@@ -37,7 +37,7 @@ Collision keys use Unicode NFC plus lower-case comparison. Any two entries with 
 
 SQL.js WASM and runtime icons are build-time assets. Runtime code must not guess their location from the working directory. The database is created only when the database file is absent. Permission, lock, and corrupt-database failures are surfaced and must never fall back to a new empty database.
 
-Missing optional history roots are reported separately from unreadable or failed roots. Permission and I/O failures must not appear as an empty successful scan.
+The renderer requests scans by target and provider only; the main process reads and validates the persisted source paths. Missing optional history roots are reported separately from unreadable or failed roots. A failed directory branch produces a structured error with its exact path while readable siblings continue scanning, and the UI reports partial scans as warnings or total failures as errors.
 
 ## Native shell behavior
 

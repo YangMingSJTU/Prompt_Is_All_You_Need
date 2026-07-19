@@ -1,12 +1,17 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, normalize } from 'node:path';
+import type { Dirent, Stats } from 'node:fs';
 import type {
   ExtractedPrompt,
+  ScanSourceError,
   ScanSummary,
   SourceFileSummary,
   SourceTool
 } from '../../shared/types';
 import { extractPromptsFromJsonl } from './parser';
+import {
+  nativePlatformPathContext,
+  type PlatformPathContext
+} from './platformPaths';
 
 const SKIPPED_SEGMENTS = [
   'paste-cache',
@@ -18,27 +23,49 @@ const SKIPPED_SEGMENTS = [
   'backups'
 ];
 
-export interface HistoryDiscoveryError {
-  code: 'permission_denied' | 'io_error';
-  path: string;
-  retryable: true;
+export type HistoryDiscoveryError = ScanSourceError;
+
+export interface ScannerFileSystem {
+  readFile(path: string): Promise<string>;
+  readdir(path: string): Promise<Dirent[]>;
+  stat(path: string): Promise<Stats>;
 }
 
-export type HistoryDiscoveryResult =
-  | { status: 'success' | 'missing'; files: string[] }
-  | { status: 'unreadable' | 'failed'; files: []; error: HistoryDiscoveryError };
+export const nodeScannerFileSystem: ScannerFileSystem = {
+  readFile: (path) => readFile(path, 'utf8'),
+  readdir: (path) => readdir(path, { withFileTypes: true }),
+  stat
+};
+
+export interface ScannerOptions {
+  fs?: ScannerFileSystem;
+  pathContext?: PlatformPathContext;
+}
+
+export interface HistoryDiscoveryOptions extends ScannerOptions {
+  limit?: number;
+}
+
+export interface HistoryDiscoveryResult {
+  status: 'success' | 'missing' | 'partial' | 'unreadable' | 'failed';
+  files: string[];
+  errors: HistoryDiscoveryError[];
+}
 
 export async function scanJsonlFiles(
   files: string[],
-  sourceTool: SourceTool
+  sourceTool: SourceTool,
+  options: ScannerOptions = {}
 ): Promise<ScanSummary> {
+  const fs = options.fs ?? nodeScannerFileSystem;
+  const pathContext = options.pathContext ?? nativePlatformPathContext;
   const prompts: ExtractedPrompt[] = [];
   const sourceFiles: SourceFileSummary[] = [];
   let warningCount = 0;
 
-  for (const file of files.filter((item) => !isSkippedPath(item))) {
+  for (const file of files.filter((item) => !isSkippedPath(item, pathContext))) {
     try {
-      const content = await readFile(file, 'utf8');
+      const content = await fs.readFile(file);
       const result = extractPromptsFromJsonl(content, {
         sourceTool,
         sourceFile: file
@@ -55,7 +82,7 @@ export async function scanJsonlFiles(
         warningCount: result.warningCount,
         scannedAt: new Date().toISOString()
       });
-    } catch {
+    } catch (error) {
       warningCount += 1;
       sourceFiles.push({
         id: `${sourceTool}:${file}`,
@@ -65,7 +92,8 @@ export async function scanJsonlFiles(
         lineCount: 0,
         promptCount: 0,
         warningCount: 1,
-        scannedAt: new Date().toISOString()
+        scannedAt: new Date().toISOString(),
+        error: mapDiscoveryError(error, file)
       });
     }
   }
@@ -79,22 +107,33 @@ export function hasSuccessfulSourceScan(sourceFiles: SourceFileSummary[]): boole
 
 export async function discoverJsonlFiles(
   root: string,
-  limit = 500
+  options: HistoryDiscoveryOptions = {}
 ): Promise<HistoryDiscoveryResult> {
+  const fs = options.fs ?? nodeScannerFileSystem;
+  const pathContext = options.pathContext ?? nativePlatformPathContext;
+  const limit = options.limit ?? 500;
   const files: string[] = [];
+  const errors: HistoryDiscoveryError[] = [];
 
   async function walk(directory: string): Promise<void> {
-    if (files.length >= limit || isSkippedPath(directory)) {
+    if (files.length >= limit || isSkippedPath(directory, pathContext)) {
       return;
     }
 
-    const entries = await readdir(directory, { withFileTypes: true });
+    let entries: Dirent[];
+    try {
+      entries = await fs.readdir(directory);
+    } catch (error) {
+      errors.push(mapDiscoveryError(error, directory));
+      return;
+    }
+
     for (const entry of entries) {
       if (files.length >= limit) {
         return;
       }
-      const fullPath = join(directory, entry.name);
-      if (isSkippedPath(fullPath)) {
+      const fullPath = pathContext.path.join(directory, entry.name);
+      if (isSkippedPath(fullPath, pathContext)) {
         continue;
       }
       if (entry.isDirectory()) {
@@ -105,42 +144,61 @@ export async function discoverJsonlFiles(
     }
   }
 
+  let rootStat: Stats;
   try {
-    const rootStat = await stat(root);
-    if (rootStat.isFile()) {
-      return {
-        status: 'success',
-        files: root.toLowerCase().endsWith('.jsonl') ? [root] : []
-      };
-    }
-    if (rootStat.isDirectory()) {
-      await walk(root);
-    }
-    return { status: 'success', files };
+    rootStat = await fs.stat(root);
   } catch (error) {
-    const code = nodeErrorCode(error);
-    if (code === 'ENOENT') {
-      return { status: 'missing', files: [] };
+    if (nodeErrorCode(error) === 'ENOENT') {
+      return { status: 'missing', files: [], errors: [] };
     }
-    const errorPath = nodeErrorPath(error) ?? root;
-    if (code === 'EACCES' || code === 'EPERM') {
-      return {
-        status: 'unreadable',
-        files: [],
-        error: { code: 'permission_denied', path: errorPath, retryable: true }
-      };
-    }
+    const failure = mapDiscoveryError(error, root);
     return {
-      status: 'failed',
+      status: failure.code === 'permission_denied' ? 'unreadable' : 'failed',
       files: [],
-      error: { code: 'io_error', path: errorPath, retryable: true }
+      errors: [failure]
     };
   }
+
+  if (rootStat.isFile()) {
+    return {
+      status: 'success',
+      files: root.toLowerCase().endsWith('.jsonl') ? [root] : [],
+      errors: []
+    };
+  }
+  if (rootStat.isDirectory()) {
+    await walk(root);
+  }
+  if (errors.length === 0) {
+    return { status: 'success', files, errors };
+  }
+  if (files.length > 0) {
+    return { status: 'partial', files, errors };
+  }
+  return {
+    status: errors.every((error) => error.code === 'permission_denied')
+      ? 'unreadable'
+      : 'failed',
+    files,
+    errors
+  };
 }
 
-export function isSkippedPath(path: string): boolean {
-  const normalized = normalize(path).toLowerCase();
+export function isSkippedPath(
+  value: string,
+  pathContext: PlatformPathContext = nativePlatformPathContext
+): boolean {
+  const normalized = pathContext.path.normalize(value).toLowerCase();
   return SKIPPED_SEGMENTS.some((segment) => normalized.includes(segment.toLowerCase()));
+}
+
+function mapDiscoveryError(error: unknown, fallbackPath: string): HistoryDiscoveryError {
+  const code = nodeErrorCode(error);
+  return {
+    code: code === 'EACCES' || code === 'EPERM' ? 'permission_denied' : 'io_error',
+    path: nodeErrorPath(error) ?? fallbackPath,
+    retryable: true
+  };
 }
 
 function nodeErrorCode(error: unknown): string | undefined {

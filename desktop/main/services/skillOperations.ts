@@ -115,8 +115,9 @@ export async function installSkillContent(options: {
     };
   }
 
+  let safeTargetBoundary: string;
   try {
-    await assertSafeTargetRoot(targetRoot, fs, pathContext);
+    safeTargetBoundary = await assertSafeTargetRoot(targetRoot, fs, pathContext);
   } catch (error) {
     return {
       ok: false,
@@ -131,7 +132,7 @@ export async function installSkillContent(options: {
 
   try {
     await fs.mkdir(targetRoot, { recursive: true });
-    await assertSafeTargetRoot(targetRoot, fs, pathContext);
+    await assertSafeTargetRoot(targetRoot, fs, pathContext, safeTargetBoundary);
   } catch (error) {
     return {
       ok: false,
@@ -183,7 +184,7 @@ export async function installSkillContent(options: {
       throw new InstallFailure({ code: 'copy_failed', path: stagedEntry, retryable: true });
     }
 
-    await assertSafeTargetRoot(targetRoot, fs, pathContext);
+    await assertSafeTargetRoot(targetRoot, fs, pathContext, safeTargetBoundary);
     // POSIX rename replaces an empty directory, so an exclusive reservation closes the
     // no-replace race there. Windows directory rename already refuses an existing target.
     // Do not create and immediately remove a Windows reservation: the deleted directory can
@@ -367,18 +368,32 @@ export async function packageSkillContent(options: {
 async function assertSafeTargetRoot(
   targetRoot: string,
   fs: SkillFileSystem,
-  pathContext: PlatformPathContext
-): Promise<void> {
+  pathContext: PlatformPathContext,
+  requiredBoundary?: string
+): Promise<string> {
   let candidatePath = pathContext.path.resolve(targetRoot);
-  const parentBoundary = pathContext.path.dirname(candidatePath);
+  const directParent = pathContext.path.dirname(candidatePath);
+  const boundary = requiredBoundary
+    ? pathContext.path.resolve(requiredBoundary)
+    : directParent;
+  if (
+    requiredBoundary &&
+    !isPathInsideOrEqual(candidatePath, boundary, pathContext)
+  ) {
+    throw unsafeTargetError(candidatePath);
+  }
+  let reachedDirectParent = pathsEqual(candidatePath, directParent, pathContext);
   while (true) {
     try {
       const stats = await fs.lstat(candidatePath);
       if (stats.isSymbolicLink() || !stats.isDirectory()) {
         throw unsafeTargetError(candidatePath);
       }
-      if (pathsEqual(candidatePath, parentBoundary, pathContext)) {
-        return;
+      if (
+        (requiredBoundary && pathsEqual(candidatePath, boundary, pathContext)) ||
+        (!requiredBoundary && reachedDirectParent)
+      ) {
+        return candidatePath;
       }
     } catch (error) {
       if (nodeErrorCode(error) !== 'ENOENT') {
@@ -390,9 +405,24 @@ async function assertSafeTargetRoot(
       throw unsafeTargetError(candidatePath);
     }
     candidatePath = parent;
+    reachedDirectParent =
+      reachedDirectParent || pathsEqual(candidatePath, directParent, pathContext);
   }
 }
 
+function isPathInsideOrEqual(
+  path: string,
+  root: string,
+  pathContext: PlatformPathContext
+): boolean {
+  const relative = pathContext.path.relative(root, path);
+  return (
+    relative === '' ||
+    (relative !== '..' &&
+      !relative.startsWith(`..${pathContext.path.sep}`) &&
+      !pathContext.path.isAbsolute(relative))
+  );
+}
 function pathsEqual(left: string, right: string, pathContext: PlatformPathContext): boolean {
   const normalize = (value: string) => pathContext.path.resolve(value);
   return pathContext.caseInsensitive

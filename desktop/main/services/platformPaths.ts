@@ -101,7 +101,17 @@ export function isAbsolutePlatformPath(
 ): boolean {
   const candidate = value.trim();
   if (context.platform === 'win32') {
-    return /^(?:[A-Za-z]:[\\/]|\\\\)/.test(candidate) && context.path.isAbsolute(candidate);
+    if (/^\\\\[?.](?:[\\/]|$)/.test(candidate)) {
+      return false;
+    }
+    if (candidate.startsWith('\\\\')) {
+      const [server, share] = candidate.slice(2).split(/[\\/]+/);
+      return (
+        Boolean(server && share) &&
+        context.path.isAbsolute(candidate)
+      );
+    }
+    return /^[A-Za-z]:[\\/]/.test(candidate) && context.path.isAbsolute(candidate);
   }
   return context.path.isAbsolute(candidate);
 }
@@ -112,7 +122,7 @@ function environmentRoot(
   fallback: string,
   context: PlatformPathContext
 ): string {
-  return value === undefined
+  return value === undefined || value.trim() === ''
     ? fallback
     : requireAbsoluteRoot(name, value, context);
 }

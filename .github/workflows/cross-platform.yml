@@ -44,5 +44,3 @@ jobs:
           name: packaged-smoke-${{ matrix.platform }}
           path: packaged-output/smoke-evidence-${{ matrix.platform }}.json
           if-no-files-found: error
-
-

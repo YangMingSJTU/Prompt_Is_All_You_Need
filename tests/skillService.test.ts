@@ -573,6 +573,32 @@ describe('skill service', () => {
     await rm(fixture.root, { recursive: true, force: true });
   });
 
+
+  it('creates a native skill root when both the root and its parent are missing', async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'spellbook-new-profile-'));
+    const codexRoot = join(fixtureRoot, '.agents', 'skills');
+    const service = createSkillService(await createTestDatabase(), {
+      roots: [
+        { platform: 'claude', path: join(fixtureRoot, '.claude', 'skills') },
+        { platform: 'codex', path: codexRoot }
+      ],
+      packageDirectory: join(fixtureRoot, 'data', 'packages')
+    });
+
+    try {
+      const result = await service.installSkill({
+        skillId: 'bundled:prompt-refiner',
+        platform: 'codex'
+      });
+
+      expect(result).toMatchObject({ ok: true });
+      await expect(
+        readFile(join(codexRoot, 'prompt-refiner', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('name: Prompt Refiner');
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
   it('rejects a linked target root and a linked parent, including Windows junctions', async () => {
     const fixture = await createEmptyRoots();
     const actualRoot = join(fixture.root, 'actual-target');
