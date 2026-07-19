@@ -369,29 +369,35 @@ async function assertSafeTargetRoot(
   fs: SkillFileSystem,
   pathContext: PlatformPathContext
 ): Promise<void> {
-  let existingPath = pathContext.path.resolve(targetRoot);
+  let candidatePath = pathContext.path.resolve(targetRoot);
+  const parentBoundary = pathContext.path.dirname(candidatePath);
   while (true) {
     try {
-      const stats = await fs.lstat(existingPath);
+      const stats = await fs.lstat(candidatePath);
       if (stats.isSymbolicLink() || !stats.isDirectory()) {
-        throw unsafeTargetError(existingPath);
+        throw unsafeTargetError(candidatePath);
       }
-      const canonicalPath = await fs.realpath(existingPath);
-      if (normalizeComparablePath(canonicalPath, pathContext) !== normalizeComparablePath(existingPath, pathContext)) {
-        throw unsafeTargetError(existingPath);
+      if (pathsEqual(candidatePath, parentBoundary, pathContext)) {
+        return;
       }
-      return;
     } catch (error) {
       if (nodeErrorCode(error) !== 'ENOENT') {
         throw error;
       }
-      const parent = pathContext.path.dirname(existingPath);
-      if (parent === existingPath) {
-        throw error;
-      }
-      existingPath = parent;
     }
+    const parent = pathContext.path.dirname(candidatePath);
+    if (parent === candidatePath) {
+      throw unsafeTargetError(candidatePath);
+    }
+    candidatePath = parent;
   }
+}
+
+function pathsEqual(left: string, right: string, pathContext: PlatformPathContext): boolean {
+  const normalize = (value: string) => pathContext.path.resolve(value);
+  return pathContext.caseInsensitive
+    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
+    : normalize(left) === normalize(right);
 }
 
 function unsafeTargetError(path: string): Error {
@@ -399,14 +405,6 @@ function unsafeTargetError(path: string): Error {
     code: 'ELOOP',
     path
   });
-}
-
-function normalizeComparablePath(
-  path: string,
-  pathContext: PlatformPathContext
-): string {
-  const normalized = pathContext.path.resolve(path);
-  return pathContext.caseInsensitive ? normalized.toLowerCase() : normalized;
 }
 
 function mapUnsafeTargetError(error: unknown, fallbackPath: string): SkillOperationError {
