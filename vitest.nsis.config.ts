@@ -3,6 +3,6 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['tests/integration/windowsNsisSideBySide.test.ts']
+    include: ['tests/integration/windowsNsis*.test.ts']
   }
 });

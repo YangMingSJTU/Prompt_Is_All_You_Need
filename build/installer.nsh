@@ -1,4 +1,6 @@
-!ifndef BUILD_UNINSTALLER
+!ifdef BUILD_UNINSTALLER
+  Var spellbookUninstallTarget
+!else
   Var spellbookRegistrationPrepared
   Var spellbookInstallCommitted
   !define MUI_CUSTOMFUNCTION_ABORT SpellbookRollbackInstallationRegistry
@@ -57,10 +59,13 @@
 !macroend
 
 !macro customUnInit
-  ; EXEDIR is untrusted until the read-only registry and artifact preflight
-  ; proves it is the exact directory of a registered Spellbook instance.
-  !insertmacro runInstallationRegistry "validate-uninstall" "$EXEDIR"
-  StrCpy $INSTDIR "$EXEDIR"
+  ; electron-builder calls SetOutPath $INSTDIR before initMultiUser. NSIS keeps
+  ; that original uninstaller directory in $OUTDIR while its standard
+  ; self-copy makes $EXEDIR point at ~nsu.tmp and initMultiUser may replace
+  ; $INSTDIR with another active side-by-side instance.
+  StrCpy $spellbookUninstallTarget "$OUTDIR"
+  !insertmacro runInstallationRegistry "validate-uninstall" "$spellbookUninstallTarget"
+  StrCpy $INSTDIR "$spellbookUninstallTarget"
 !macroend
 
 !macro customPageAfterChangeDir

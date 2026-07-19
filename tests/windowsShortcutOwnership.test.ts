@@ -189,12 +189,17 @@ describeWindows('Windows desktop shortcut ownership', () => {
       include.indexOf('!macroend', include.indexOf('!macro customUnInit'))
     );
     const validation = uninit.indexOf(
-      '!insertmacro runInstallationRegistry "validate-uninstall" "$EXEDIR"'
+      '!insertmacro runInstallationRegistry "validate-uninstall" "$spellbookUninstallTarget"'
     );
     const validationAbsolute = include.indexOf(
-      '!insertmacro runInstallationRegistry "validate-uninstall" "$EXEDIR"'
+      '!insertmacro runInstallationRegistry "validate-uninstall" "$spellbookUninstallTarget"'
     );
-    const rebind = uninit.indexOf('StrCpy $INSTDIR "$EXEDIR"');
+    const capture = uninit.indexOf(
+      'StrCpy $spellbookUninstallTarget "$OUTDIR"'
+    );
+    const rebind = uninit.indexOf(
+      'StrCpy $INSTDIR "$spellbookUninstallTarget"'
+    );
     const uninstallSection = include.indexOf('!macro customUnInstall');
     const registryMacroStart = include.indexOf('!macro runInstallationRegistry');
     const registryMacro = include.slice(
@@ -202,7 +207,8 @@ describeWindows('Windows desktop shortcut ownership', () => {
       include.indexOf('!macroend', registryMacroStart)
     );
 
-    expect(validation).toBeGreaterThanOrEqual(0);
+    expect(capture).toBeGreaterThanOrEqual(0);
+    expect(validation).toBeGreaterThan(capture);
     expect(rebind).toBeGreaterThan(validation);
     expect(validationAbsolute).toBeLessThan(uninstallSection);
     expect(registryMacro).toMatch(
