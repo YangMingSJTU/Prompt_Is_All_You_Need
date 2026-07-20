@@ -1,22 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../desktop/main/services/database';
-import { createSettingsService, defaultScanSources } from '../desktop/main/services/settingsService';
+import {
+  createPlatformPathContext,
+  createPlatformPaths
+} from '../desktop/main/services/platformPaths';
+import {
+  createSettingsService,
+  defaultScanSources
+} from '../desktop/main/services/settingsService';
 import { DEFAULT_APP_SETTINGS } from '../desktop/shared/settings';
+
+const PLATFORM_PATHS = createPlatformPaths({
+  platform: 'win32',
+  homeDirectory: 'C:\\Users\\Test',
+  userDataDirectory: 'C:\\Users\\Test\\AppData\\Roaming\\Spellbook'
+});
+const OPTIONS = {
+  defaultScanSources: defaultScanSources(PLATFORM_PATHS),
+  pathContext: createPlatformPathContext('win32')
+};
 
 describe('settings service', () => {
   it('returns default settings when nothing is saved', async () => {
     const db = await createTestDatabase();
-    const service = createSettingsService(db);
+    const service = createSettingsService(db, OPTIONS);
 
     expect(service.getSettings()).toEqual({
       ...DEFAULT_APP_SETTINGS,
-      scanSources: defaultScanSources()
+      scanSources: OPTIONS.defaultScanSources
     });
   });
 
   it('persists valid setting updates', async () => {
     const db = await createTestDatabase();
-    const service = createSettingsService(db);
+    const service = createSettingsService(db, OPTIONS);
 
     await service.updateSettings({
       language: 'en',
@@ -26,19 +43,19 @@ describe('settings service', () => {
     });
     await service.updateQuickPanelShortcut('CommandOrControl+Alt+K');
 
-    expect(createSettingsService(db).getSettings()).toEqual({
+    expect(createSettingsService(db, OPTIONS).getSettings()).toEqual({
       language: 'en',
       quickPanelShortcut: 'CommandOrControl+Alt+K',
       quickPanelPlacement: 'mouse',
       quickPanelPinned: true,
       recommendationPanelOpen: false,
-      scanSources: defaultScanSources()
+      scanSources: OPTIONS.defaultScanSources
     });
 
     await service.updateSettings({ quickPanelPinned: false });
 
-    expect(createSettingsService(db).getSettings().quickPanelPinned).toBe(false);
-    expect(createSettingsService(db).getSettings().recommendationPanelOpen).toBe(false);
+    expect(createSettingsService(db, OPTIONS).getSettings().quickPanelPinned).toBe(false);
+    expect(createSettingsService(db, OPTIONS).getSettings().recommendationPanelOpen).toBe(false);
   });
 
   it('loads legacy shortcut ids as accelerators', async () => {
@@ -48,7 +65,9 @@ describe('settings service', () => {
       ['quickPanelShortcut', 'ctrl-alt-p', '2026-07-07T00:00:00.000Z']
     );
 
-    expect(createSettingsService(db).getSettings().quickPanelShortcut).toBe('CommandOrControl+Alt+P');
+    expect(createSettingsService(db, OPTIONS).getSettings().quickPanelShortcut).toBe(
+      'CommandOrControl+Alt+P'
+    );
   });
 
   it('falls back to defaults for invalid stored values', async () => {
@@ -68,15 +87,15 @@ describe('settings service', () => {
       ]
     );
 
-    expect(createSettingsService(db).getSettings()).toEqual({
+    expect(createSettingsService(db, OPTIONS).getSettings()).toEqual({
       ...DEFAULT_APP_SETTINGS,
-      scanSources: defaultScanSources()
+      scanSources: OPTIONS.defaultScanSources
     });
   });
 
   it('rejects shortcut writes through the generic settings path', async () => {
     const db = await createTestDatabase();
-    const service = createSettingsService(db);
+    const service = createSettingsService(db, OPTIONS);
 
     await expect(
       service.updateSettings({ quickPanelShortcut: 'CommandOrControl+Alt+K' } as never)
@@ -86,14 +105,17 @@ describe('settings service', () => {
 
   it('restores the in-memory shortcut row when persistence fails', async () => {
     const db = await createTestDatabase();
-    const workingService = createSettingsService(db);
+    const workingService = createSettingsService(db, OPTIONS);
     await workingService.updateQuickPanelShortcut('CommandOrControl+Alt+K');
-    const failingService = createSettingsService({
-      ...db,
-      async transaction<T>(_operation: () => T | Promise<T>): Promise<T> {
-        throw new Error('injected transaction failure');
-      }
-    });
+    const failingService = createSettingsService(
+      {
+        ...db,
+        async transaction<T>(_operation: () => T | Promise<T>): Promise<T> {
+          throw new Error('injected transaction failure');
+        }
+      },
+      OPTIONS
+    );
 
     await expect(
       failingService.updateQuickPanelShortcut('CommandOrControl+Shift+P')

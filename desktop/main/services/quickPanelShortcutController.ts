@@ -245,22 +245,28 @@ export class QuickPanelShortcutController {
 
   endCapture(sessionToken: string): ShortcutCaptureEndResult {
     if (!this.captureSessionToken || sessionToken !== this.captureSessionToken) {
-      return { ok: true, state: this.getState() };
+      return { ok: true, sessionToken: null, state: this.getState() };
     }
     return this.forceEndCapture();
   }
 
   forceEndCapture(): ShortcutCaptureEndResult {
     if (!this.captureSessionToken) {
-      return { ok: true, state: this.getState() };
+      return { ok: true, sessionToken: null, state: this.getState() };
     }
+    const sessionToken = this.captureSessionToken;
     this.captureSessionToken = null;
     this.state = { ...this.state, captureActive: false };
     if (!this.resumeListeners()) {
       this.disable(this.state.configuredAccelerator);
-      return { ok: false, error: 'recovery_failed', state: this.getState() };
+      return {
+        ok: false,
+        sessionToken,
+        error: 'recovery_failed',
+        state: this.getState()
+      };
     }
-    return { ok: true, state: this.getState() };
+    return { ok: true, sessionToken, state: this.getState() };
   }
 
   dismissStartupNotice(): QuickPanelShortcutState {

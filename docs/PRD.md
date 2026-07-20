@@ -109,9 +109,9 @@ type SkillRecord = {
 
 ## 5. 本地存储
 
-- 数据目录：`~/.spellbook/`
-- SQLite：`~/.spellbook/index.sqlite`
-- 技能包输出：`~/.spellbook/packages/`
+- 数据目录：Electron `userData/data/`
+- SQLite：Electron `userData/data/index.sqlite`
+- 技能包输出：Electron `userData/data/packages/`
 
 SQLite 表：
 
@@ -144,5 +144,7 @@ Renderer bridge：`window.spellbook`
 - 用户可见文案不再使用旧产品名和旧资产名。
 - 咒语复制只复制 `body`。
 - Codex 技能默认目录为 `$HOME/.agents/skills`。
-- 数据库存放在 `~/.spellbook/index.sqlite`。
+- 数据库存放在 Electron `userData/data/index.sqlite`。
 - `npm test`、`npm run typecheck`、`npm run build` 通过。
+- Windows/macOS 原生目录包可启动，并分别产出通过的 packaged smoke JSON。
+- 详细跨平台契约以 [`cross-platform-compatibility.md`](cross-platform-compatibility.md) 为准。

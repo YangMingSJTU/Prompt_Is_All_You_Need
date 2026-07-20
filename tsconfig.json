@@ -16,5 +16,11 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["desktop/renderer", "desktop/shared", "tests", "vitest.config.ts"]
+  "include": [
+    "desktop/renderer",
+    "desktop/shared",
+    "tests",
+    "vitest.config.ts",
+    "vitest.nsis.config.ts"
+  ]
 }

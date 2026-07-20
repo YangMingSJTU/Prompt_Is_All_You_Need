@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+packaged-output/
 .env
 .env.*
 npm-debug.log*

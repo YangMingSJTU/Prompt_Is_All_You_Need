@@ -4,6 +4,7 @@ import {
   QuickPanelShortcutController,
   type GlobalShortcutAdapter
 } from '../desktop/main/services/quickPanelShortcutController';
+import { handleShortcutCaptureEnded } from '../desktop/renderer/shortcutCaptureUi';
 
 const DEFAULT = DEFAULT_APP_SETTINGS.quickPanelShortcut;
 const CUSTOM = 'CommandOrControl+Alt+K';
@@ -171,7 +172,7 @@ describe('quick panel shortcut controller', () => {
     expect(events).toContain('suspended:false');
   });
 
-  it('keeps a newer capture active when blur cleanup races stale renderer cleanup', async () => {
+  it('keeps capture B active when capture A blur push arrives after B begins', async () => {
     const globalShortcut = new FakeGlobalShortcut([]);
     let tokenNumber = 0;
     const controller = createController(
@@ -184,27 +185,51 @@ describe('quick panel shortcut controller', () => {
 
     const first = controller.beginCapture();
     expect(first).toMatchObject({ ok: true, sessionToken: 'session-1' });
-    expect(controller.forceEndCapture()).toMatchObject({
+    const delayedFirstPush = controller.forceEndCapture();
+    expect(delayedFirstPush).toMatchObject({
       ok: true,
+      sessionToken: 'session-1',
       state: { captureActive: false }
     });
     const second = controller.beginCapture();
     expect(second).toMatchObject({ ok: true, sessionToken: 'session-2' });
+    if (!second.ok) {
+      throw new Error('Expected capture B to begin');
+    }
+    const uiBeforeDelayedPush = {
+      sessionToken: second.sessionToken,
+      recording: true,
+      modifierPreview: ['Ctrl'],
+      candidate: 'CommandOrControl+K',
+      shortcutState: second.state
+    };
 
-    expect(controller.endCapture('session-1')).toMatchObject({
-      ok: true,
-      state: { captureActive: true }
+    expect(handleShortcutCaptureEnded(uiBeforeDelayedPush.sessionToken, delayedFirstPush)).toBeNull();
+    expect(uiBeforeDelayedPush).toMatchObject({
+      sessionToken: 'session-2',
+      recording: true,
+      modifierPreview: ['Ctrl'],
+      candidate: 'CommandOrControl+K',
+      shortcutState: { captureActive: true }
     });
+    expect(controller.getState().captureActive).toBe(true);
     expect(globalShortcut.suspended).toBe(true);
-    expect(controller.forceEndCapture()).toMatchObject({
+
+    const secondPush = controller.endCapture(second.sessionToken);
+    expect(secondPush).toMatchObject({
       ok: true,
+      sessionToken: 'session-2',
       state: { captureActive: false }
     });
-    expect(controller.endCapture('session-2')).toMatchObject({
-      ok: true,
-      state: { captureActive: false }
+    expect(handleShortcutCaptureEnded(uiBeforeDelayedPush.sessionToken, secondPush)).toMatchObject({
+      sessionToken: null,
+      recording: false,
+      modifierPreview: [],
+      candidate: null,
+      shortcutState: { captureActive: false }
     });
     expect(globalShortcut.suspended).toBe(false);
+    expect(handleShortcutCaptureEnded(null, secondPush)).toBeNull();
   });
 
   it('disables the authoritative state when Electron repeatedly fails to resume listeners', async () => {

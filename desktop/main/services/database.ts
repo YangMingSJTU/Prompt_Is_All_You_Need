@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
 
 export interface AppDatabase {
@@ -37,33 +38,61 @@ const DEFAULT_FILE_OPERATIONS: DatabaseFileOperations = {
   }
 };
 
-let sqlModulePromise: Promise<SqlJsStatic> | null = null;
+export interface TestDatabaseOptions {
+  filePath?: string;
+  sqlWasmPath?: string;
+  fileOperations?: DatabaseFileOperations;
+}
 
-export async function createTestDatabase(): Promise<AppDatabase> {
-  const SQL = await getSqlModule();
-  return wrapDatabase(SQL, new SQL.Database(), null, DEFAULT_FILE_OPERATIONS);
+const sqlModulePromises = new Map<string, Promise<SqlJsStatic>>();
+
+export async function createTestDatabase(
+  options: TestDatabaseOptions = {}
+): Promise<AppDatabase> {
+  const SQL = await getSqlModule(options.sqlWasmPath);
+  return wrapDatabase(
+    SQL,
+    new SQL.Database(),
+    options.filePath ?? null,
+    options.fileOperations ?? DEFAULT_FILE_OPERATIONS
+  );
+}
+
+export interface OpenAppDatabaseOptions {
+  sqlWasmPath?: string;
+  fileOperations?: DatabaseFileOperations;
 }
 
 export async function openAppDatabase(
   filePath: string,
-  fileOperations: DatabaseFileOperations = DEFAULT_FILE_OPERATIONS
+  options: OpenAppDatabaseOptions = {}
 ): Promise<AppDatabase> {
-  const SQL = await getSqlModule();
+  const SQL = await getSqlModule(options.sqlWasmPath);
+  const fileOperations = options.fileOperations ?? DEFAULT_FILE_OPERATIONS;
   let db: SqlJsDatabase;
   try {
     const bytes = await fileOperations.read(filePath);
     db = new SQL.Database(bytes);
-  } catch {
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') {
+      throw error;
+    }
     db = new SQL.Database();
   }
   return wrapDatabase(SQL, db, filePath, fileOperations);
 }
 
-async function getSqlModule(): Promise<SqlJsStatic> {
-  sqlModulePromise ??= initSqlJs({
-    locateFile: (file) => join(process.cwd(), 'node_modules', 'sql.js', 'dist', file)
-  });
-  return sqlModulePromise;
+async function getSqlModule(sqlWasmPath = resolveInstalledSqlWasmPath()): Promise<SqlJsStatic> {
+  let modulePromise = sqlModulePromises.get(sqlWasmPath);
+  if (!modulePromise) {
+    modulePromise = initSqlJs({ locateFile: () => sqlWasmPath });
+    sqlModulePromises.set(sqlWasmPath, modulePromise);
+  }
+  return modulePromise;
+}
+
+function resolveInstalledSqlWasmPath(): string {
+  return fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
 }
 
 function wrapDatabase(
@@ -236,6 +265,15 @@ function createSchema(db: SqlJsDatabase): void {
       UNIQUE(platform, root_path)
     );
 
+    CREATE TABLE IF NOT EXISTS skill_scan_sources (
+      platform TEXT PRIMARY KEY CHECK (platform IN ('claude', 'codex')),
+      root_path TEXT NOT NULL,
+      last_attempt_status TEXT NOT NULL,
+      last_attempt_at TEXT NOT NULL,
+      last_success_at TEXT,
+      last_error_code TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -245,7 +283,7 @@ function createSchema(db: SqlJsDatabase): void {
   `);
 
   ensureColumn(db, 'spells', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
-  db.exec('PRAGMA user_version = 9;');
+  db.exec('PRAGMA user_version = 10;');
 }
 
 function ensureColumn(
@@ -268,4 +306,10 @@ function getUserVersion(db: SqlJsDatabase): number {
   const result = db.exec('PRAGMA user_version;')[0];
   const value = result?.values?.[0]?.[0];
   return typeof value === 'number' ? value : 0;
+}
+
+function nodeErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
 }

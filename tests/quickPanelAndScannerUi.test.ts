@@ -18,7 +18,6 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).not.toContain("labelKey: 'settings.scanner'");
     expect(settings).not.toContain("activeTab === 'scanner'");
     expect(settings).not.toContain('<ScannerView');
-    expect(settings).toContain('scanTarget');
     expect(settings).toContain('selectedProviders');
     expect(settings).toContain('scanSources');
     expect(settings).toContain('activeScanSources');
@@ -30,15 +29,28 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(settings).not.toContain("t('metric.score')");
     expect(settings).toContain('selectDirectory');
     expect(settings).toContain('chooseScanSourceDirectory');
+    expect(settings).toContain("target: 'spells'");
+    expect(settings).not.toContain('scanTarget');
+    expect(settings).not.toContain('scanSkills');
+    expect(settings).not.toContain('settings.scanTarget.skills');
+    expect(readFileSync('desktop/renderer/i18n.ts', 'utf8')).not.toContain(
+      'settings.scanTarget.skills'
+    );
     expect(settings).not.toContain('settings.scanSources\n                .filter');
-    expect(settings).not.toContain('sourceFiles');
+    expect(settings).not.toContain('providers: selectedProviders,\n        scanSources:');
+    expect(settings).toContain('summarizeScanFeedback(result.sourceFiles)');
+    expect(settings).toContain("feedback.kind === 'partial' ? 'warning' : 'error'");
     expect(settings).not.toContain('source-table');
+    expect(settings).not.toContain('settings.databasePath');
+    expect(settings).not.toContain('function InfoRow');
 
     expect(app).toContain("onOpenRecommendationDiscovery={() => openSettings('localData')}");
     expect(app).toContain('activeTab={settingsTab}');
     expect(settings).toContain('activeTab: SettingsTab');
     expect(settings).toContain('onTabChange(tab: SettingsTab): void');
-    expect(settings).toContain("useState<ScanTarget>('spells')");
+    expect(readFileSync('desktop/main/index.ts', 'utf8')).not.toContain(
+      "scanRequest.target === 'skills'"
+    );
     expect(library).toContain('onClick={onOpenRecommendationDiscovery}');
     expect(library).toContain("t('library.find')");
   });
@@ -55,6 +67,9 @@ describe('scanner placement and floating quick panel UI', () => {
     expect(main).toContain('showOpenDialog');
     expect(main).toContain("'openDirectory'");
     expect(main).toContain('if (hasSuccessfulSourceScan(summaries))');
+    expect(main).toContain("ipcMain.handle('scanner:run', async (_event, request: unknown)");
+    expect(main).toContain('resolveScanRequest(');
+    expect(main).toContain('settingsService.getSettings().scanSources');
 
     expect(preload).toContain('selectDirectory');
     expect(preload).toContain("ipcRenderer.invoke('dialog:selectDirectory'");

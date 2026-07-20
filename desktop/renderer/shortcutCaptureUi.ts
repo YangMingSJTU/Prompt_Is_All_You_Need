@@ -1,6 +1,7 @@
 import {
   getShortcutAccessibleText,
-  type QuickPanelShortcutState
+  type QuickPanelShortcutState,
+  type ShortcutCaptureEndResult
 } from '../shared/settings';
 import type { TFunction } from './i18n';
 
@@ -8,6 +9,32 @@ export interface ShortcutButtonPresentation {
   label: string;
   description: string;
   phase: 'default' | 'recording' | 'applying' | 'disabled';
+}
+
+export interface ShortcutCaptureEndedUpdate {
+  sessionToken: null;
+  recording: false;
+  modifierPreview: [];
+  candidate: null;
+  shortcutState: QuickPanelShortcutState;
+  recoveryFailed: boolean;
+}
+
+export function handleShortcutCaptureEnded(
+  currentSessionToken: string | null,
+  result: ShortcutCaptureEndResult
+): ShortcutCaptureEndedUpdate | null {
+  if (!result.sessionToken || result.sessionToken !== currentSessionToken) {
+    return null;
+  }
+  return {
+    sessionToken: null,
+    recording: false,
+    modifierPreview: [],
+    candidate: null,
+    shortcutState: result.state,
+    recoveryFailed: !result.ok
+  };
 }
 
 export function getShortcutButtonPresentation(options: {

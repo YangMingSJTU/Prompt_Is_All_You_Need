@@ -27,10 +27,15 @@ import {
   type ShortcutUpdateRequest,
   type ShortcutUpdateResult
 } from '../../shared/settings';
-import type { Candidate, ScanProvider, ScanSourceConfig, ScanTarget, SkillRecord } from '../../shared/types';
-import type { TFunction } from '../i18n';
+import type { Candidate, ScanProvider, ScanSourceConfig } from '../../shared/types';
+import {
+  translateForLocalePreference,
+  type TFunction
+} from '../i18n';
+import { summarizeScanFeedback } from '../scanFeedback';
 import {
   getShortcutButtonPresentation,
+  handleShortcutCaptureEnded,
   restoreShortcutButtonFocus,
   type ShortcutFocusEvent
 } from '../shortcutCaptureUi';
@@ -74,14 +79,6 @@ const PLACEMENT_OPTIONS: Array<{
   { value: 'mouse', labelKey: 'settings.placement.mouse' }
 ];
 
-const SCAN_TARGET_OPTIONS: Array<{
-  value: ScanTarget;
-  labelKey: 'settings.scanTarget.spells' | 'settings.scanTarget.skills';
-}> = [
-  { value: 'spells', labelKey: 'settings.scanTarget.spells' },
-  { value: 'skills', labelKey: 'settings.scanTarget.skills' }
-];
-
 const SCAN_PROVIDERS: ScanProvider[] = ['claude', 'codex'];
 
 export function SettingsView({
@@ -100,10 +97,8 @@ export function SettingsView({
   const [shortcutError, setShortcutError] = useState<string | null>(null);
   const [shortcutCandidate, setShortcutCandidate] = useState<string | null>(null);
   const [modifierPreview, setModifierPreview] = useState<string[]>([]);
-  const [scanTarget, setScanTarget] = useState<ScanTarget>('spells');
   const [selectedProviders, setSelectedProviders] = useState<ScanProvider[]>(['claude', 'codex']);
   const [scanCandidates, setScanCandidates] = useState<Candidate[]>([]);
-  const [scanSkills, setScanSkills] = useState<SkillRecord[]>([]);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [runningScan, setRunningScan] = useState(false);
   const [addingCandidates, setAddingCandidates] = useState(false);
@@ -147,11 +142,21 @@ export function SettingsView({
   useEffect(
     () =>
       window.spellbook.onShortcutCaptureEnded((result) => {
-        shortcutCaptureTokenRef.current = null;
-        setRecordingShortcut(false);
-        setModifierPreview([]);
-        setShortcutCandidate(null);
-        applyShortcutCaptureEndResult(result);
+        const update = handleShortcutCaptureEnded(
+          shortcutCaptureTokenRef.current,
+          result
+        );
+        if (!update) {
+          return;
+        }
+        shortcutCaptureTokenRef.current = update.sessionToken;
+        setRecordingShortcut(update.recording);
+        setModifierPreview(update.modifierPreview);
+        setShortcutCandidate(update.candidate);
+        setShortcutState(update.shortcutState);
+        if (update.recoveryFailed) {
+          setShortcutError(t('settings.shortcut.recoveryFailed'));
+        }
       }),
     [t]
   );
@@ -180,7 +185,14 @@ export function SettingsView({
     try {
       const result = await window.spellbook.updateSettings(patch);
       onSettingsChanged(result.settings);
-      showToast(t('settings.saved'), { variant: 'success' });
+      const savedMessage = translateForLocalePreference(
+        result.settings.language,
+        globalThis.navigator?.language,
+        'settings.saved'
+      );
+      showToast(result.warning ?? savedMessage, {
+        variant: result.warning ? 'warning' : 'success'
+      });
     } finally {
       setSaving(false);
     }
@@ -375,24 +387,6 @@ export function SettingsView({
 
         {activeTab === 'localData' ? (
           <SettingsSection title={t('settings.localData')} icon={Database} fill>
-            <InfoRow label={t('settings.databasePath')} value={info?.databasePath ?? t('settings.loading')} />
-            <SettingRow label={t('settings.scanTarget')}>
-              <div className="settings-segmented">
-                {SCAN_TARGET_OPTIONS.map((option) => (
-                  <button
-                    className={scanTarget === option.value ? 'active' : ''}
-                    key={option.value}
-                    onClick={() => {
-                      setScanTarget(option.value);
-                      setSelectedCandidateIds([]);
-                    }}
-                    type="button"
-                  >
-                    {t(option.labelKey)}
-                  </button>
-                ))}
-              </div>
-            </SettingRow>
             <SettingRow label={t('settings.scanProvider')}>
               <div className="settings-segmented">
                 {SCAN_PROVIDERS.map((provider) => (
@@ -409,7 +403,6 @@ export function SettingsView({
             </SettingRow>
             <div className="scan-source-list">
               {activeScanSources
-                .filter((source) => source.target === scanTarget)
                 .map((source) => (
                   <div className="scan-source-row" key={`${source.provider}:${source.target}`}>
                     <span>{source.provider === 'claude' ? 'Claude' : 'Codex'}</span>
@@ -448,8 +441,7 @@ export function SettingsView({
                 {runningScan ? t('scanner.running') : t('scanner.run')}
               </button>
             </div>
-            {scanTarget === 'spells' ? (
-              <div className="candidate-results">
+            <div className="candidate-results">
                 <div className="section-heading compact">
                   <h3>{t('library.candidates')}</h3>
                   <div className="button-row">
@@ -492,18 +484,7 @@ export function SettingsView({
                   })}
                   {scanCandidates.length === 0 ? <div className="empty-state">{t('scanner.noCandidates')}</div> : null}
                 </div>
-              </div>
-            ) : (
-              <div className="skill-scan-results">
-                {scanSkills.map((skill) => (
-                  <div className="settings-info-row" key={skill.id}>
-                    <span>{skill.name}</span>
-                    <code title={skill.rootPath}>{skill.rootPath}</code>
-                  </div>
-                ))}
-                {scanSkills.length === 0 ? <div className="empty-state">{t('skill.empty')}</div> : null}
-              </div>
-            )}
+            </div>
           </SettingsSection>
         ) : null}
       </div>
@@ -725,19 +706,29 @@ export function SettingsView({
     setRunningScan(true);
     try {
       const result = await window.spellbook.runScan({
-        target: scanTarget,
+        target: 'spells',
         providers: selectedProviders,
-        scanSources: activeScanSources
       });
       setScanCandidates(result.candidates);
-      setScanSkills(result.skills);
       setSelectedCandidateIds([]);
-      showToast(
-        scanTarget === 'spells'
-          ? `${t('status.scanFinished')}: ${result.candidates.length}`
-          : `${t('status.skillScanFinished')}: ${result.skills.length}`
-      );
+      const feedback = summarizeScanFeedback(result.sourceFiles);
+      if (feedback.kind === 'success') {
+        showToast(`${t('status.scanFinished')}: ${result.candidates.length}`);
+      } else {
+        const displayedPaths = feedback.paths.slice(0, 2).join(', ');
+        const remaining = feedback.paths.length - 2;
+        const suffix = remaining > 0 ? ` (+${remaining})` : '';
+        showToast(
+          `${t(feedback.kind === 'partial' ? 'status.scanPartial' : 'status.scanFailed')}: ${displayedPaths}${suffix}`,
+          { variant: feedback.kind === 'partial' ? 'warning' : 'error' }
+        );
+      }
       await onChanged();
+    } catch (error) {
+      const detail = error instanceof Error && error.message
+        ? error.message
+        : t('status.scanFailed');
+      showToast(`${t('status.scanFailed')}: ${detail}`, { variant: 'error' });
     } finally {
       setRunningScan(false);
     }
@@ -927,7 +918,6 @@ function SettingsSection({
     </div>
   );
 }
-
 function SettingRow({
   label,
   description,
@@ -944,15 +934,6 @@ function SettingRow({
         {description ? <span>{description}</span> : null}
       </div>
       <div className="setting-control">{children}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="settings-info-row">
-      <span>{label}</span>
-      <code title={value}>{value}</code>
     </div>
   );
 }

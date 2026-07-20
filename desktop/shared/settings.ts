@@ -1,8 +1,9 @@
-import type { ScanSourceConfig, SkillPlatform } from './types';
+import type { ScanSourceConfig } from './types';
+import type { DesktopPlatform } from './platform';
 
 export type AppLanguage = 'system' | 'zh' | 'en';
 export type ShortcutAccelerator = string;
-export type ShortcutPlatform = 'win32' | 'darwin';
+export type ShortcutPlatform = DesktopPlatform;
 export type QuickPanelPlacement = 'center' | 'mouse';
 
 export interface AppSettings {
@@ -18,6 +19,7 @@ export type AppSettingsPatch = Partial<Omit<AppSettings, 'quickPanelShortcut'>>;
 
 export interface SettingsUpdateResult {
   settings: AppSettings;
+  warning?: string;
 }
 
 export interface ShortcutDefinition {
@@ -76,14 +78,18 @@ export type ShortcutCaptureResult =
   | { ok: false; error: 'busy' | 'failed'; state: QuickPanelShortcutState };
 
 export type ShortcutCaptureEndResult =
-  | { ok: true; state: QuickPanelShortcutState }
-  | { ok: false; error: 'recovery_failed'; state: QuickPanelShortcutState };
+  | { ok: true; sessionToken: string | null; state: QuickPanelShortcutState }
+  | {
+      ok: false;
+      sessionToken: string;
+      error: 'recovery_failed';
+      state: QuickPanelShortcutState;
+    };
 
 export interface SettingsInfo {
-  databasePath: string;
   defaultScanSources: ScanSourceConfig[];
   historyRoots: Array<{ sourceTool: 'claude' | 'codex'; path: string }>;
-  skillRoots: Array<{ platform: SkillPlatform; path: string }>;
+  platform: DesktopPlatform;
 }
 
 export const DEFAULT_QUICK_PANEL_SHORTCUT = 'CommandOrControl+Shift+Space';
@@ -194,8 +200,11 @@ export function formatShortcutDisplay(
   accelerator: unknown,
   platform: ShortcutPlatform = 'win32'
 ): string {
-  return getShortcutKeycaps(accelerator, platform)
-    .map((keycap) => keycap.label)
+  const normalized =
+    normalizeShortcutAccelerator(accelerator, platform) ?? DEFAULT_QUICK_PANEL_SHORTCUT;
+  return normalized
+    .split('+')
+    .map((token) => shortcutDisplayLabel(token, platform))
     .join(' ');
 }
 
@@ -380,6 +389,19 @@ function shortcutKeycap(token: string, platform: ShortcutPlatform): ShortcutKeyc
     };
   }
   return { key: token, label: displayMainKey(token), spokenLabel: spokenMainKey(token) };
+}
+
+function shortcutDisplayLabel(token: string, platform: ShortcutPlatform): string {
+  if (token === 'CommandOrControl' || token === 'Command') {
+    return platform === 'darwin' ? 'Cmd' : token === 'CommandOrControl' ? 'Ctrl' : 'Command';
+  }
+  if (token === 'Control') {
+    return 'Ctrl';
+  }
+  if (token === 'Alt') {
+    return platform === 'darwin' ? 'Option' : 'Alt';
+  }
+  return displayMainKey(token);
 }
 
 function displayMainKey(token: string): string {

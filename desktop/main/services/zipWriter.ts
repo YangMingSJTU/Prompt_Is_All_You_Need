@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { isPortableRelativePath } from './skillPath';
 
 interface ZipEntry {
   name: string;
@@ -9,12 +10,21 @@ interface ZipEntry {
 const CRC_TABLE = buildCrcTable();
 
 export async function writeZipFile(outputPath: string, entries: ZipEntry[]): Promise<void> {
+  for (const entry of entries) {
+    if (!isPortableRelativePath(entry.name)) {
+      throw Object.assign(new Error('Unsafe zip entry path'), {
+        code: 'EINVAL',
+        path: entry.name
+      });
+    }
+  }
+
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
 
   for (const entry of entries) {
-    const name = Buffer.from(entry.name.replaceAll('\\', '/'), 'utf8');
+    const name = Buffer.from(entry.name, 'utf8');
     const data = Buffer.from(entry.data);
     const crc = crc32(data);
     const localHeader = Buffer.alloc(30);

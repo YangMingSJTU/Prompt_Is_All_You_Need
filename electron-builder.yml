@@ -1,0 +1,39 @@
+appId: com.spellbook.desktop
+productName: Spellbook
+asar: true
+npmRebuild: false
+
+directories:
+  output: packaged-output
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - node_modules/sql.js/**/*
+  - "!**/*.map"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icons/app-icon.ico
+  artifactName: Spellbook-${version}-win-${arch}-setup.${ext}
+  requestedExecutionLevel: asInvoker
+
+mac:
+  target: dir
+  icon: assets/icons/app-icon.png
+  category: public.app-category.productivity
+  identity: null
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  deleteAppDataOnUninstall: false

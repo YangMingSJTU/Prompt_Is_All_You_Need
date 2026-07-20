@@ -1,5 +1,3 @@
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import type { AppDatabase } from './database';
 import {
   DEFAULT_APP_SETTINGS,
@@ -13,6 +11,11 @@ import {
   type ShortcutAccelerator
 } from '../../shared/settings';
 import type { ScanProvider, ScanSourceConfig, ScanTarget } from '../../shared/types';
+import {
+  isAbsolutePlatformPath,
+  type PlatformPathContext,
+  type PlatformPaths
+} from './platformPaths';
 
 interface SettingRow {
   [key: string]: unknown;
@@ -26,20 +29,31 @@ export interface SettingsService {
   updateQuickPanelShortcut(shortcut: ShortcutAccelerator): Promise<AppSettings>;
 }
 
-export function createSettingsService(db: AppDatabase): SettingsService {
+export interface SettingsServiceOptions {
+  defaultScanSources: ScanSourceConfig[];
+  pathContext: PlatformPathContext;
+}
+
+export function createSettingsService(
+  db: AppDatabase,
+  options: SettingsServiceOptions
+): SettingsService {
   return {
     getSettings() {
       const rows = db.all<SettingRow>('SELECT key, value FROM app_settings');
       const values = new Map(rows.map((row) => [row.key, row.value]));
       return {
         language: normalizeLanguage(values.get('language')),
-        quickPanelShortcut: normalizeShortcut(values.get('quickPanelShortcut')),
+        quickPanelShortcut: normalizeShortcut(
+          values.get('quickPanelShortcut'),
+          options.pathContext.platform
+        ),
         quickPanelPlacement: normalizePlacement(values.get('quickPanelPlacement')),
         quickPanelPinned: normalizePinned(values.get('quickPanelPinned')),
         recommendationPanelOpen: normalizeRecommendationPanelOpen(
           values.get('recommendationPanelOpen')
         ),
-        scanSources: normalizeScanSources(values.get('scanSources'))
+        scanSources: normalizeScanSources(values.get('scanSources'), options)
       };
     },
     async updateSettings(patch) {
@@ -69,7 +83,7 @@ export function createSettingsService(db: AppDatabase): SettingsService {
           scanSources:
             patch.scanSources === undefined
               ? current.scanSources
-              : normalizeScanSources(patch.scanSources)
+              : normalizeScanSources(patch.scanSources, options)
         };
         writeSettings(db, [
           ['language', next.language],
@@ -82,7 +96,7 @@ export function createSettingsService(db: AppDatabase): SettingsService {
       });
     },
     async updateQuickPanelShortcut(shortcut) {
-      const normalized = normalizeShortcutAccelerator(shortcut);
+      const normalized = normalizeShortcutAccelerator(shortcut, options.pathContext.platform);
       if (!normalized) {
         throw new Error('Invalid quick panel shortcut');
       }
@@ -98,8 +112,14 @@ function normalizeLanguage(value: unknown): AppLanguage {
   return isAppLanguage(value) ? value : DEFAULT_APP_SETTINGS.language;
 }
 
-function normalizeShortcut(value: unknown): ShortcutAccelerator {
-  return normalizeShortcutAccelerator(value) ?? DEFAULT_APP_SETTINGS.quickPanelShortcut;
+function normalizeShortcut(
+  value: unknown,
+  platform: PlatformPathContext['platform']
+): ShortcutAccelerator {
+  return (
+    normalizeShortcutAccelerator(value, platform) ??
+    DEFAULT_APP_SETTINGS.quickPanelShortcut
+  );
 }
 
 function normalizePlacement(value: unknown): QuickPanelPlacement {
@@ -124,26 +144,32 @@ function normalizeBooleanSetting(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
-export function defaultScanSources(): ScanSourceConfig[] {
-  const home = homedir();
-  return [
-    { provider: 'claude', target: 'spells', path: join(home, '.claude'), enabled: true },
-    { provider: 'codex', target: 'spells', path: join(home, '.codex'), enabled: true },
-    { provider: 'claude', target: 'skills', path: join(home, '.claude', 'skills'), enabled: true },
-    { provider: 'codex', target: 'skills', path: join(home, '.agents', 'skills'), enabled: true }
-  ];
+export function defaultScanSources(
+  paths: Pick<PlatformPaths, 'historyRoots'>
+): ScanSourceConfig[] {
+  return paths.historyRoots.map((root) => ({
+    provider: root.sourceTool,
+    target: 'spells',
+    path: root.path,
+    enabled: true
+  }));
 }
 
-function normalizeScanSources(value: unknown): ScanSourceConfig[] {
+function normalizeScanSources(
+  value: unknown,
+  options: SettingsServiceOptions
+): ScanSourceConfig[] {
   const parsed = typeof value === 'string' ? parseJson(value) : value;
-  const defaults = defaultScanSources();
+  const defaults = options.defaultScanSources;
   if (!Array.isArray(parsed)) {
     return defaults;
   }
 
-  const byKey = new Map(defaults.map((source) => [scanSourceKey(source.provider, source.target), source]));
+  const byKey = new Map(
+    defaults.map((source) => [scanSourceKey(source.provider, source.target), source])
+  );
   for (const item of parsed) {
-    if (!isScanSourceConfig(item)) {
+    if (!isScanSourceConfig(item) || !isAbsolutePlatformPath(item.path, options.pathContext)) {
       continue;
     }
     const key = scanSourceKey(item.provider, item.target);
@@ -153,11 +179,13 @@ function normalizeScanSources(value: unknown): ScanSourceConfig[] {
     byKey.set(key, {
       provider: item.provider,
       target: item.target,
-      path: item.path.trim() || byKey.get(key)?.path || '',
+      path: item.path.trim(),
       enabled: item.enabled
     });
   }
-  return defaults.map((source) => byKey.get(scanSourceKey(source.provider, source.target)) ?? source);
+  return defaults.map(
+    (source) => byKey.get(scanSourceKey(source.provider, source.target)) ?? source
+  );
 }
 
 function parseJson(value: string): unknown {
@@ -186,14 +214,32 @@ function isScanProvider(value: unknown): value is ScanProvider {
 }
 
 function isScanTarget(value: unknown): value is ScanTarget {
-  return value === 'spells' || value === 'skills';
+  return value === 'spells';
+}
+
+export function areScanSourcesValid(
+  value: unknown,
+  pathContext: PlatformPathContext
+): value is ScanSourceConfig[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (item) => isScanSourceConfig(item) && isAbsolutePlatformPath(item.path, pathContext)
+    )
+  );
 }
 
 function scanSourceKey(provider: ScanProvider, target: ScanTarget): string {
   return `${provider}:${target}`;
 }
 
-function writeSetting(db: AppDatabase, key: keyof AppSettings, value: string, updatedAt: string): void {
+function writeSetting(
+  db: AppDatabase,
+  key: keyof AppSettings,
+  value: string,
+  updatedAt: string
+): void {
   db.run(
     `
       INSERT INTO app_settings (key, value, updated_at)

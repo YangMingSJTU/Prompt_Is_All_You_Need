@@ -21,8 +21,8 @@ Spellbook 魔法书是一个本地优先的桌面端 AI 提示词与技能管理
 
 ## Local Data
 
-- 数据库：`~/.spellbook/index.sqlite`
-- 技能打包输出：`~/.spellbook/packages/`
+- 数据库：Electron `userData/data/index.sqlite`
+- 技能打包输出：Electron `userData/data/packages/`
 - Claude 技能目录：`~/.claude/skills`
 - Codex 用户级技能目录：`$HOME/.agents/skills`
 
@@ -37,5 +37,17 @@ npm run typecheck
 npm run build
 npm run dev
 ```
+
+原生目录包与 smoke 必须在对应系统执行：
+
+```bash
+# Windows
+npm run package:win && npm run smoke:packaged:win
+
+# macOS
+npm run package:mac && npm run smoke:packaged:mac
+```
+
+完整的路径、资源和验收契约见 [`docs/cross-platform-compatibility.md`](docs/cross-platform-compatibility.md)。
 
 默认不上传数据、不调用远程 LLM、不读取 assistant/tool-result 内容。

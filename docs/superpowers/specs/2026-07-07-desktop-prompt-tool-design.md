@@ -216,11 +216,13 @@ The scanner follows the PRD privacy boundary.
 It discovers:
 
 ```text
-%USERPROFILE%\.claude\history.jsonl
-%USERPROFILE%\.claude\projects\**\*.jsonl
-%USERPROFILE%\.codex\sessions\**\*.jsonl
+<CLAUDE_CONFIG_DIR or ~/.claude>/history.jsonl
+<CLAUDE_CONFIG_DIR or ~/.claude>/projects/**/*.jsonl
+<CODEX_HOME or ~/.codex>/sessions/**/*.jsonl
 ```
 
+
+Paths use the current OS separator. Persisted overrides must be absolute for the current OS.
 It skips path segments:
 
 ```text
@@ -270,11 +272,10 @@ Exports are local writes and require preview plus explicit confirmation.
 
 | Target | Default path |
 | --- | --- |
-| Snippet | `%USERPROFILE%\.apm\snippets\<slug>.md` |
-| Claude Skill | `%USERPROFILE%\.claude\skills\<slug>\SKILL.md` |
-| Codex Skill | `%USERPROFILE%\.codex\skills\<slug>\SKILL.md` |
+| Claude Skill | `~/.claude/skills/<slug>/SKILL.md` |
+| Codex Skill | `~/.agents/skills/<slug>/SKILL.md` |
 
-The Codex Skill path uses `%USERPROFILE%\.codex\skills` because this machine already stores Codex skills there. A future settings screen can add alternate directories.
+Portable file names and collision behavior are defined in [`../../cross-platform-compatibility.md`](../../cross-platform-compatibility.md).
 
 If the target exists, the app offers overwrite, rename, or cancel. Cancel is the default.
 

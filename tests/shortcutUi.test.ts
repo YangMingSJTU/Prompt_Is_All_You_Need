@@ -21,10 +21,10 @@ describe('shortcut IPC and renderer UI', () => {
     expect(main).toContain('event.sender !== mainWindow.webContents');
     expect(main).toContain("'quickPanelShortcut' in patch");
     expect(main).not.toContain('globalShortcut.register(');
-    expect(main).toContain("mainWindow.webContents.on('render-process-gone'");
-    expect(main).toContain("mainWindow.webContents.on('destroyed'");
-    expect(main).toContain("mainWindow.on('blur'");
-    expect(main).toContain("captureWindow.webContents.send('shortcut:capture-ended'");
+    expect(main).toContain("window.webContents.on('render-process-gone'");
+    expect(main).toContain("window.webContents.on('destroyed'");
+    expect(main).toContain("window.on('blur'");
+    expect(main).toContain("window.webContents.send('shortcut:capture-ended', result)");
 
     expect(controller).toContain('this.registerOwned(candidate)');
     expect(controller).toContain('await this.settingsService.updateQuickPanelShortcut(candidate)');
@@ -58,6 +58,7 @@ describe('shortcut IPC and renderer UI', () => {
     expect(component).toContain("'shortcut-capture-description shortcut-inline-error'");
     expect(component).toContain('shortcutButtonPresentation.label');
     expect(component).toContain('restoreShortcutButtonFocus');
+    expect(component).toContain('handleShortcutCaptureEnded');
     expect(component).toContain('getShortcutAccessibleText');
     expect(component).toContain('dismissShortcutStartupNotice()');
     expect(component).toContain("t('settings.shortcut.internalDescription')");

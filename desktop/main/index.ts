@@ -1,11 +1,12 @@
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { resolveAppName } from '../shared/appIdentity';
 import { calculateFloatingPanelPosition } from '../shared/floatingPlacement';
 import {
-  APP_TITLEBAR_HEIGHT,
   FLOATING_WINDOW_DEFAULT_HEIGHT,
   FLOATING_WINDOW_DEFAULT_WIDTH,
   FLOATING_WINDOW_MAX_HEIGHT,
@@ -21,10 +22,7 @@ import {
 } from '../shared/layout';
 import type {
   FloatingWindowState,
-  ScanProvider,
-  ScanRunRequest,
-  ScanSourceConfig,
-  SkillPlatform,
+  SourceFileSummary,
   SpellCreateInput,
   SpellStatePatch,
   SpellUpdatePatch
@@ -32,23 +30,50 @@ import type {
 import {
   DEFAULT_APP_SETTINGS,
   type AppSettingsPatch,
-  type ShortcutPlatform,
   type ShortcutUpdateRequest
 } from '../shared/settings';
+import { isDesktopPlatform, type DesktopPlatform } from '../shared/platform';
+import type { PlatformPaths } from './services/platformPaths';
 import { openAppDatabase } from './services/database';
 import { createSpellService } from './services/spellService';
 import { generateCandidates } from './services/candidateGenerator';
 import {
-  defaultHistoryRoots,
   discoverJsonlFiles,
   hasSuccessfulSourceScan,
   scanJsonlFiles
 } from './services/scanner';
-import { createSettingsService, defaultScanSources, type SettingsService } from './services/settingsService';
+import { resolveScanRequest } from './services/scanRequest';
+import {
+  areScanSourcesValid,
+  createSettingsService,
+  defaultScanSources,
+  type SettingsService
+} from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
-import { createSpellbookPaths } from './services/spellbookPaths';
-import { getAppIconPath, getTrayIconPath } from './services/appAssets';
 import { QuickPanelShortcutController } from './services/quickPanelShortcutController';
+import {
+  createPlatformPathContext,
+  createPlatformPaths
+} from './services/platformPaths';
+import {
+  SQL_WASM_PATH,
+  TRAY_ICON_PATH,
+  WINDOWS_APP_ICON_PATH
+} from './services/runtimeAssets';
+import {
+  applicationMenuTemplate,
+  createTrayImage,
+  mainWindowChromeOptions,
+  optionalWindowsIcon
+} from './services/nativeShell';
+import { writePackagedSmokeEvidence } from './services/packagedSmoke';
+import { runAppPreflight, runAppStartup } from './services/appStartup';
+import {
+  createAppReadinessBarrier,
+  createWindowRestorer,
+  registerSingleInstanceLifecycle
+} from './services/appLifecycle';
+import { registerSkillHandlers } from './ipc/skillHandlers';
 
 let mainWindow: BrowserWindow | null = null;
 let floatingWindow: BrowserWindow | null = null;
@@ -61,24 +86,35 @@ let mainWindowCompact = false;
 let mainWindowExpandedWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 let mainWindowRecommendationDelta = SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA;
 let restoreMainWindowMaximized = false;
+const desktopPlatform = requireDesktopPlatform(process.platform);
+const platformPathContext = createPlatformPathContext(desktopPlatform);
+let platformPaths: PlatformPaths | null = null;
 
-async function createWindow(): Promise<void> {
+function requireDesktopPlatform(value: string): DesktopPlatform {
+  if (!isDesktopPlatform(value)) {
+    throw new Error(`Unsupported desktop platform: ${value}`);
+  }
+  return value;
+}
+
+function getPlatformPaths(): PlatformPaths {
+  if (!platformPaths) {
+    throw new Error('Platform paths are not ready');
+  }
+  return platformPaths;
+}
+
+async function createWindow(): Promise<BrowserWindow> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
   const appName = getCurrentAppName();
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
     height: MAIN_WINDOW_DEFAULT_HEIGHT,
     minWidth: MAIN_WINDOW_MIN_WIDTH,
     minHeight: MAIN_WINDOW_MIN_HEIGHT,
     useContentSize: true,
     title: appName,
-    icon: getAppIconPath(),
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#0f1115',
-      symbolColor: '#f5f0df',
-      height: APP_TITLEBAR_HEIGHT
-    },
+    ...mainWindowChromeOptions(desktopPlatform, WINDOWS_APP_ICON_PATH),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -89,36 +125,46 @@ async function createWindow(): Promise<void> {
     }
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+  mainWindow = window;
+  window.once('ready-to-show', () => {
+    if (!window.isDestroyed()) {
+      window.show();
+    }
   });
-  mainWindow.webContents.on('did-start-loading', () => {
+  window.webContents.on('did-start-loading', () => {
     shortcutController?.forceEndCapture();
   });
-  mainWindow.webContents.on('render-process-gone', () => {
+  window.webContents.on('render-process-gone', () => {
     shortcutController?.forceEndCapture();
   });
-  mainWindow.webContents.on('destroyed', () => {
+  window.webContents.on('destroyed', () => {
     shortcutController?.forceEndCapture();
   });
-  mainWindow.on('blur', () => {
+  window.on('blur', () => {
     const controller = shortcutController;
     if (!controller?.getState().captureActive) {
       return;
     }
     const result = controller.forceEndCapture();
-    const captureWindow = mainWindow;
-    if (captureWindow && !captureWindow.isDestroyed()) {
-      captureWindow.webContents.send('shortcut:capture-ended', result);
+    if (!window.isDestroyed()) {
+      window.webContents.send('shortcut:capture-ended', result);
     }
   });
-  mainWindow.on('closed', () => {
+  window.on('closed', () => {
     shortcutController?.forceEndCapture();
-    mainWindow = null;
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
   });
 
-  await loadRenderer(mainWindow, 'main');
+  await loadRenderer(window, 'main');
+  return window;
 }
+
+const restoreMainWindow = createWindowRestorer<BrowserWindow>({
+  getWindow: () => mainWindow,
+  createWindow
+});
 
 async function createFloatingWindow(): Promise<void> {
   const preloadPath = join(__dirname, '../preload/preload.mjs');
@@ -131,7 +177,7 @@ async function createFloatingWindow(): Promise<void> {
     maxWidth: FLOATING_WINDOW_MAX_WIDTH,
     maxHeight: FLOATING_WINDOW_MAX_HEIGHT,
     title: appName,
-    icon: getAppIconPath(),
+    icon: optionalWindowsIcon(desktopPlatform, WINDOWS_APP_ICON_PATH),
     show: false,
     frame: false,
     resizable: true,
@@ -170,17 +216,26 @@ async function loadRenderer(window: BrowserWindow, mode: 'main' | 'floating'): P
 }
 
 async function bootstrap(): Promise<void> {
-  const spellbookPaths = createSpellbookPaths();
-  databasePath = spellbookPaths.databasePath;
-  const db = await openAppDatabase(databasePath);
+  const paths = getPlatformPaths();
+  await Promise.all([
+    mkdir(paths.dataDirectory, { recursive: true }),
+    mkdir(paths.packageDirectory, { recursive: true })
+  ]);
+  databasePath = paths.databasePath;
+  const db = await openAppDatabase(databasePath, { sqlWasmPath: SQL_WASM_PATH });
   const spellService = createSpellService(db);
+  const scanSourceDefaults = defaultScanSources(paths);
   const skillService = createSkillService(db, {
-    roots: defaultSkillRoots(),
-    packageDirectory: spellbookPaths.packageDirectory
+    roots: defaultSkillRoots(paths),
+    packageDirectory: paths.packageDirectory,
+    pathContext: platformPathContext
   });
-  settingsService = createSettingsService(db);
+  settingsService = createSettingsService(db, {
+    defaultScanSources: scanSourceDefaults,
+    pathContext: platformPathContext
+  });
   shortcutController = new QuickPanelShortcutController({
-    platform: getShortcutPlatform(),
+    platform: desktopPlatform,
     globalShortcut,
     settingsService,
     onToggle: toggleFloatingWindow
@@ -224,12 +279,7 @@ async function bootstrap(): Promise<void> {
     spellService.promoteCandidates(candidateIds)
   );
   ipcMain.handle('analytics:get', () => spellService.getAnalytics());
-  ipcMain.handle('skills:list', () => skillService.listSkills());
-  ipcMain.handle('skills:scan', () => skillService.scanSkills());
-  ipcMain.handle('skills:package', (_event, skillId: string) => skillService.packageSkill(skillId));
-  ipcMain.handle('skills:install', (_event, skillId: string, targetPlatform: SkillPlatform) =>
-    skillService.installSkill(skillId, targetPlatform)
-  );
+  registerSkillHandlers(ipcMain, skillService);
   ipcMain.handle('settings:get', () => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
@@ -263,10 +313,9 @@ async function bootstrap(): Promise<void> {
     return getShortcutController().dismissStartupNotice();
   });
   ipcMain.handle('settings:info', () => ({
-    databasePath,
-    defaultScanSources: defaultScanSources(),
-    historyRoots: defaultHistoryRoots(),
-    skillRoots: skillService.getSkillRoots()
+    defaultScanSources: scanSourceDefaults,
+    historyRoots: paths.historyRoots,
+    platform: desktopPlatform
   }));
   ipcMain.handle(
     'window:setRecommendationPanelOpen',
@@ -296,42 +345,78 @@ async function bootstrap(): Promise<void> {
     if (!patch || typeof patch !== 'object' || 'quickPanelShortcut' in patch) {
       throw new Error('Shortcut updates require the dedicated shortcut API');
     }
+    const current = settingsService.getSettings();
+    if ('scanSources' in patch && !areScanSourcesValid(patch.scanSources, platformPathContext)) {
+      return {
+        settings: current,
+        warning:
+          desktopPlatform === 'darwin'
+            ? 'History folders must use absolute macOS paths.'
+            : 'History folders must use absolute Windows drive or UNC paths.'
+      };
+    }
     const settings = await settingsService.updateSettings(patch);
     applyAppIdentity();
     return { settings };
   });
-  ipcMain.handle('scanner:run', async (_event, request: ScanRunRequest) => {
+  ipcMain.handle('scanner:run', async (_event, request: unknown) => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
     }
-    const scanRequest = normalizeScanRunRequest(request, settingsService.getSettings().scanSources);
-    const roots = scanRequest.scanSources.filter(
-      (source) =>
-        source.enabled &&
-        source.target === scanRequest.target &&
-        scanRequest.providers.includes(source.provider)
+    const scanRequest = resolveScanRequest(
+      request,
+      settingsService.getSettings().scanSources,
+      platformPathContext
     );
-    if (scanRequest.target === 'skills') {
-      const skills = await skillService.scanSkills(
-        roots.map((root) => ({ platform: root.provider, path: root.path }))
-      );
-      return {
-        id: randomUUID(),
-        target: scanRequest.target,
-        scannedPrompts: 0,
-        sourceFiles: [],
-        candidates: await spellService.listCandidates(),
-        skills,
-        warningCount: 0
-      };
-    }
-
-    const summaries = [];
+    const roots = scanRequest.scanSources;
+    const summaries: SourceFileSummary[] = [];
     const allPrompts = [];
 
     for (const root of roots) {
-      const files = await discoverJsonlFiles(root.path);
-      const summary = await scanJsonlFiles(files, root.provider);
+      const discovery = await discoverJsonlFiles(root.path, { pathContext: platformPathContext });
+      if (discovery.status === 'missing') {
+        summaries.push({
+          id: `${root.provider}:${root.path}`,
+          sourceTool: root.provider,
+          path: root.path,
+          status: 'missing',
+          lineCount: 0,
+          promptCount: 0,
+          warningCount: 0,
+          scannedAt: new Date().toISOString()
+        });
+        continue;
+      }
+      discovery.errors.forEach((error, index) => {
+        summaries.push({
+          id: `${root.provider}:${error.path}:discovery:${index}`,
+          sourceTool: root.provider,
+          path: error.path,
+          status: error.code === 'permission_denied' ? 'unreadable' : 'failed',
+          lineCount: 0,
+          promptCount: 0,
+          warningCount: 1,
+          scannedAt: new Date().toISOString(),
+          error
+        });
+      });
+      if (discovery.files.length === 0 && discovery.errors.length === 0) {
+        summaries.push({
+          id: `${root.provider}:${root.path}`,
+          sourceTool: root.provider,
+          path: root.path,
+          status: 'scanned',
+          lineCount: 0,
+          promptCount: 0,
+          warningCount: 0,
+          scannedAt: new Date().toISOString()
+        });
+      }
+      const summary = await scanJsonlFiles(
+        discovery.files,
+        root.provider,
+        { pathContext: platformPathContext }
+      );
       summaries.push(...summary.sourceFiles);
       allPrompts.push(...summary.prompts);
     }
@@ -347,7 +432,6 @@ async function bootstrap(): Promise<void> {
       scannedPrompts: allPrompts.length,
       sourceFiles: summaries,
       candidates: await spellService.listCandidates(),
-      skills: await skillService.listSkills(),
       warningCount: summaries.reduce((total, source) => total + source.warningCount, 0)
     };
   });
@@ -375,7 +459,7 @@ async function setFloatingWindowPinned(pinned: boolean): Promise<FloatingWindowS
 }
 
 function registerDesktopControls(): void {
-  const trayIcon = nativeImage.createFromPath(getTrayIconPath()).resize({ width: 16, height: 16 });
+  const trayIcon = createTrayImage(desktopPlatform, TRAY_ICON_PATH, nativeImage);
   tray = new Tray(trayIcon);
   tray.setToolTip(getCurrentAppName());
   tray.setContextMenu(
@@ -389,6 +473,25 @@ function registerDesktopControls(): void {
   );
 }
 
+async function completePackagedSmokeIfRequested(): Promise<void> {
+  const outputPath = process.env.SPELLBOOK_PACKAGED_SMOKE_EVIDENCE;
+  if (!outputPath) {
+    return;
+  }
+  const paths = getPlatformPaths();
+  const evidence = await writePackagedSmokeEvidence(outputPath, {
+    platform: desktopPlatform,
+    isPackaged: app.isPackaged,
+    paths,
+    pathContext: platformPathContext,
+    sqlWasmPath: SQL_WASM_PATH,
+    trayIconPath: TRAY_ICON_PATH,
+    windowsIconPath:
+      desktopPlatform === 'win32' ? WINDOWS_APP_ICON_PATH : undefined
+  });
+  app.exit(evidence.passed ? 0 : 1);
+}
+
 function getCurrentAppName(): string {
   const language = settingsService?.getSettings().language ?? DEFAULT_APP_SETTINGS.language;
   return resolveAppName(language, app.getLocale());
@@ -397,38 +500,13 @@ function getCurrentAppName(): string {
 function applyAppIdentity(): void {
   const name = getCurrentAppName();
   app.setName(name);
+  const menuTemplate = applicationMenuTemplate(desktopPlatform, name);
+  Menu.setApplicationMenu(menuTemplate ? Menu.buildFromTemplate(menuTemplate) : null);
   mainWindow?.setTitle(name);
   floatingWindow?.setTitle(name);
   tray?.setToolTip(name);
 }
 
-function normalizeScanRunRequest(request: ScanRunRequest, fallbackSources: ScanSourceConfig[]): ScanRunRequest {
-  const target = request?.target === 'skills' ? 'skills' : 'spells';
-  const providers = Array.isArray(request?.providers)
-    ? request.providers.filter((provider): provider is ScanProvider => provider === 'claude' || provider === 'codex')
-    : [];
-  const scanSources = Array.isArray(request?.scanSources)
-    ? request.scanSources.filter(isScanSourceConfig)
-    : [];
-  return {
-    target,
-    providers: providers.length ? [...new Set(providers)] : ['claude', 'codex'],
-    scanSources: scanSources.length ? scanSources : fallbackSources
-  };
-}
-
-function isScanSourceConfig(value: unknown): value is ScanSourceConfig {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const source = value as Record<string, unknown>;
-  return (
-    (source.provider === 'claude' || source.provider === 'codex') &&
-    (source.target === 'spells' || source.target === 'skills') &&
-    typeof source.path === 'string' &&
-    typeof source.enabled === 'boolean'
-  );
-}
 
 function toggleFloatingWindow(): void {
   if (!floatingWindow) {
@@ -523,23 +601,82 @@ function setMainWindowRecommendationPanelOpen(
   });
 }
 
-app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
-  await bootstrap();
-  await createWindow();
-  await createFloatingWindow();
-  registerDesktopControls();
+const preflightResult = runAppPreflight({
+  prepare() {},
+  showFailure(feedback) {
+    dialog.showErrorBox(feedback.title, feedback.message);
+  },
+  exit(code) {
+    app.exit(code);
+  }
 });
 
+const appReadiness = createAppReadinessBarrier({
+  async startApplication() {
+    return runAppStartup({
+      async initialize() {
+        await app.whenReady();
+        platformPaths = createPlatformPaths({
+          platform: desktopPlatform,
+          homeDirectory: homedir(),
+          userDataDirectory: app.getPath('userData'),
+          env: process.env
+        });
+        await bootstrap();
+      },
+      async createWindows() {
+        await restoreMainWindow();
+        await createFloatingWindow();
+        registerDesktopControls();
+        await completePackagedSmokeIfRequested();
+      },
+      showFailure(feedback) {
+        dialog.showErrorBox(feedback.title, feedback.message);
+      },
+      quit() {
+        app.quit();
+      }
+    });
+  },
+  restorePrimaryWindow: restoreMainWindow
+});
+
+const instanceRole =
+  preflightResult === 'ready'
+    ? registerSingleInstanceLifecycle({
+        requestLock: () => app.requestSingleInstanceLock(),
+        onSecondInstance(handler) {
+          app.on('second-instance', () => handler());
+        },
+        async restorePrimaryWindow() {
+          await appReadiness.restorePrimaryWindow();
+        },
+        reportRestoreFailure(error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          dialog.showErrorBox(
+            'Spellbook could not restore its window',
+            `The existing Spellbook process is still running, but its window could not be restored.\n\nDetails: ${detail}`
+          );
+        },
+        quitSecondary: () => app.quit()
+      })
+    : 'secondary';
+
+if (preflightResult === 'ready' && instanceRole === 'primary') {
+  void appReadiness.start();
+}
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (desktopPlatform !== 'darwin') {
     app.quit();
   }
 });
 
 app.on('activate', async () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    await createWindow();
+  if (!(await appReadiness.restorePrimaryWindow())) {
+    return;
+  }
+  if (!floatingWindow || floatingWindow.isDestroyed()) {
     await createFloatingWindow();
   }
 });
@@ -547,10 +684,6 @@ app.on('activate', async () => {
 app.on('will-quit', () => {
   shortcutController?.dispose();
 });
-
-function getShortcutPlatform(): ShortcutPlatform {
-  return process.platform === 'darwin' ? 'darwin' : 'win32';
-}
 
 function getShortcutController(): QuickPanelShortcutController {
   if (!shortcutController) {

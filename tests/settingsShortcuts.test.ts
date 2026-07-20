@@ -16,8 +16,13 @@ describe('settings shortcuts', () => {
       'Ctrl Shift Space'
     );
     expect(formatShortcutDisplay(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'darwin')).toBe(
-      '⌘ ⇧ Space'
+      'Cmd Shift Space'
     );
+    expect(
+      getShortcutKeycaps(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'darwin').map(
+        (item) => item.label
+      )
+    ).toEqual(['⌘', '⇧', 'Space']);
     expect(getShortcutAccessibleText(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'darwin')).toBe(
       'Command + Shift + Space'
     );
@@ -50,15 +55,15 @@ describe('settings shortcuts', () => {
   it('keeps Command, Control, and Option distinct on macOS', () => {
     expect(shortcutFromKeyInput({ key: '7', metaKey: true, shiftKey: true }, 'darwin')).toEqual({
       accelerator: 'Command+Shift+7',
-      display: '⌘ ⇧ 7'
+      display: 'Cmd Shift 7'
     });
     expect(shortcutFromKeyInput({ key: 'F5', ctrlKey: true }, 'darwin')).toEqual({
       accelerator: 'Control+F5',
-      display: '⌃ F5'
+      display: 'Ctrl F5'
     });
     expect(shortcutFromKeyInput({ key: ' ', altKey: true }, 'darwin')).toEqual({
       accelerator: 'Alt+Space',
-      display: '⌥ Space'
+      display: 'Option Space'
     });
     expect(getShortcutKeycaps('Command+Control+Alt+K', 'darwin').map((item) => item.label)).toEqual(
       ['⌘', '⌃', '⌥', 'K']
@@ -72,5 +77,14 @@ describe('settings shortcuts', () => {
     expect(isShortcutAccelerator('P', 'win32')).toBe(false);
     expect(isShortcutAccelerator('Control+K+P', 'darwin')).toBe(false);
     expect(isShortcutAccelerator('CommandOrControl+Alt+P', 'win32')).toBe(true);
+  });
+
+  it('uses macOS modifier names in visible shortcut text', () => {
+    expect(formatShortcutDisplay('CommandOrControl+Alt+Space', 'darwin')).toBe(
+      'Cmd Option Space'
+    );
+    expect(shortcutFromKeyInput({ key: 'k', metaKey: true }, 'darwin')).toEqual({
+      accelerator: 'Command+K', display: 'Cmd K'
+    });
   });
 });

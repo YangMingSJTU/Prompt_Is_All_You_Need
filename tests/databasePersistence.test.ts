@@ -7,8 +7,13 @@ import {
   type DatabaseFileOperations
 } from '../desktop/main/services/database';
 import { createSettingsService } from '../desktop/main/services/settingsService';
+import { createPlatformPathContext } from '../desktop/main/services/platformPaths';
 
 const temporaryDirectories: string[] = [];
+const SETTINGS_OPTIONS = {
+  defaultScanSources: [],
+  pathContext: createPlatformPathContext('win32')
+};
 
 afterEach(async () => {
   await Promise.all(
@@ -24,7 +29,7 @@ describe('database persistence', () => {
     const databasePath = join(directory, 'spellbook.db');
     const calls: string[] = [];
     const operations = createTrackedOperations(calls);
-    const db = await openAppDatabase(databasePath, operations);
+    const db = await openAppDatabase(databasePath, { fileOperations: operations });
 
     await db.transaction(() => {
       db.run('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)', [
@@ -55,7 +60,7 @@ describe('database persistence', () => {
     const originalBytes = await readFile(databasePath);
 
     const operations = createTrackedOperations([], 'replace');
-    const db = await openAppDatabase(databasePath, operations);
+    const db = await openAppDatabase(databasePath, { fileOperations: operations });
     await expect(
       db.transaction(() => {
         db.run('UPDATE app_settings SET value = ? WHERE key = ?', ['zh', 'language']);
@@ -77,7 +82,7 @@ describe('database persistence', () => {
     const originalBytes = await readFile(databasePath);
 
     const operations = createTrackedOperations([], 'write');
-    const db = await openAppDatabase(databasePath, operations);
+    const db = await openAppDatabase(databasePath, { fileOperations: operations });
 
     await expect(db.transaction(() => undefined)).rejects.toThrow('injected write failure');
     expect(await readFile(databasePath)).toEqual(originalBytes);
@@ -112,12 +117,12 @@ describe('database persistence', () => {
     const directory = await createTemporaryDirectory();
     const databasePath = join(directory, 'spellbook.db');
     const initial = await openAppDatabase(databasePath);
-    const initialSettings = createSettingsService(initial);
+    const initialSettings = createSettingsService(initial, SETTINGS_OPTIONS);
     await initialSettings.updateQuickPanelShortcut('Alt+Space');
 
     const deferred = createDeferredReplaceOperations({ failFirst: true });
-    const db = await openAppDatabase(databasePath, deferred.operations);
-    const settings = createSettingsService(db);
+    const db = await openAppDatabase(databasePath, { fileOperations: deferred.operations });
+    const settings = createSettingsService(db, SETTINGS_OPTIONS);
     const shortcutWrite = settings.updateQuickPanelShortcut('Control+Space');
     await deferred.firstReplaceStarted;
     const languageWrite = settings.updateSettings({ language: 'zh' });
@@ -128,7 +133,10 @@ describe('database persistence', () => {
 
     expect(settings.getSettings().quickPanelShortcut).toBe('Alt+Space');
     expect(settings.getSettings().language).toBe('zh');
-    const reopened = createSettingsService(await openAppDatabase(databasePath));
+    const reopened = createSettingsService(
+      await openAppDatabase(databasePath),
+      SETTINGS_OPTIONS
+    );
     expect(reopened.getSettings().quickPanelShortcut).toBe('Alt+Space');
     expect(reopened.getSettings().language).toBe('zh');
   });
@@ -140,8 +148,8 @@ describe('database persistence', () => {
     await initial.transaction(() => undefined);
 
     const deferred = createDeferredReplaceOperations({ failFirst: false });
-    const db = await openAppDatabase(databasePath, deferred.operations);
-    const settings = createSettingsService(db);
+    const db = await openAppDatabase(databasePath, { fileOperations: deferred.operations });
+    const settings = createSettingsService(db, SETTINGS_OPTIONS);
     const firstWrite = settings.updateSettings({ language: 'zh' });
     await deferred.firstReplaceStarted;
     const secondWrite = settings.updateSettings({ quickPanelPlacement: 'mouse' });
@@ -151,7 +159,10 @@ describe('database persistence', () => {
     deferred.releaseFirstReplace();
     await Promise.all([firstWrite, secondWrite]);
 
-    const reopened = createSettingsService(await openAppDatabase(databasePath));
+    const reopened = createSettingsService(
+      await openAppDatabase(databasePath),
+      SETTINGS_OPTIONS
+    );
     expect(reopened.getSettings().language).toBe('zh');
     expect(reopened.getSettings().quickPanelPlacement).toBe('mouse');
     expect(deferred.replaceCount()).toBe(2);

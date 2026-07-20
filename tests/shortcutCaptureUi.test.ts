@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TFunction } from '../desktop/renderer/i18n';
 import {
   getShortcutButtonPresentation,
+  handleShortcutCaptureEnded,
   restoreShortcutButtonFocus,
   type ShortcutFocusEvent
 } from '../desktop/renderer/shortcutCaptureUi';
@@ -89,6 +90,30 @@ describe('shortcut capture UI behavior', () => {
       label: 'settings.shortcut.set',
       description: 'settings.shortcut.allUnavailable'
     });
+  });
+
+  it('ignores delayed and repeated capture-ended pushes by session token', () => {
+    const endedA = {
+      ok: true as const,
+      sessionToken: 'session-a',
+      state: { ...activeState, captureActive: false }
+    };
+    const endedB = {
+      ok: true as const,
+      sessionToken: 'session-b',
+      state: { ...activeState, captureActive: false }
+    };
+
+    expect(handleShortcutCaptureEnded('session-b', endedA)).toBeNull();
+    expect(handleShortcutCaptureEnded('session-b', endedB)).toEqual({
+      sessionToken: null,
+      recording: false,
+      modifierPreview: [],
+      candidate: null,
+      shortcutState: endedB.state,
+      recoveryFailed: false
+    });
+    expect(handleShortcutCaptureEnded(null, endedB)).toBeNull();
   });
 
   it.each([

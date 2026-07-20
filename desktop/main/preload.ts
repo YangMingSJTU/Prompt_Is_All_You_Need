@@ -8,9 +8,16 @@ import type {
   ShortcutUpdateResult
 } from '../shared/settings';
 import type {
+  InstallSkillRequest,
+  InstallSkillResult,
+  PackageSkillRequest,
+  PackageSkillResult,
+  SkillLibraryState,
+  SkillScanResult
+} from '../shared/skillTypes';
+import type {
   FloatingWindowState,
   ScanRunRequest,
-  SkillPlatform,
   SpellCreateInput,
   SpellDeleteResult,
   SpellStatePatch,
@@ -35,11 +42,13 @@ contextBridge.exposeInMainWorld('spellbook', {
   promoteCandidates: (candidateIds: string[]) => ipcRenderer.invoke('candidates:promoteBatch', candidateIds),
   runScan: (request: ScanRunRequest) => ipcRenderer.invoke('scanner:run', request),
   getAnalytics: () => ipcRenderer.invoke('analytics:get'),
-  listSkills: () => ipcRenderer.invoke('skills:list'),
-  scanSkills: () => ipcRenderer.invoke('skills:scan'),
-  packageSkill: (skillId: string) => ipcRenderer.invoke('skills:package', skillId),
-  installSkill: (skillId: string, targetPlatform: SkillPlatform) =>
-    ipcRenderer.invoke('skills:install', skillId, targetPlatform),
+  getSkillLibraryState: (): Promise<SkillLibraryState> =>
+    ipcRenderer.invoke('skills:getLibraryState'),
+  scanSkills: (): Promise<SkillScanResult> => ipcRenderer.invoke('skills:scan'),
+  packageSkill: (request: PackageSkillRequest): Promise<PackageSkillResult> =>
+    ipcRenderer.invoke('skills:package', request),
+  installSkill: (request: InstallSkillRequest): Promise<InstallSkillResult> =>
+    ipcRenderer.invoke('skills:install', request),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   getSettingsInfo: () => ipcRenderer.invoke('settings:info'),
   updateSettings: (patch: AppSettingsPatch) => ipcRenderer.invoke('settings:update', patch),

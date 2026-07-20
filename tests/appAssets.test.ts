@@ -1,24 +1,22 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join, normalize } from 'node:path';
+import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { getAppIconPath, getTrayIconPath } from '../desktop/main/services/appAssets';
 
 describe('app assets', () => {
-  it('uses a Windows icon file for window and taskbar chrome', () => {
-    const iconPath = getAppIconPath(process.cwd(), 'win32');
+  it('imports every runtime resource through the build asset pipeline', () => {
+    const source = readFileSync('desktop/main/services/runtimeAssets.ts', 'utf8');
+    const mainProcess = readFileSync('desktop/main/index.ts', 'utf8');
 
-    expect(normalize(iconPath)).toBe(normalize(join(process.cwd(), 'assets', 'icons', 'app-icon.ico')));
-    expect(iconPath).not.toContain('docs');
-    expect(existsSync(iconPath)).toBe(true);
-  });
-
-  it('uses a separate transparent icon for the tray', () => {
-    const iconPath = getTrayIconPath(process.cwd());
-
-    expect(normalize(iconPath)).toBe(normalize(join(process.cwd(), 'assets', 'icons', 'tray-icon.png')));
-    expect(iconPath).not.toContain('docs');
-    expect(existsSync(iconPath)).toBe(true);
+    expect(source).toContain("node_modules/sql.js/dist/sql-wasm.wasm?asset");
+    expect(source).toContain("assets/icons/tray-icon.png?asset");
+    expect(source).toContain("assets/icons/app-icon.ico?asset");
+    expect(source).not.toContain('process.cwd()');
+    expect(mainProcess).toContain('SQL_WASM_PATH');
+    expect(mainProcess).toContain('TRAY_ICON_PATH');
+    expect(mainProcess).toContain('WINDOWS_APP_ICON_PATH');
+    expect(existsSync(join(process.cwd(), 'assets', 'icons', 'app-icon.ico'))).toBe(true);
+    expect(existsSync(join(process.cwd(), 'assets', 'icons', 'tray-icon.png'))).toBe(true);
   });
 
   it('keeps the runtime png icon transparent for tray scaling', () => {
