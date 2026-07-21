@@ -50,4 +50,20 @@ npm run package:mac && npm run smoke:packaged:mac
 
 完整的路径、资源和验收契约见 [`docs/cross-platform-compatibility.md`](docs/cross-platform-compatibility.md)。
 
+## Product Website
+
+The official product website is isolated under [`site/`](site/README.md). It keeps
+its own dependencies, tests, build output, and deployment configuration so website
+work cannot change the Electron desktop runtime accidentally.
+
+```bash
+cd site
+npm ci
+npm test
+npm run dev
+```
+
+Pushes to `main` that change `site/` or the Pages workflow publish the static site
+through GitHub Actions.
+
 默认不上传数据、不调用远程 LLM、不读取 assistant/tool-result 内容。
