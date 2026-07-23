@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -26,11 +27,10 @@ import type {
   SpellStatePatch,
   SpellUpdatePatch
 } from '../shared/types';
-import type { AppSettings, ShortcutAccelerator } from '../shared/settings';
 import {
   DEFAULT_APP_SETTINGS,
-  formatShortcutDisplay,
-  normalizeShortcutAccelerator
+  type AppSettingsPatch,
+  type ShortcutUpdateRequest
 } from '../shared/settings';
 import { isDesktopPlatform, type DesktopPlatform } from '../shared/platform';
 import type { PlatformPaths } from './services/platformPaths';
@@ -50,6 +50,7 @@ import {
   type SettingsService
 } from './services/settingsService';
 import { createSkillService, defaultSkillRoots } from './services/skillService';
+import { QuickPanelShortcutController } from './services/quickPanelShortcutController';
 import {
   createPlatformPathContext,
   createPlatformPaths
@@ -79,8 +80,8 @@ let floatingWindow: BrowserWindow | null = null;
 let floatingWindowPinned = false;
 let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
+let shortcutController: QuickPanelShortcutController | null = null;
 let databasePath = '';
-let activeQuickPanelShortcut: ShortcutAccelerator | null = null;
 let mainWindowCompact = false;
 let mainWindowExpandedWidth = MAIN_WINDOW_DEFAULT_WIDTH;
 let mainWindowRecommendationDelta = SPELL_LIBRARY_DEFAULT_RECOMMENDATION_WINDOW_DELTA;
@@ -130,7 +131,27 @@ async function createWindow(): Promise<BrowserWindow> {
       window.show();
     }
   });
+  window.webContents.on('did-start-loading', () => {
+    shortcutController?.forceEndCapture();
+  });
+  window.webContents.on('render-process-gone', () => {
+    shortcutController?.forceEndCapture();
+  });
+  window.webContents.on('destroyed', () => {
+    shortcutController?.forceEndCapture();
+  });
+  window.on('blur', () => {
+    const controller = shortcutController;
+    if (!controller?.getState().captureActive) {
+      return;
+    }
+    const result = controller.forceEndCapture();
+    if (!window.isDestroyed()) {
+      window.webContents.send('shortcut:capture-ended', result);
+    }
+  });
   window.on('closed', () => {
+    shortcutController?.forceEndCapture();
     if (mainWindow === window) {
       mainWindow = null;
     }
@@ -201,7 +222,7 @@ async function bootstrap(): Promise<void> {
     mkdir(paths.packageDirectory, { recursive: true })
   ]);
   databasePath = paths.databasePath;
-  const db = await openAppDatabase(databasePath, SQL_WASM_PATH);
+  const db = await openAppDatabase(databasePath, { sqlWasmPath: SQL_WASM_PATH });
   const spellService = createSpellService(db);
   const scanSourceDefaults = defaultScanSources(paths);
   const skillService = createSkillService(db, {
@@ -213,6 +234,13 @@ async function bootstrap(): Promise<void> {
     defaultScanSources: scanSourceDefaults,
     pathContext: platformPathContext
   });
+  shortcutController = new QuickPanelShortcutController({
+    platform: desktopPlatform,
+    globalShortcut,
+    settingsService,
+    onToggle: toggleFloatingWindow
+  });
+  await shortcutController.initialize();
   floatingWindowPinned = settingsService.getSettings().quickPanelPinned;
   await spellService.seedStarterSpells();
   applyAppIdentity();
@@ -258,6 +286,32 @@ async function bootstrap(): Promise<void> {
     }
     return settingsService.getSettings();
   });
+  ipcMain.handle('shortcut:getState', (event) => {
+    assertMainWindowSender(event);
+    return getShortcutController().getState();
+  });
+  ipcMain.handle('shortcut:update', (event, request: ShortcutUpdateRequest) => {
+    assertMainWindowSender(event);
+    if (!isShortcutUpdateRequest(request)) {
+      throw new Error('Invalid shortcut update request');
+    }
+    return getShortcutController().update(request);
+  });
+  ipcMain.handle('shortcut:beginCapture', (event) => {
+    assertMainWindowSender(event);
+    return getShortcutController().beginCapture();
+  });
+  ipcMain.handle('shortcut:endCapture', (event, sessionToken: string) => {
+    assertMainWindowSender(event);
+    if (typeof sessionToken !== 'string' || !sessionToken) {
+      throw new Error('Invalid shortcut capture session');
+    }
+    return getShortcutController().endCapture(sessionToken);
+  });
+  ipcMain.handle('shortcut:dismissStartupNotice', (event) => {
+    assertMainWindowSender(event);
+    return getShortcutController().dismissStartupNotice();
+  });
   ipcMain.handle('settings:info', () => ({
     defaultScanSources: scanSourceDefaults,
     historyRoots: paths.historyRoots,
@@ -284,12 +338,14 @@ async function bootstrap(): Promise<void> {
       : await dialog.showOpenDialog(options);
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
-  ipcMain.handle('settings:update', async (_event, patch: Partial<AppSettings>) => {
+  ipcMain.handle('settings:update', async (_event, patch: AppSettingsPatch) => {
     if (!settingsService) {
       throw new Error('Settings service is not ready');
     }
+    if (!patch || typeof patch !== 'object' || 'quickPanelShortcut' in patch) {
+      throw new Error('Shortcut updates require the dedicated shortcut API');
+    }
     const current = settingsService.getSettings();
-    const nextPatch: Partial<AppSettings> = { ...patch };
     if ('scanSources' in patch && !areScanSourcesValid(patch.scanSources, platformPathContext)) {
       return {
         settings: current,
@@ -299,26 +355,7 @@ async function bootstrap(): Promise<void> {
             : 'History folders must use absolute Windows drive or UNC paths.'
       };
     }
-    if ('quickPanelShortcut' in patch) {
-      const requestedShortcut = normalizeShortcutAccelerator(patch.quickPanelShortcut);
-      if (!requestedShortcut) {
-        return {
-          settings: current,
-          warning: 'Invalid shortcut'
-        };
-      }
-      if (requestedShortcut !== current.quickPanelShortcut) {
-        const registered = registerQuickPanelShortcut(requestedShortcut);
-        if (!registered) {
-          return {
-            settings: current,
-            warning: `Shortcut conflict: ${formatShortcutDisplay(requestedShortcut, desktopPlatform)}`
-          };
-        }
-      }
-      nextPatch.quickPanelShortcut = requestedShortcut;
-    }
-    const settings = await settingsService.updateSettings(nextPatch);
+    const settings = await settingsService.updateSettings(patch);
     applyAppIdentity();
     return { settings };
   });
@@ -422,12 +459,6 @@ async function setFloatingWindowPinned(pinned: boolean): Promise<FloatingWindowS
 }
 
 function registerDesktopControls(): void {
-  const shortcut = settingsService?.getSettings().quickPanelShortcut ?? DEFAULT_APP_SETTINGS.quickPanelShortcut;
-  const registered = registerQuickPanelShortcut(shortcut);
-  if (!registered && shortcut !== DEFAULT_APP_SETTINGS.quickPanelShortcut) {
-    registerQuickPanelShortcut(DEFAULT_APP_SETTINGS.quickPanelShortcut);
-  }
-
   const trayIcon = createTrayImage(desktopPlatform, TRAY_ICON_PATH, nativeImage);
   tray = new Tray(trayIcon);
   tray.setToolTip(getCurrentAppName());
@@ -476,25 +507,6 @@ function applyAppIdentity(): void {
   tray?.setToolTip(name);
 }
 
-
-function registerQuickPanelShortcut(shortcut: ShortcutAccelerator): boolean {
-  const accelerator = normalizeShortcutAccelerator(shortcut);
-  if (!accelerator) {
-    return false;
-  }
-  if (activeQuickPanelShortcut === accelerator) {
-    return true;
-  }
-  const registered = globalShortcut.register(accelerator, toggleFloatingWindow);
-  if (!registered) {
-    return false;
-  }
-  if (activeQuickPanelShortcut) {
-    globalShortcut.unregister(activeQuickPanelShortcut);
-  }
-  activeQuickPanelShortcut = accelerator;
-  return true;
-}
 
 function toggleFloatingWindow(): void {
   if (!floatingWindow) {
@@ -670,5 +682,29 @@ app.on('activate', async () => {
 });
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
+  shortcutController?.dispose();
 });
+
+function getShortcutController(): QuickPanelShortcutController {
+  if (!shortcutController) {
+    throw new Error('Shortcut controller is not ready');
+  }
+  return shortcutController;
+}
+
+function assertMainWindowSender(event: IpcMainInvokeEvent): void {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Shortcut IPC is only available to the main window');
+  }
+}
+
+function isShortcutUpdateRequest(value: unknown): value is ShortcutUpdateRequest {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const request = value as Record<string, unknown>;
+  return (
+    request.intent === 'reset' ||
+    (request.intent === 'set' && typeof request.accelerator === 'string')
+  );
+}

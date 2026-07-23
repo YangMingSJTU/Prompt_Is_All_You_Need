@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppSettings } from '../shared/settings';
+import type {
+  AppSettingsPatch,
+  QuickPanelShortcutState,
+  ShortcutCaptureEndResult,
+  ShortcutCaptureResult,
+  ShortcutUpdateRequest,
+  ShortcutUpdateResult
+} from '../shared/settings';
 import type {
   InstallSkillRequest,
   InstallSkillResult,
@@ -44,7 +51,23 @@ contextBridge.exposeInMainWorld('spellbook', {
     ipcRenderer.invoke('skills:install', request),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   getSettingsInfo: () => ipcRenderer.invoke('settings:info'),
-  updateSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('settings:update', patch),
+  updateSettings: (patch: AppSettingsPatch) => ipcRenderer.invoke('settings:update', patch),
+  getQuickPanelShortcutState: (): Promise<QuickPanelShortcutState> =>
+    ipcRenderer.invoke('shortcut:getState'),
+  updateQuickPanelShortcut: (request: ShortcutUpdateRequest): Promise<ShortcutUpdateResult> =>
+    ipcRenderer.invoke('shortcut:update', request),
+  beginShortcutCapture: (): Promise<ShortcutCaptureResult> =>
+    ipcRenderer.invoke('shortcut:beginCapture'),
+  endShortcutCapture: (sessionToken: string): Promise<ShortcutCaptureEndResult> =>
+    ipcRenderer.invoke('shortcut:endCapture', sessionToken),
+  onShortcutCaptureEnded: (callback: (result: ShortcutCaptureEndResult) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, result: ShortcutCaptureEndResult) =>
+      callback(result);
+    ipcRenderer.on('shortcut:capture-ended', listener);
+    return () => ipcRenderer.removeListener('shortcut:capture-ended', listener);
+  },
+  dismissShortcutStartupNotice: (): Promise<QuickPanelShortcutState> =>
+    ipcRenderer.invoke('shortcut:dismissStartupNotice'),
   setRecommendationPanelWindowOpen: (open: boolean, panelWidth?: number): Promise<void> =>
     ipcRenderer.invoke('window:setRecommendationPanelOpen', open, panelWidth),
   selectDirectory: (defaultPath?: string) => ipcRenderer.invoke('dialog:selectDirectory', defaultPath),

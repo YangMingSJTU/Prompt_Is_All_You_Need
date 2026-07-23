@@ -2,6 +2,7 @@ import { Clipboard, Heart, Pin, X } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Spell } from '../../shared/types';
+import { getNextFloatingSelectionIndex } from '../floatingKeyboard';
 import type { TFunction } from '../i18n';
 import {
   filterSpells,
@@ -26,8 +27,10 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   const [searchScope, setSearchScope] = useState<SearchScope>('title-content');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<SpellStatusFilter>('active');
+  const [selectionAnnouncement, setSelectionAnnouncement] = useState('');
   const { showToast } = useFeedbackToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastAnnouncementRef = useRef('');
 
   const loadSpells = useCallback(async () => {
     setSpells(await window.spellbook.listSpells());
@@ -80,6 +83,21 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   }, [selectedSpellId, visibleSpells]);
   const selected = useMemo(() => visibleSpells[selectedIndex] ?? null, [visibleSpells, selectedIndex]);
 
+  useEffect(() => {
+    if (!selected) {
+      lastAnnouncementRef.current = '';
+      setSelectionAnnouncement('');
+      return;
+    }
+    const announcementKey = `${selected.id}:${selectedIndex}:${visibleSpells.length}`;
+    if (announcementKey !== lastAnnouncementRef.current) {
+      lastAnnouncementRef.current = announcementKey;
+      setSelectionAnnouncement(
+        `${getFloatingSpellName(selected, t)}, ${selectedIndex + 1}/${visibleSpells.length}`
+      );
+    }
+  }, [selected, selectedIndex, t, visibleSpells.length]);
+
   async function copySpell(spell: Spell): Promise<void> {
     await window.spellbook.copySpell(spell.id);
     setSelectedSpellId(spell.id);
@@ -88,7 +106,9 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
         item.id === spell.id ? { ...item, copyCount: item.copyCount + 1 } : item
       )
     );
-    showToast(t('status.copied'));
+    if (isPinned) {
+      showToast(t('status.copied'));
+    }
   }
 
   async function toggleFavorite(spell: Spell): Promise<void> {
@@ -108,6 +128,9 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
   }
 
   async function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): Promise<void> {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
       await window.spellbook.closeFloatingWindow();
@@ -115,13 +138,21 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      const nextIndex = Math.min(selectedIndex + 1, Math.max(visibleSpells.length - 1, 0));
+      const nextIndex = getNextFloatingSelectionIndex(
+        selectedIndex,
+        visibleSpells.length,
+        'next'
+      );
       setSelectedSpellId(visibleSpells[nextIndex]?.id ?? null);
       return;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      const nextIndex = Math.max(selectedIndex - 1, 0);
+      const nextIndex = getNextFloatingSelectionIndex(
+        selectedIndex,
+        visibleSpells.length,
+        'previous'
+      );
       setSelectedSpellId(visibleSpells[nextIndex]?.id ?? null);
       return;
     }
@@ -179,7 +210,7 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
           onToggleTag={toggleFilterTag}
           t={t}
         />
-        <section className="floating-results">
+        <section aria-label={t('floating.title')} className="floating-results">
           {visibleSpells.map((spell) => (
             <div
               className={spell.id === selected?.id ? 'floating-row selected' : 'floating-row'}
@@ -218,7 +249,33 @@ export function FloatingPanel({ t }: FloatingPanelProps) {
           ) : null}
         </section>
       </div>
+      <ShortcutHintBar hasResults={visibleSpells.length > 0} t={t} />
+      <div aria-live="polite" className="sr-only">
+        {selectionAnnouncement}
+      </div>
     </main>
+  );
+}
+
+function ShortcutHintBar({ hasResults, t }: { hasResults: boolean; t: TFunction }) {
+  const isMac = globalThis.navigator?.platform?.toLowerCase().includes('mac') ?? false;
+  return (
+    <footer className="floating-shortcut-hints">
+      <span aria-disabled={!hasResults} className={!hasResults ? 'unavailable' : undefined}>
+        <kbd aria-hidden>↑↓</kbd>
+        {t('floating.hint.select')}
+        {!hasResults ? <span className="sr-only"> {t('floating.hint.unavailable')}</span> : null}
+      </span>
+      <span aria-disabled={!hasResults} className={!hasResults ? 'unavailable' : undefined}>
+        <kbd aria-hidden>{isMac ? '↩' : 'Enter'}</kbd>
+        {t('floating.hint.copy')}
+        {!hasResults ? <span className="sr-only"> {t('floating.hint.unavailable')}</span> : null}
+      </span>
+      <span>
+        <kbd aria-hidden>{isMac ? 'esc' : 'Esc'}</kbd>
+        {t('floating.hint.close')}
+      </span>
+    </footer>
   );
 }
 

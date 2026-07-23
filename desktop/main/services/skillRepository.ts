@@ -70,22 +70,21 @@ export function createSkillRepository(db: AppDatabase): SkillRepository {
     },
 
     async commitScan(results) {
-      const cachedCounts = new Map<SkillPlatform, number>();
-      for (const platform of ['claude', 'codex'] as const) {
-        cachedCounts.set(
-          platform,
-          Number(
-            db.get<{ count: number }>(
-              'SELECT COUNT(*) AS count FROM skills WHERE platform = ?',
-              [platform]
-            )?.count ?? 0
-          )
-        );
-      }
+      return db.transaction(() => {
+        const cachedCounts = new Map<SkillPlatform, number>();
+        for (const platform of ['claude', 'codex'] as const) {
+          cachedCounts.set(
+            platform,
+            Number(
+              db.get<{ count: number }>(
+                'SELECT COUNT(*) AS count FROM skills WHERE platform = ?',
+                [platform]
+              )?.count ?? 0
+            )
+          );
+        }
 
-      const now = new Date().toISOString();
-      db.run('BEGIN TRANSACTION');
-      try {
+        const now = new Date().toISOString();
         for (const result of results) {
           if (result.status === 'success' || result.status === 'missing_directory') {
             db.run('DELETE FROM skills WHERE platform = ?', [result.platform]);
@@ -112,33 +111,28 @@ export function createSkillRepository(db: AppDatabase): SkillRepository {
             ]
           );
         }
-        db.run('COMMIT');
-      } catch (error) {
-        db.run('ROLLBACK');
-        throw error;
-      }
-      await db.save();
 
-      return results.map((result): SkillScanSourceResult => {
-        if ('skills' in result) {
+        return results.map((result): SkillScanSourceResult => {
+          if ('skills' in result) {
+            return {
+              platform: result.platform,
+              path: result.path,
+              status: result.status,
+              refreshed: true,
+              stale: false,
+              skillCount: result.skills.length
+            };
+          }
           return {
             platform: result.platform,
             path: result.path,
             status: result.status,
-            refreshed: true,
-            stale: false,
-            skillCount: result.skills.length
+            refreshed: false,
+            stale: true,
+            cachedSkillCount: cachedCounts.get(result.platform) ?? 0,
+            error: result.error
           };
-        }
-        return {
-          platform: result.platform,
-          path: result.path,
-          status: result.status,
-          refreshed: false,
-          stale: true,
-          cachedSkillCount: cachedCounts.get(result.platform) ?? 0,
-          error: result.error
-        };
+        });
       });
     }
   };

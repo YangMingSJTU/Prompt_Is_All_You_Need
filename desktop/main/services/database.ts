@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
@@ -8,49 +9,69 @@ export interface AppDatabase {
   all<T extends Record<string, unknown>>(sql: string, params?: unknown[]): T[];
   get<T extends Record<string, unknown>>(sql: string, params?: unknown[]): T | null;
   exportBytes(): Uint8Array;
-  save(): Promise<void>;
+  transaction<T>(operation: () => T | Promise<T>): Promise<T>;
 }
 
-export interface DatabaseWriteOperations {
-  createParentDirectory(filePath: string): Promise<void>;
-  writeFile(filePath: string, bytes: Uint8Array): Promise<void>;
+export interface DatabaseFileOperations {
+  read(path: string): Promise<Uint8Array>;
+  makeDirectory(path: string): Promise<void>;
+  write(path: string, bytes: Uint8Array): Promise<void>;
+  replace(sourcePath: string, targetPath: string): Promise<void>;
+  remove(path: string): Promise<void>;
 }
+
+const DEFAULT_FILE_OPERATIONS: DatabaseFileOperations = {
+  async read(path) {
+    return readFile(path);
+  },
+  async makeDirectory(path) {
+    await mkdir(path, { recursive: true });
+  },
+  async write(path, bytes) {
+    await writeFile(path, bytes);
+  },
+  async replace(sourcePath, targetPath) {
+    await rename(sourcePath, targetPath);
+  },
+  async remove(path) {
+    await rm(path, { force: true });
+  }
+};
 
 export interface TestDatabaseOptions {
   filePath?: string;
-  writeOperations?: DatabaseWriteOperations;
+  sqlWasmPath?: string;
+  fileOperations?: DatabaseFileOperations;
 }
 
 const sqlModulePromises = new Map<string, Promise<SqlJsStatic>>();
 
-const nodeDatabaseWriteOperations: DatabaseWriteOperations = {
-  async createParentDirectory(filePath) {
-    await mkdir(dirname(filePath), { recursive: true });
-  },
-  async writeFile(filePath, bytes) {
-    await writeFile(filePath, bytes);
-  }
-};
-
 export async function createTestDatabase(
   options: TestDatabaseOptions = {}
 ): Promise<AppDatabase> {
-  const SQL = await getSqlModule();
+  const SQL = await getSqlModule(options.sqlWasmPath);
   return wrapDatabase(
+    SQL,
     new SQL.Database(),
     options.filePath ?? null,
-    options.writeOperations ?? nodeDatabaseWriteOperations
+    options.fileOperations ?? DEFAULT_FILE_OPERATIONS
   );
+}
+
+export interface OpenAppDatabaseOptions {
+  sqlWasmPath?: string;
+  fileOperations?: DatabaseFileOperations;
 }
 
 export async function openAppDatabase(
   filePath: string,
-  sqlWasmPath?: string
+  options: OpenAppDatabaseOptions = {}
 ): Promise<AppDatabase> {
-  const SQL = await getSqlModule(sqlWasmPath);
+  const SQL = await getSqlModule(options.sqlWasmPath);
+  const fileOperations = options.fileOperations ?? DEFAULT_FILE_OPERATIONS;
   let db: SqlJsDatabase;
   try {
-    const bytes = await readFile(filePath);
+    const bytes = await fileOperations.read(filePath);
     db = new SQL.Database(bytes);
   } catch (error) {
     if (nodeErrorCode(error) !== 'ENOENT') {
@@ -58,7 +79,7 @@ export async function openAppDatabase(
     }
     db = new SQL.Database();
   }
-  return wrapDatabase(db, filePath, nodeDatabaseWriteOperations);
+  return wrapDatabase(SQL, db, filePath, fileOperations);
 }
 
 async function getSqlModule(sqlWasmPath = resolveInstalledSqlWasmPath()): Promise<SqlJsStatic> {
@@ -75,13 +96,30 @@ function resolveInstalledSqlWasmPath(): string {
 }
 
 function wrapDatabase(
-  db: SqlJsDatabase,
+  SQL: SqlJsStatic,
+  initialDatabase: SqlJsDatabase,
   filePath: string | null,
-  writeOperations: DatabaseWriteOperations
+  fileOperations: DatabaseFileOperations
 ): AppDatabase {
+  let db = initialDatabase;
+  let transactionQueue = Promise.resolve();
   createSchema(db);
-  let pendingSave = Promise.resolve();
-  return {
+
+  async function persist(bytes: Uint8Array): Promise<void> {
+    if (!filePath) {
+      return;
+    }
+    await fileOperations.makeDirectory(dirname(filePath));
+    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await fileOperations.write(temporaryPath, bytes);
+      await fileOperations.replace(temporaryPath, filePath);
+    } finally {
+      await fileOperations.remove(temporaryPath).catch(() => undefined);
+    }
+  }
+
+  const appDatabase: AppDatabase = {
     run(sql: string, params: unknown[] = []) {
       db.run(sql, params as never[]);
     },
@@ -104,21 +142,28 @@ function wrapDatabase(
     exportBytes() {
       return db.export();
     },
-    async save() {
-      if (!filePath) {
-        return;
-      }
-      const bytes = db.export();
-      const save = pendingSave
-        .catch(() => undefined)
-        .then(async () => {
-          await writeOperations.createParentDirectory(filePath);
-          await writeOperations.writeFile(filePath, bytes);
-        });
-      pendingSave = save;
-      await save;
+    transaction<T>(operation: () => T | Promise<T>): Promise<T> {
+      const execute = async (): Promise<T> => {
+        const snapshot = db.export();
+        try {
+          const result = await operation();
+          await persist(db.export());
+          return result;
+        } catch (error) {
+          db.close();
+          db = new SQL.Database(snapshot);
+          throw error;
+        }
+      };
+      const result = transactionQueue.then(execute, execute);
+      transactionQueue = result.then(
+        () => undefined,
+        () => undefined
+      );
+      return result;
     }
   };
+  return appDatabase;
 }
 
 function createSchema(db: SqlJsDatabase): void {

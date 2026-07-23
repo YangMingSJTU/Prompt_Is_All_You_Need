@@ -2,41 +2,81 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_APP_SETTINGS,
   formatShortcutDisplay,
+  getShortcutAccessibleText,
+  getShortcutKeycaps,
   isShortcutAccelerator,
   normalizeShortcutAccelerator,
   shortcutFromKeyInput
 } from '../desktop/shared/settings';
 
 describe('settings shortcuts', () => {
-  it('uses a default shortcut accelerator with compact display text', () => {
+  it('uses platform-specific default shortcut labels and accessible text', () => {
     expect(DEFAULT_APP_SETTINGS.quickPanelShortcut).toBe('CommandOrControl+Shift+Space');
-    expect(formatShortcutDisplay(DEFAULT_APP_SETTINGS.quickPanelShortcut)).toBe('Ctrl Shift Space');
-  });
-
-  it('normalizes legacy shortcut ids and user-entered accelerator text', () => {
-    expect(normalizeShortcutAccelerator('ctrl-alt-p')).toBe('CommandOrControl+Alt+P');
-    expect(normalizeShortcutAccelerator('Ctrl Shift K')).toBe('CommandOrControl+Shift+K');
-    expect(normalizeShortcutAccelerator('CommandOrControl+Alt+Space')).toBe(
-      'CommandOrControl+Alt+Space'
+    expect(formatShortcutDisplay(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'win32')).toBe(
+      'Ctrl Shift Space'
+    );
+    expect(formatShortcutDisplay(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'darwin')).toBe(
+      'Cmd Shift Space'
+    );
+    expect(
+      getShortcutKeycaps(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'darwin').map(
+        (item) => item.label
+      )
+    ).toEqual(['⌘', '⇧', 'Space']);
+    expect(getShortcutAccessibleText(DEFAULT_APP_SETTINGS.quickPanelShortcut, 'darwin')).toBe(
+      'Command + Shift + Space'
     );
   });
 
-  it('builds a shortcut from keyboard input', () => {
-    expect(shortcutFromKeyInput({ key: 'k', ctrlKey: true, shiftKey: true })).toEqual({
+  it('normalizes legacy shortcut ids and accelerator text', () => {
+    expect(normalizeShortcutAccelerator('ctrl-alt-p')).toBe('CommandOrControl+Alt+P');
+    expect(normalizeShortcutAccelerator('Ctrl Shift K', 'win32')).toBe(
+      'CommandOrControl+Shift+K'
+    );
+    expect(normalizeShortcutAccelerator('Command Shift K', 'darwin')).toBe('Command+Shift+K');
+    expect(normalizeShortcutAccelerator('Control Option F12', 'darwin')).toBe(
+      'Control+Alt+F12'
+    );
+  });
+
+  it('builds Windows accelerators without accepting the Windows key', () => {
+    expect(shortcutFromKeyInput({ key: 'k', ctrlKey: true, shiftKey: true }, 'win32')).toEqual({
       accelerator: 'CommandOrControl+Shift+K',
       display: 'Ctrl Shift K'
     });
-    expect(shortcutFromKeyInput({ key: ' ', ctrlKey: true, altKey: true })).toEqual({
+    expect(shortcutFromKeyInput({ key: ' ', ctrlKey: true, altKey: true }, 'win32')).toEqual({
       accelerator: 'CommandOrControl+Alt+Space',
       display: 'Ctrl Alt Space'
     });
+    expect(shortcutFromKeyInput({ key: 'k', metaKey: true }, 'win32')).toBeNull();
+    expect(shortcutFromKeyInput({ key: 'k', ctrlKey: true, metaKey: true }, 'win32')).toBeNull();
   });
 
-  it('rejects ambiguous global shortcuts', () => {
-    expect(shortcutFromKeyInput({ key: 'k' })).toBeNull();
-    expect(shortcutFromKeyInput({ key: 'Shift', shiftKey: true })).toBeNull();
-    expect(isShortcutAccelerator('P')).toBe(false);
-    expect(isShortcutAccelerator('CommandOrControl+Alt+P')).toBe(true);
+  it('keeps Command, Control, and Option distinct on macOS', () => {
+    expect(shortcutFromKeyInput({ key: '7', metaKey: true, shiftKey: true }, 'darwin')).toEqual({
+      accelerator: 'Command+Shift+7',
+      display: 'Cmd Shift 7'
+    });
+    expect(shortcutFromKeyInput({ key: 'F5', ctrlKey: true }, 'darwin')).toEqual({
+      accelerator: 'Control+F5',
+      display: 'Ctrl F5'
+    });
+    expect(shortcutFromKeyInput({ key: ' ', altKey: true }, 'darwin')).toEqual({
+      accelerator: 'Alt+Space',
+      display: 'Option Space'
+    });
+    expect(getShortcutKeycaps('Command+Control+Alt+K', 'darwin').map((item) => item.label)).toEqual(
+      ['⌘', '⌃', '⌥', 'K']
+    );
+  });
+
+  it('rejects modifier-only, single-key, multiple-main-key, and unsupported combinations', () => {
+    expect(shortcutFromKeyInput({ key: 'k' }, 'win32')).toBeNull();
+    expect(shortcutFromKeyInput({ key: 'Shift', shiftKey: true }, 'win32')).toBeNull();
+    expect(shortcutFromKeyInput({ key: 'Tab' }, 'win32')).toBeNull();
+    expect(isShortcutAccelerator('P', 'win32')).toBe(false);
+    expect(isShortcutAccelerator('Control+K+P', 'darwin')).toBe(false);
+    expect(isShortcutAccelerator('CommandOrControl+Alt+P', 'win32')).toBe(true);
   });
 
   it('uses macOS modifier names in visible shortcut text', () => {
@@ -44,7 +84,7 @@ describe('settings shortcuts', () => {
       'Cmd Option Space'
     );
     expect(shortcutFromKeyInput({ key: 'k', metaKey: true }, 'darwin')).toEqual({
-      accelerator: 'CommandOrControl+K', display: 'Cmd K'
+      accelerator: 'Command+K', display: 'Cmd K'
     });
   });
 });

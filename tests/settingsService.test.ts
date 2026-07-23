@@ -37,11 +37,11 @@ describe('settings service', () => {
 
     await service.updateSettings({
       language: 'en',
-      quickPanelShortcut: 'CommandOrControl+Alt+K',
       quickPanelPlacement: 'mouse',
       quickPanelPinned: true,
       recommendationPanelOpen: false
     });
+    await service.updateQuickPanelShortcut('CommandOrControl+Alt+K');
 
     expect(createSettingsService(db, OPTIONS).getSettings()).toEqual({
       language: 'en',
@@ -91,5 +91,35 @@ describe('settings service', () => {
       ...DEFAULT_APP_SETTINGS,
       scanSources: OPTIONS.defaultScanSources
     });
+  });
+
+  it('rejects shortcut writes through the generic settings path', async () => {
+    const db = await createTestDatabase();
+    const service = createSettingsService(db, OPTIONS);
+
+    await expect(
+      service.updateSettings({ quickPanelShortcut: 'CommandOrControl+Alt+K' } as never)
+    ).rejects.toThrow('shortcut controller');
+    expect(service.getSettings().quickPanelShortcut).toBe(DEFAULT_APP_SETTINGS.quickPanelShortcut);
+  });
+
+  it('restores the in-memory shortcut row when persistence fails', async () => {
+    const db = await createTestDatabase();
+    const workingService = createSettingsService(db, OPTIONS);
+    await workingService.updateQuickPanelShortcut('CommandOrControl+Alt+K');
+    const failingService = createSettingsService(
+      {
+        ...db,
+        async transaction<T>(_operation: () => T | Promise<T>): Promise<T> {
+          throw new Error('injected transaction failure');
+        }
+      },
+      OPTIONS
+    );
+
+    await expect(
+      failingService.updateQuickPanelShortcut('CommandOrControl+Shift+P')
+    ).rejects.toThrow('injected transaction failure');
+    expect(failingService.getSettings().quickPanelShortcut).toBe('CommandOrControl+Alt+K');
   });
 });

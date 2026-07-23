@@ -1,86 +1,117 @@
 import { describe, expect, it } from 'vitest';
-import { createTestDatabase } from '../desktop/main/services/database';
+import {
+  createTestDatabase,
+  type DatabaseFileOperations
+} from '../desktop/main/services/database';
 
-describe('database save queue', () => {
-  it('writes deferred snapshots in save call order', async () => {
+describe('database transaction queue', () => {
+  it('serializes mutation and persistence in transaction call order', async () => {
     const writes: Uint8Array[] = [];
     const firstWriteStarted = deferred();
     const releaseFirstWrite = deferred();
+    let replaceCalls = 0;
     const db = await createTestDatabase({
       filePath: 'virtual/index.sqlite',
-      writeOperations: {
-        async createParentDirectory() {
-          return undefined;
-        },
-        async writeFile(_filePath, bytes) {
+      fileOperations: createVirtualOperations({
+        async write(bytes) {
           writes.push(new Uint8Array(bytes));
           if (writes.length === 1) {
             firstWriteStarted.resolve();
             await releaseFirstWrite.promise;
           }
+        },
+        replace() {
+          replaceCalls += 1;
         }
-      }
+      })
     });
 
-    db.run(
-      "INSERT INTO app_settings (key, value, updated_at) VALUES ('save-order', 'first', 'now')"
-    );
-    const expectedFirst = db.exportBytes();
-    const firstSave = db.save();
+    const firstTransaction = db.transaction(() => {
+      db.run(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES ('save-order', 'first', 'now')"
+      );
+    });
     await firstWriteStarted.promise;
 
-    db.run("UPDATE app_settings SET value = 'second' WHERE key = 'save-order'");
-    const expectedSecond = db.exportBytes();
-    const secondSave = db.save();
+    let secondMutationStarted = false;
+    const secondTransaction = db.transaction(() => {
+      secondMutationStarted = true;
+      db.run("UPDATE app_settings SET value = 'second' WHERE key = 'save-order'");
+    });
     await Promise.resolve();
 
+    expect(secondMutationStarted).toBe(false);
     expect(writes).toHaveLength(1);
-
     releaseFirstWrite.resolve();
-    await Promise.all([firstSave, secondSave]);
+    await Promise.all([firstTransaction, secondTransaction]);
 
+    expect(secondMutationStarted).toBe(true);
     expect(writes).toHaveLength(2);
-    expect(Array.from(writes[0])).toEqual(Array.from(expectedFirst));
-    expect(Array.from(writes[1])).toEqual(Array.from(expectedSecond));
+    expect(replaceCalls).toBe(2);
+    expect(db.get('SELECT value FROM app_settings WHERE key = ?', ['save-order'])).toEqual({
+      value: 'second'
+    });
   });
 
-  it('rejects the failed save but continues with the next queued snapshot', async () => {
+  it('rolls back a failed persistence and continues with the next queued transaction', async () => {
     const writeFailure = new Error('simulated write failure');
     const recoveredWrites: Uint8Array[] = [];
     let writeCalls = 0;
     const db = await createTestDatabase({
       filePath: 'virtual/index.sqlite',
-      writeOperations: {
-        async createParentDirectory() {
-          return undefined;
-        },
-        async writeFile(_filePath, bytes) {
+      fileOperations: createVirtualOperations({
+        write(bytes) {
           writeCalls += 1;
           if (writeCalls === 1) {
             throw writeFailure;
           }
           recoveredWrites.push(new Uint8Array(bytes));
         }
-      }
+      })
     });
 
-    db.run(
-      "INSERT INTO app_settings (key, value, updated_at) VALUES ('save-recovery', 'failed', 'now')"
-    );
-    const failedSave = db.save();
-    const observedFailure = failedSave.catch((error: unknown) => error);
-
-    db.run("UPDATE app_settings SET value = 'recovered' WHERE key = 'save-recovery'");
-    const expectedRecovery = db.exportBytes();
-    const recoveredSave = db.save();
+    const failedTransaction = db.transaction(() => {
+      db.run(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES ('save-recovery', 'failed', 'now')"
+      );
+    });
+    const observedFailure = failedTransaction.catch((error: unknown) => error);
+    const recoveredTransaction = db.transaction(() => {
+      db.run(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES ('save-recovery', 'recovered', 'now')"
+      );
+    });
 
     expect(await observedFailure).toBe(writeFailure);
-    await expect(recoveredSave).resolves.toBeUndefined();
+    await expect(recoveredTransaction).resolves.toBeUndefined();
     expect(writeCalls).toBe(2);
     expect(recoveredWrites).toHaveLength(1);
-    expect(Array.from(recoveredWrites[0])).toEqual(Array.from(expectedRecovery));
+    expect(db.get('SELECT value FROM app_settings WHERE key = ?', ['save-recovery'])).toEqual({
+      value: 'recovered'
+    });
   });
 });
+
+function createVirtualOperations(hooks: {
+  write(bytes: Uint8Array): void | Promise<void>;
+  replace?(): void | Promise<void>;
+}): DatabaseFileOperations {
+  return {
+    async read() {
+      const error = new Error('not found') as Error & { code: string };
+      error.code = 'ENOENT';
+      throw error;
+    },
+    async makeDirectory() {},
+    async write(_path, bytes) {
+      await hooks.write(bytes);
+    },
+    async replace() {
+      await hooks.replace?.();
+    },
+    async remove() {}
+  };
+}
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;

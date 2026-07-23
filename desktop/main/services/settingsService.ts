@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_SETTINGS,
   type AppLanguage,
   type AppSettings,
+  type AppSettingsPatch,
   isAppLanguage,
   isQuickPanelPlacement,
   normalizeShortcutAccelerator,
@@ -24,7 +25,8 @@ interface SettingRow {
 
 export interface SettingsService {
   getSettings(): AppSettings;
-  updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  updateSettings(patch: AppSettingsPatch): Promise<AppSettings>;
+  updateQuickPanelShortcut(shortcut: ShortcutAccelerator): Promise<AppSettings>;
 }
 
 export interface SettingsServiceOptions {
@@ -42,7 +44,10 @@ export function createSettingsService(
       const values = new Map(rows.map((row) => [row.key, row.value]));
       return {
         language: normalizeLanguage(values.get('language')),
-        quickPanelShortcut: normalizeShortcut(values.get('quickPanelShortcut')),
+        quickPanelShortcut: normalizeShortcut(
+          values.get('quickPanelShortcut'),
+          options.pathContext.platform
+        ),
         quickPanelPlacement: normalizePlacement(values.get('quickPanelPlacement')),
         quickPanelPinned: normalizePinned(values.get('quickPanelPinned')),
         recommendationPanelOpen: normalizeRecommendationPanelOpen(
@@ -52,42 +57,53 @@ export function createSettingsService(
       };
     },
     async updateSettings(patch) {
-      const current = this.getSettings();
-      const next: AppSettings = {
-        language:
-          patch.language === undefined
-            ? current.language
-            : normalizeLanguage(patch.language),
-        quickPanelShortcut:
-          patch.quickPanelShortcut === undefined
-            ? current.quickPanelShortcut
-            : normalizeShortcut(patch.quickPanelShortcut),
-        quickPanelPlacement:
-          patch.quickPanelPlacement === undefined
-            ? current.quickPanelPlacement
-            : normalizePlacement(patch.quickPanelPlacement),
-        quickPanelPinned:
-          patch.quickPanelPinned === undefined
-            ? current.quickPanelPinned
-            : normalizePinned(patch.quickPanelPinned),
-        recommendationPanelOpen:
-          patch.recommendationPanelOpen === undefined
-            ? current.recommendationPanelOpen
-            : normalizeRecommendationPanelOpen(patch.recommendationPanelOpen),
-        scanSources:
-          patch.scanSources === undefined
-            ? current.scanSources
-            : normalizeScanSources(patch.scanSources, options)
-      };
-      const now = new Date().toISOString();
-      writeSetting(db, 'language', next.language, now);
-      writeSetting(db, 'quickPanelShortcut', next.quickPanelShortcut, now);
-      writeSetting(db, 'quickPanelPlacement', next.quickPanelPlacement, now);
-      writeSetting(db, 'quickPanelPinned', String(next.quickPanelPinned), now);
-      writeSetting(db, 'recommendationPanelOpen', String(next.recommendationPanelOpen), now);
-      writeSetting(db, 'scanSources', JSON.stringify(next.scanSources), now);
-      await db.save();
-      return next;
+      if ('quickPanelShortcut' in (patch as Record<string, unknown>)) {
+        throw new Error('quickPanelShortcut must be updated through the shortcut controller');
+      }
+      return db.transaction(() => {
+        const current = this.getSettings();
+        const next: AppSettings = {
+          language:
+            patch.language === undefined
+              ? current.language
+              : normalizeLanguage(patch.language),
+          quickPanelShortcut: current.quickPanelShortcut,
+          quickPanelPlacement:
+            patch.quickPanelPlacement === undefined
+              ? current.quickPanelPlacement
+              : normalizePlacement(patch.quickPanelPlacement),
+          quickPanelPinned:
+            patch.quickPanelPinned === undefined
+              ? current.quickPanelPinned
+              : normalizePinned(patch.quickPanelPinned),
+          recommendationPanelOpen:
+            patch.recommendationPanelOpen === undefined
+              ? current.recommendationPanelOpen
+              : normalizeRecommendationPanelOpen(patch.recommendationPanelOpen),
+          scanSources:
+            patch.scanSources === undefined
+              ? current.scanSources
+              : normalizeScanSources(patch.scanSources, options)
+        };
+        writeSettings(db, [
+          ['language', next.language],
+          ['quickPanelPlacement', next.quickPanelPlacement],
+          ['quickPanelPinned', String(next.quickPanelPinned)],
+          ['recommendationPanelOpen', String(next.recommendationPanelOpen)],
+          ['scanSources', JSON.stringify(next.scanSources)]
+        ]);
+        return next;
+      });
+    },
+    async updateQuickPanelShortcut(shortcut) {
+      const normalized = normalizeShortcutAccelerator(shortcut, options.pathContext.platform);
+      if (!normalized) {
+        throw new Error('Invalid quick panel shortcut');
+      }
+      return db.transaction(() => {
+        writeSettings(db, [['quickPanelShortcut', normalized]]);
+        return this.getSettings();
+      });
     }
   };
 }
@@ -96,8 +112,14 @@ function normalizeLanguage(value: unknown): AppLanguage {
   return isAppLanguage(value) ? value : DEFAULT_APP_SETTINGS.language;
 }
 
-function normalizeShortcut(value: unknown): ShortcutAccelerator {
-  return normalizeShortcutAccelerator(value) ?? DEFAULT_APP_SETTINGS.quickPanelShortcut;
+function normalizeShortcut(
+  value: unknown,
+  platform: PlatformPathContext['platform']
+): ShortcutAccelerator {
+  return (
+    normalizeShortcutAccelerator(value, platform) ??
+    DEFAULT_APP_SETTINGS.quickPanelShortcut
+  );
 }
 
 function normalizePlacement(value: unknown): QuickPanelPlacement {
@@ -228,4 +250,14 @@ function writeSetting(
     `,
     [key, value, updatedAt]
   );
+}
+
+function writeSettings(
+  db: AppDatabase,
+  entries: Array<[keyof AppSettings, string]>
+): void {
+  const now = new Date().toISOString();
+  for (const [key, value] of entries) {
+    writeSetting(db, key, value, now);
+  }
 }

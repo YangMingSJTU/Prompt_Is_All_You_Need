@@ -414,12 +414,21 @@ describeWindows('generated NSIS side-by-side lifecycle', () => {
       await mkdir(foreignDirectory);
       await copyFile(uninstallerA, copiedUninstaller);
       await writeFile(sentinel, 'preserve user data');
-      const rejected = await runExecutableResult(copiedUninstaller, [
+      const wrapperResult = await runExecutableResult(copiedUninstaller, [
         '/S',
         '/currentuser'
       ]);
+      const innerResult = await runExecutableResult(copiedUninstaller, [
+        '/S',
+        '/currentuser',
+        `_?=${foreignDirectory}`
+      ]);
 
-      expect(rejected.exitCode).toBe(2);
+      // A standard NSIS uninstaller first launches a self-copy. Its outer
+      // wrapper reports only that launch (0), while _?= runs the inner
+      // uninstaller in place and exposes our validation error level (2).
+      expect(wrapperResult.exitCode).toBe(0);
+      expect(innerResult.exitCode).toBe(2);
       expect(await readFile(sentinel, 'utf8')).toBe('preserve user data');
       expect(existsSync(foreignDirectory)).toBe(true);
       expect(existsSync(executableA)).toBe(true);

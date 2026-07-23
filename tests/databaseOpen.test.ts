@@ -11,10 +11,11 @@ describe('database open errors', () => {
 
     try {
       const db = await openAppDatabase(databasePath);
-      db.run(
-        "INSERT INTO app_settings (key, value, updated_at) VALUES ('created', 'true', 'now')"
-      );
-      await db.save();
+      await db.transaction(() => {
+        db.run(
+          "INSERT INTO app_settings (key, value, updated_at) VALUES ('created', 'true', 'now')"
+        );
+      });
       expect(db.get('SELECT value FROM app_settings WHERE key = ?', ['created'])).toEqual({
         value: 'true'
       });

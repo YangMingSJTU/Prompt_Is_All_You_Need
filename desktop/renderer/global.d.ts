@@ -1,7 +1,13 @@
 import type {
   AppSettings,
+  AppSettingsPatch,
+  QuickPanelShortcutState,
   SettingsInfo,
   SettingsUpdateResult,
+  ShortcutCaptureEndResult,
+  ShortcutCaptureResult,
+  ShortcutUpdateRequest,
+  ShortcutUpdateResult,
 } from '../shared/settings';
 import type {
   InstallSkillRequest,
@@ -55,7 +61,15 @@ declare global {
       installSkill(request: InstallSkillRequest): Promise<InstallSkillResult>;
       getSettings(): Promise<AppSettings>;
       getSettingsInfo(): Promise<SettingsInfo>;
-      updateSettings(patch: Partial<AppSettings>): Promise<SettingsUpdateResult>;
+      updateSettings(patch: AppSettingsPatch): Promise<SettingsUpdateResult>;
+      getQuickPanelShortcutState(): Promise<QuickPanelShortcutState>;
+      updateQuickPanelShortcut(request: ShortcutUpdateRequest): Promise<ShortcutUpdateResult>;
+      beginShortcutCapture(): Promise<ShortcutCaptureResult>;
+      endShortcutCapture(sessionToken: string): Promise<ShortcutCaptureEndResult>;
+      onShortcutCaptureEnded(
+        callback: (result: ShortcutCaptureEndResult) => void
+      ): () => void;
+      dismissShortcutStartupNotice(): Promise<QuickPanelShortcutState>;
       setRecommendationPanelWindowOpen(open: boolean, panelWidth?: number): Promise<void>;
       selectDirectory(defaultPath?: string): Promise<string | null>;
       onFloatingFocus(callback: () => void): () => void;

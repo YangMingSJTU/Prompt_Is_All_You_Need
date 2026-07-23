@@ -29,11 +29,12 @@ describe('app startup', () => {
         async initialize() {
           const sqlWasmPath = fileURLToPath(import.meta.resolve('sql.js/dist/sql-wasm.wasm'));
           expect(existsSync(sqlWasmPath)).toBe(true);
-          const db = await openAppDatabase(databasePath, sqlWasmPath);
-          db.run(
-            "INSERT INTO app_settings (key, value, updated_at) VALUES ('cwd', 'independent', 'now')"
-          );
-          await db.save();
+          const db = await openAppDatabase(databasePath, { sqlWasmPath });
+          await db.transaction(() => {
+            db.run(
+              "INSERT INTO app_settings (key, value, updated_at) VALUES ('cwd', 'independent', 'now')"
+            );
+          });
         },
         async createWindows() {
           windowsCreated += 1;
